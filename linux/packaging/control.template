@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Template control file — version is injected by package-release.js
+Package: dacx
+Version: {{VERSION}}
+Section: sound
+Priority: optional
+Architecture: amd64
+Depends: libgtk-3-0, libmpv2 | libmpv1, libc6
+Maintainer: BurntToasters <dacx@run.rosie>
+Homepage: https://github.com/BurntToasters/DACX
+Description: Quick, lightweight cross-platform media player
+ DACX is a desktop media player built with Flutter and libmpv.
+ Supports audio and video playback with drag-and-drop, minimal UI,
+ and cross-platform consistency.

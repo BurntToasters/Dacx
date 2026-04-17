@@ -1,0 +1,38 @@
+# Node
+node_modules/
+npm-debug.log*
+.npm
+*.tgz
+
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+*.iml
+.idea/
+*.lock
+!pubspec.lock
+
+# dotenv
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Coverage
+coverage/
+.lcov
+
+# Release artifacts
+release/
+dist/
+flatpak-repo/
+flatpak-build*/

@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+
+import '../services/settings_service.dart';
+
+class TransportControls extends StatelessWidget {
+  final bool isPlaying;
+  final double volume;
+  final bool hasMedia;
+  final double speed;
+  final LoopMode loopMode;
+  final List<String> recentFiles;
+  final VoidCallback onPlayPause;
+  final VoidCallback onStop;
+  final VoidCallback onOpenFile;
+  final ValueChanged<double> onVolumeChanged;
+  final ValueChanged<LoopMode> onLoopModeChanged;
+  final ValueChanged<String> onRecentFileSelected;
+  final VoidCallback onSettingsPressed;
+
+  const TransportControls({
+    super.key,
+    required this.isPlaying,
+    required this.volume,
+    required this.hasMedia,
+    required this.speed,
+    required this.loopMode,
+    required this.recentFiles,
+    required this.onPlayPause,
+    required this.onStop,
+    required this.onOpenFile,
+    required this.onVolumeChanged,
+    required this.onLoopModeChanged,
+    required this.onRecentFileSelected,
+    required this.onSettingsPressed,
+  });
+
+  void _cycleLoopMode() {
+    final next = switch (loopMode) {
+      LoopMode.none => LoopMode.loop,
+      LoopMode.loop => LoopMode.single,
+      LoopMode.single => LoopMode.none,
+    };
+    onLoopModeChanged(next);
+  }
+
+  IconData get _loopIcon => switch (loopMode) {
+    LoopMode.none => Icons.repeat,
+    LoopMode.loop => Icons.repeat_on,
+    LoopMode.single => Icons.repeat_one_on,
+  };
+
+  String get _loopTooltip => switch (loopMode) {
+    LoopMode.none => 'Loop: Off',
+    LoopMode.loop => 'Loop: All',
+    LoopMode.single => 'Loop: Single',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Row(
+        children: [
+          // Open button (with recent files popup)
+          _buildOpenButton(context),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+            tooltip: isPlaying ? 'Pause' : 'Play',
+            iconSize: 36,
+            onPressed: hasMedia ? onPlayPause : null,
+          ),
+          IconButton(
+            icon: const Icon(Icons.stop),
+            tooltip: 'Stop',
+            onPressed: hasMedia ? onStop : null,
+          ),
+          const SizedBox(width: 4),
+          // Loop toggle
+          IconButton(
+            icon: Icon(_loopIcon),
+            tooltip: _loopTooltip,
+            onPressed: _cycleLoopMode,
+            iconSize: 20,
+          ),
+          // Speed chip (visible when != 1.0)
+          if (speed != 1.0)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Chip(
+                label: Text('$speed×', style: const TextStyle(fontSize: 12)),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          const Spacer(),
+          // Volume
+          Icon(
+            volume == 0 ? Icons.volume_off : Icons.volume_up,
+            size: 20,
+          ),
+          SizedBox(
+            width: 120,
+            child: Slider(
+              value: volume,
+              min: 0,
+              max: 100,
+              onChanged: onVolumeChanged,
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Settings gear
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            iconSize: 20,
+            onPressed: onSettingsPressed,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOpenButton(BuildContext context) {
+    if (recentFiles.isEmpty) {
+      return IconButton(
+        icon: const Icon(Icons.folder_open),
+        tooltip: 'Open file',
+        onPressed: onOpenFile,
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'Open file / Recent files',
+      onSelected: (value) {
+        if (value == '__open__') {
+          onOpenFile();
+        } else {
+          onRecentFileSelected(value);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: '__open__',
+          child: ListTile(
+            leading: Icon(Icons.folder_open),
+            title: Text('Open File...'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (recentFiles.isNotEmpty) const PopupMenuDivider(),
+        ...recentFiles.take(10).map((path) => PopupMenuItem(
+          value: path,
+          child: Text(
+            p.basename(path),
+            overflow: TextOverflow.ellipsis,
+          ),
+        )),
+      ],
+      child: const Padding(
+        padding: EdgeInsets.all(8.0),
+        child: Icon(Icons.folder_open),
+      ),
+    );
+  }
+}

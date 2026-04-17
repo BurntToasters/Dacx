@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=DACX
+GenericName=Media Player
+Comment=Quick, lightweight cross-platform media player
+Exec=dacx %U
+Icon=dacx
+Terminal=false
+Categories=AudioVideo;Audio;Video;Player;
+MimeType=audio/mpeg;audio/flac;audio/x-wav;audio/ogg;audio/aac;audio/x-m4a;audio/x-ms-wma;audio/opus;video/mp4;video/x-matroska;video/x-msvideo;video/webm;video/quicktime;video/x-ms-wmv;video/x-flv;
+Keywords=music;audio;video;media;player;
+StartupWMClass=dacx
