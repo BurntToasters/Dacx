@@ -48,3 +48,6 @@ security default-keychain -d user -s "$KEYCHAIN_PATH"
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
 echo "Keychain ready for SSH signing."
+echo "Setup complete."
+echo "Next: npm run release:mac"
+exit 0
