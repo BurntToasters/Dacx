@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-# Template control file — version is injected by package-release.js
 Package: dacx
 Version: {{VERSION}}
 Section: sound

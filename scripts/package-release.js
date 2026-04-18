@@ -560,6 +560,7 @@ function writeWindowsWixV4Source(buildDir, wxsPath) {
 
   // WiX v4+ schema: <Package> replaces the v3 <Product>+<Package> pair.
   // Scope="perMachine" replaces InstallScope="perMachine"; Platform moved to CLI (-arch x64).
+  // StandardDirectory replaces manual TARGETDIR/ProgramFiles64Folder definitions.
   const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
@@ -578,13 +579,11 @@ ${componentRefs}
   </Package>
 
   <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="DACX">
-${renderDirectoryContents(rootNode, "          ").join("\n")}
-        </Directory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="DACX">
+${renderDirectoryContents(rootNode, "        ").join("\n")}
       </Directory>
-    </Directory>
+    </StandardDirectory>
   </Fragment>
 </Wix>
 `;
