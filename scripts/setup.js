@@ -127,8 +127,11 @@ function setupWindows() {
   console.log('   Then add the C++ desktop workload via the VS Installer.');
   console.log('   For release installers (.exe + .msi), also install:');
   console.log('   winget install JRSoftware.InnoSetup');
-  console.log('   WiX Toolset v3.14 (candle/light):');
-  console.log('   https://github.com/wixtoolset/wix3/releases');
+  console.log('   WiX v7 (.NET global tool, preferred):');
+  console.log('     dotnet tool install -g wix --version 7.0.0');
+  console.log('     wix eula accept wix7');
+  console.log('   Or WiX v3.14 (candle/light, legacy fallback):');
+  console.log('     https://github.com/wixtoolset/wix3/releases');
 
   // Common steps
   commonSetup();

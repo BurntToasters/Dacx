@@ -83,11 +83,136 @@ function copyDirSync(src, dest) {
   }
 }
 
-function ensureCommand(cmd, installHint) {
-  if (hasCommand(cmd)) return;
-  console.error(`${cmd} was not found on PATH.`);
-  if (installHint) console.error(`Install it: ${installHint}`);
-  process.exit(1);
+function resolveCommandFromPath(cmd) {
+  try {
+    if (process.platform === "win32") {
+      const output = execSync(`where ${cmd}`, {
+        cwd: root,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      return output[0] || null;
+    }
+    const output = execSync(`which ${cmd}`, {
+      cwd: root,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+}
+
+function firstExistingPath(paths) {
+  for (const p of paths) {
+    if (!p) continue;
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function findWindowsDirByPrefix(baseDir, prefixRegex) {
+  try {
+    return fs
+      .readdirSync(baseDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && prefixRegex.test(entry.name))
+      .map((entry) => path.join(baseDir, entry.name))
+      .sort((a, b) => b.localeCompare(a));
+  } catch {
+    return [];
+  }
+}
+
+function resolveInnoSetupCompilerPath() {
+  if (process.env.INNO_SETUP_COMPILER && fs.existsSync(process.env.INNO_SETUP_COMPILER)) {
+    return process.env.INNO_SETUP_COMPILER;
+  }
+
+  const pathHit = resolveCommandFromPath("iscc");
+  if (pathHit) return pathHit;
+
+  const programFilesX86 = process.env["ProgramFiles(x86)"];
+  const programFiles = process.env.ProgramFiles;
+
+  const directCandidates = [
+    programFilesX86 ? path.join(programFilesX86, "Inno Setup 6", "ISCC.exe") : null,
+    programFiles ? path.join(programFiles, "Inno Setup 6", "ISCC.exe") : null,
+  ];
+
+  const prefixedDirCandidates = [
+    ...findWindowsDirByPrefix(programFilesX86, /^Inno Setup/i),
+    ...findWindowsDirByPrefix(programFiles, /^Inno Setup/i),
+  ].map((dir) => path.join(dir, "ISCC.exe"));
+
+  return firstExistingPath([...directCandidates, ...prefixedDirCandidates]);
+}
+
+function resolveWixV4PlusTool() {
+  if (process.env.WIX_BIN) {
+    const wixExe = path.join(process.env.WIX_BIN, "wix.exe");
+    if (fs.existsSync(wixExe)) return wixExe;
+  }
+  return resolveCommandFromPath("wix");
+}
+
+function getWixMajorVersion(wixPath) {
+  try {
+    const output = execSync(`"${wixPath}" --version`, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const match = output.match(/^(\d+)\./);
+    return match ? parseInt(match[1], 10) : 4;
+  } catch {
+    return 4;
+  }
+}
+
+function resolveWixV3ToolPaths() {
+  const envBin = process.env.WIX_V3_BIN;
+  if (envBin) {
+    const envCandle = path.join(envBin, "candle.exe");
+    const envLight = path.join(envBin, "light.exe");
+    if (fs.existsSync(envCandle) && fs.existsSync(envLight)) {
+      return { candlePath: envCandle, lightPath: envLight };
+    }
+  }
+
+  const pathCandle = resolveCommandFromPath("candle");
+  const pathLight = resolveCommandFromPath("light");
+  if (pathCandle && pathLight) {
+    return { candlePath: pathCandle, lightPath: pathLight };
+  }
+
+  const programFilesX86 = process.env["ProgramFiles(x86)"];
+  const programFiles = process.env.ProgramFiles;
+
+  const directBinCandidates = [
+    programFilesX86 ? path.join(programFilesX86, "WiX Toolset v3.14", "bin") : null,
+    programFilesX86 ? path.join(programFilesX86, "WiX Toolset v3.11", "bin") : null,
+    programFiles ? path.join(programFiles, "WiX Toolset v3.14", "bin") : null,
+    programFiles ? path.join(programFiles, "WiX Toolset v3.11", "bin") : null,
+  ];
+
+  const scannedBins = [
+    ...findWindowsDirByPrefix(programFilesX86, /^WiX Toolset v3/i),
+    ...findWindowsDirByPrefix(programFiles, /^WiX Toolset v3/i),
+  ].map((dir) => path.join(dir, "bin"));
+
+  const bins = [...directBinCandidates, ...scannedBins].filter(Boolean);
+  for (const binDir of bins) {
+    const candlePath = path.join(binDir, "candle.exe");
+    const lightPath = path.join(binDir, "light.exe");
+    if (fs.existsSync(candlePath) && fs.existsSync(lightPath)) {
+      return { candlePath, lightPath };
+    }
+  }
+
+  return null;
 }
 
 function toWindowsPath(inputPath) {
@@ -170,7 +295,15 @@ function packageWindows() {
 }
 
 function buildWindowsExeInstaller(buildDir) {
-  ensureCommand("iscc", "winget install JRSoftware.InnoSetup");
+  const isccPath = resolveInnoSetupCompilerPath();
+  if (!isccPath) {
+    console.error("Inno Setup compiler was not found.");
+    console.error("Install it: winget install JRSoftware.InnoSetup");
+    console.error(
+      "If already installed but not detected, set INNO_SETUP_COMPILER to full ISCC.exe path.",
+    );
+    process.exit(1);
+  }
 
   const outName = "DACX-Windows-x64.exe";
   const outPath = path.join(releaseDir, outName);
@@ -226,7 +359,7 @@ Name: "{autodesktop}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"; Tasks: desk
 
   fs.writeFileSync(issPath, script);
 
-  run(`iscc /Qp "${issPath}"`, {
+  run(`"${isccPath}" /Qp "${issPath}"`, {
     env: {
       ...process.env,
       APP_VERSION: VERSION,
@@ -245,16 +378,56 @@ Name: "{autodesktop}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"; Tasks: desk
 }
 
 function buildWindowsMsiInstaller(buildDir) {
-  if (!(hasCommand("candle") && hasCommand("light"))) {
-    if (hasCommand("wix")) {
-      console.error("Detected WiX v4+ (`wix`) but this script requires WiX v3 (`candle` + `light`).");
-    } else {
-      console.error("WiX v3 tools were not found (`candle` + `light`).");
-    }
-    console.error("Install WiX Toolset v3.14: https://github.com/wixtoolset/wix3/releases");
-    process.exit(1);
+  // Prefer WiX v4+ (wix build), fall back to WiX v3 (candle + light).
+  const wixV4Path = resolveWixV4PlusTool();
+  if (wixV4Path) {
+    buildWindowsMsiInstallerV4(buildDir, wixV4Path);
+    return;
   }
 
+  const wixV3Paths = resolveWixV3ToolPaths();
+  if (wixV3Paths) {
+    buildWindowsMsiInstallerV3(buildDir, wixV3Paths);
+    return;
+  }
+
+  console.error("WiX tools were not found.");
+  console.error("Install WiX v7 (.NET global tool):");
+  console.error("  dotnet tool install -g wix --version 7.0.0");
+  console.error("  wix eula accept wix7");
+  console.error("Or set WIX_BIN to the directory containing wix.exe.");
+  console.error("Alternatively, install WiX v3.14 (candle/light):");
+  console.error("  https://github.com/wixtoolset/wix3/releases");
+  console.error("Or set WIX_V3_BIN to the directory containing candle.exe and light.exe.");
+  process.exit(1);
+}
+
+function buildWindowsMsiInstallerV4(buildDir, wixPath) {
+  const outName = "DACX-Windows-x64.msi";
+  const outPath = path.join(releaseDir, outName);
+  removeIfExists(outPath);
+
+  const installerDir = path.join(root, "build", "win-installer");
+  fs.mkdirSync(installerDir, { recursive: true });
+  const wxsPath = path.join(installerDir, "dacx-installer.wxs");
+
+  writeWindowsWixV4Source(buildDir, wxsPath);
+
+  const majorVersion = getWixMajorVersion(wixPath);
+  const acceptEulaFlag = majorVersion >= 7 ? " -acceptEula wix7" : "";
+  run(
+    `"${wixPath}" build${acceptEulaFlag} -arch x64` +
+      ` -out "${toWindowsPath(outPath)}" "${toWindowsPath(wxsPath)}"`,
+  );
+
+  if (!fs.existsSync(outPath)) {
+    console.error(`WiX did not produce expected output: ${outPath}`);
+    process.exit(1);
+  }
+  console.log(`  ✓ ${outName}`);
+}
+
+function buildWindowsMsiInstallerV3(buildDir, wixV3Paths) {
   const outName = "DACX-Windows-x64.msi";
   const outPath = path.join(releaseDir, outName);
   removeIfExists(outPath);
@@ -266,14 +439,157 @@ function buildWindowsMsiInstaller(buildDir) {
 
   writeWindowsWixSource(buildDir, wxsPath);
 
-  run(`candle -nologo -arch x64 -out "${wixobjPath}" "${wxsPath}"`);
-  run(`light -nologo -spdb -out "${outPath}" "${wixobjPath}"`);
+  run(`"${wixV3Paths.candlePath}" -nologo -arch x64 -out "${wixobjPath}" "${wxsPath}"`);
+  run(`"${wixV3Paths.lightPath}" -nologo -spdb -out "${outPath}" "${wixobjPath}"`);
 
   if (!fs.existsSync(outPath)) {
     console.error(`WiX did not produce expected output: ${outPath}`);
     process.exit(1);
   }
   console.log(`  ✓ ${outName}`);
+}
+
+function writeWindowsWixV4Source(buildDir, wxsPath) {
+  const files = listFilesRecursive(buildDir)
+    .map((absolutePath) => {
+      const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
+      const relDir = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
+      return { absolutePath, rel, relDir };
+    })
+    .sort((a, b) => a.rel.localeCompare(b.rel));
+
+  const relDirs = new Set([""]);
+  for (const file of files) {
+    const parts = file.relDir ? file.relDir.split("/") : [];
+    let acc = "";
+    for (const part of parts) {
+      acc = acc ? `${acc}/${part}` : part;
+      relDirs.add(acc);
+    }
+  }
+
+  const dirIdByRel = new Map([["", "INSTALLFOLDER"]]);
+  let dirCounter = 1;
+  for (const relDir of Array.from(relDirs).sort((a, b) => a.localeCompare(b))) {
+    if (!relDir) continue;
+    dirIdByRel.set(relDir, `DIR_${String(dirCounter).padStart(4, "0")}`);
+    dirCounter += 1;
+  }
+
+  const rootNode = {
+    name: "",
+    relDir: "",
+    id: "INSTALLFOLDER",
+    children: new Map(),
+  };
+  for (const relDir of Array.from(relDirs).sort((a, b) => a.localeCompare(b))) {
+    if (!relDir) continue;
+    const parts = relDir.split("/");
+    let node = rootNode;
+    let acc = "";
+    for (const part of parts) {
+      acc = acc ? `${acc}/${part}` : part;
+      if (!node.children.has(part)) {
+        node.children.set(part, {
+          name: part,
+          relDir: acc,
+          id: dirIdByRel.get(acc),
+          children: new Map(),
+        });
+      }
+      node = node.children.get(part);
+    }
+  }
+
+  const componentsByDir = new Map();
+  const fileComponentIds = [];
+  files.forEach((file, index) => {
+    const idx = String(index + 1).padStart(4, "0");
+    const componentId = `CMP_FILE_${idx}`;
+    const fileId = `FIL_${idx}`;
+    fileComponentIds.push(componentId);
+
+    // WiX v4+: no Win64="yes" — platform is inferred from -arch x64 at build time.
+    const componentLines = [
+      `<Component Id="${componentId}" Guid="*">`,
+      `  <File Id="${fileId}" Source="${escapeXmlAttr(toWindowsPath(file.absolutePath))}" KeyPath="yes" />`,
+      `</Component>`,
+    ];
+
+    const list = componentsByDir.get(file.relDir) || [];
+    list.push(componentLines);
+    componentsByDir.set(file.relDir, list);
+  });
+
+  function renderDirectoryContents(node, indent) {
+    const lines = [];
+
+    const components = componentsByDir.get(node.relDir) || [];
+    for (const block of components) {
+      for (const line of block) {
+        lines.push(`${indent}${line}`);
+      }
+    }
+
+    const children = Array.from(node.children.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const child of children) {
+      lines.push(
+        `${indent}<Directory Id="${child.id}" Name="${escapeXmlAttr(child.name)}">`,
+      );
+      lines.push(...renderDirectoryContents(child, `${indent}  `));
+      lines.push(`${indent}</Directory>`);
+    }
+
+    return lines;
+  }
+
+  const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const msiVersion = toMsiVersion(VERSION);
+  const iconBlock = fs.existsSync(appIconPath)
+    ? [
+        `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
+        `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
+      ].join("\n")
+    : "";
+
+  const componentRefs = [
+    ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
+  ].join("\n");
+
+  // WiX v4+ schema: <Package> replaces the v3 <Product>+<Package> pair.
+  // Scope="perMachine" replaces InstallScope="perMachine"; Platform moved to CLI (-arch x64).
+  const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="DACX"
+    Language="1033"
+    Version="${msiVersion}"
+    Manufacturer="run.rosie"
+    UpgradeCode="{D8D4A9F8-084A-4A7C-9713-3BC4F78E2A93}"
+    Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+${iconBlock}
+    <Feature Id="ProductFeature" Title="DACX" Level="1">
+${componentRefs}
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="DACX">
+${renderDirectoryContents(rootNode, "          ").join("\n")}
+        </Directory>
+      </Directory>
+    </Directory>
+  </Fragment>
+</Wix>
+`;
+
+  fs.writeFileSync(wxsPath, wixSource);
 }
 
 function writeWindowsWixSource(buildDir, wxsPath) {
