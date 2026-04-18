@@ -36,7 +36,7 @@
     "win-compiler:arm64": "powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command \"& 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\Launch-VsDevShell.ps1' -SkipAutomaticLocation -Arch arm64 -HostArch amd64\"",
     "flatpak:bundle": "node scripts/flatpak-bundle.js",
     "release:warn": "node scripts/release-warning.js",
-    "release:prepare": "npm run release:warn && npm run sync-version && flutter pub get && node scripts/update-metainfo.js && npm run icons:normalize && npm run dist:clean",
+    "release:prepare": "npm run release:warn && npm run sync-version && flutter pub get && node scripts/update-metainfo.js && npm run dist:clean",
     "release:package:win": "node scripts/package-release.js win",
     "release:package:mac": "node scripts/package-release.js mac",
     "release:package:linux": "node scripts/package-release.js linux",
