@@ -39,7 +39,7 @@ const isChecksumTextName = rx(/^SHA256SUMS(?:-[a-z0-9_]+(?:-[a-z0-9_]+)?)?\.txt$
 
 const ARTIFACT_RULES = [
   rx(/^DACX-.*\.exe$/i),
-  ext(".msix"),
+  ext(".msi"),
   ext(".dmg"),
   ext(".zip"),
   ext(".deb"),
@@ -47,13 +47,13 @@ const ARTIFACT_RULES = [
   ext(".flatpak"),
   rx(/\.appimage$/i),
   rx(/\.tar\.gz$/i),
-  rx(/\.(?:exe|msix|dmg|deb|rpm|flatpak|appimage|zip)\.sig$/i),
+  rx(/\.(?:exe|msi|dmg|deb|rpm|flatpak|appimage|zip)\.sig$/i),
   rx(/\.tar\.gz\.sig$/i),
 ];
 
 const SIGN_RULES = [
   ext(".exe"),
-  ext(".msix"),
+  ext(".msi"),
   ext(".dmg"),
   ext(".deb"),
   ext(".rpm"),
@@ -82,7 +82,7 @@ function cleanArtifactBaseName(name) {
 
   // Windows
   if (/x64.*\.exe$/i.test(name) || /\.exe$/i.test(name)) return "DACX-Windows-x64.exe";
-  if (/\.msix$/i.test(name)) return "DACX-Windows-x64.msix";
+  if (/\.msi$/i.test(name)) return "DACX-Windows-x64.msi";
 
   // Linux
   if (/amd64\.deb$/i.test(name) || /x86_64\.deb$/i.test(name)) return "DACX-Linux-amd64.deb";

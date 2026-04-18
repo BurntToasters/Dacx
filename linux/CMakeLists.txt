@@ -110,6 +110,7 @@ endforeach(bundled_library)
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+   OPTIONAL
    COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
