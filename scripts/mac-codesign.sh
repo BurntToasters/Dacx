@@ -15,8 +15,9 @@ BUILD_DIR="$ROOT/build/macos/Build/Products/Release"
 APP_BUNDLE="$BUILD_DIR/${APP_NAME}.app"
 ZIP_NAME="${APP_NAME}-${PKG_VERSION}-macos.zip"
 ZIP_PATH="$ROOT/release/$ZIP_NAME"
+ENTITLEMENTS_FILE="$ROOT/macos/Runner/Release.entitlements"
 
-# ── Validate env ──────────────────────────────────────────────
+# Validate
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY in .env}"
 : "${APPLE_ID:?Set APPLE_ID in .env}"
 : "${APPLE_PASSWORD:?Set APPLE_PASSWORD in .env}"
@@ -28,7 +29,12 @@ if [[ ! -d "$APP_BUNDLE" ]]; then
   exit 1
 fi
 
-# ── Codesign ──────────────────────────────────────────────────
+if [[ ! -f "$ENTITLEMENTS_FILE" ]]; then
+  echo "ERROR: Entitlements file not found at $ENTITLEMENTS_FILE"
+  exit 1
+fi
+
+# Signing
 echo "Codesigning ${APP_BUNDLE}..."
 
 # Sign all embedded dylibs first (files)
@@ -44,18 +50,25 @@ find "$APP_BUNDLE" -type d -name "*.framework" -print0 | while IFS= read -r -d '
 done
 
 codesign --force --options runtime --timestamp \
+  --entitlements "$ENTITLEMENTS_FILE" \
   --sign "$APPLE_SIGNING_IDENTITY" \
-  --deep "$APP_BUNDLE"
+  "$APP_BUNDLE"
 
 echo "Verifying codesign..."
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
-# ── Package ───────────────────────────────────────────────────
+echo "Verifying entitlements..."
+if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.apple.security.files.user-selected.read-only'; then
+  echo "ERROR: Missing file picker entitlement after signing."
+  exit 1
+fi
+
+# Pkg
 echo "Creating zip for notarization..."
 mkdir -p "$ROOT/release"
 ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
-# ── Notarize ──────────────────────────────────────────────────
+# Notarize
 echo "Submitting for notarization..."
 xcrun notarytool submit "$ZIP_PATH" \
   --apple-id "$APPLE_ID" \
@@ -63,7 +76,7 @@ xcrun notarytool submit "$ZIP_PATH" \
   --team-id "$APPLE_TEAM_ID" \
   --wait
 
-# ── Staple ────────────────────────────────────────────────────
+# Staple Noatry
 echo "Stapling notarization ticket..."
 xcrun stapler staple "$APP_BUNDLE"
 
@@ -71,7 +84,7 @@ xcrun stapler staple "$APP_BUNDLE"
 rm -f "$ZIP_PATH"
 ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
-# ── DMG ───────────────────────────────────────────────────────
+# DMG
 DMG_NAME="Dacx-macOS.dmg"
 DMG_PATH="$ROOT/release/$DMG_NAME"
 DMG_STAGE="$ROOT/build/dmg-stage"
@@ -87,7 +100,7 @@ hdiutil create -volname "Dacx" -srcfolder "$DMG_STAGE" \
 
 rm -rf "$DMG_STAGE"
 
-# Sign the DMG
+# Sign DMG
 codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
 
 echo ""
