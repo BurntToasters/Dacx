@@ -248,19 +248,20 @@ function escapeXmlAttr(value) {
 }
 
 function renderInnoOpenWithRegistryLines() {
+  const openCommandValue = '"""{app}\\{#AppExeName}"" ""%1"""';
   const lines = [
     'Root: HKCR; Subkey: "Dacx.Media"; ValueType: string; ValueData: "Dacx Media File"; Flags: uninsdeletekey',
-    'Root: HKCR; Subkey: "Dacx.Media\\\\DefaultIcon"; ValueType: string; ValueData: "{app}\\\\{#AppExeName},0"; Flags: uninsdeletekey',
-    'Root: HKCR; Subkey: "Dacx.Media\\\\shell\\\\open\\\\command"; ValueType: string; ValueData: "\\"{app}\\\\{#AppExeName}\\" \\"%1\\""; Flags: uninsdeletekey',
-    'Root: HKCR; Subkey: "Applications\\\\{#AppExeName}\\\\shell\\\\open\\\\command"; ValueType: string; ValueData: "\\"{app}\\\\{#AppExeName}\\" \\"%1\\""; Flags: uninsdeletekey',
+    'Root: HKCR; Subkey: "Dacx.Media\\DefaultIcon"; ValueType: string; ValueData: "{app}\\{#AppExeName},0"; Flags: uninsdeletekey',
+    `Root: HKCR; Subkey: "Dacx.Media\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
+    `Root: HKCR; Subkey: "Applications\\{#AppExeName}\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
   ];
 
   for (const ext of SUPPORTED_MEDIA_EXTENSIONS) {
     lines.push(
-      `Root: HKCR; Subkey: "Applications\\\\{#AppExeName}\\\\SupportedTypes"; ValueType: string; ValueName: ".${ext}"; ValueData: ""; Flags: uninsdeletevalue`,
+      `Root: HKCR; Subkey: "Applications\\{#AppExeName}\\SupportedTypes"; ValueType: string; ValueName: ".${ext}"; ValueData: ""; Flags: uninsdeletevalue`,
     );
     lines.push(
-      `Root: HKCR; Subkey: ".${ext}\\\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Media"; ValueData: ""; Flags: uninsdeletevalue`,
+      `Root: HKCR; Subkey: ".${ext}\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Media"; ValueData: ""; Flags: uninsdeletevalue`,
     );
   }
   return lines.join("\n");
