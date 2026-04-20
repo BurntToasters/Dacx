@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -162,6 +163,13 @@ class _DacxAppState extends State<DacxApp>
   bool _applyingWindowVisuals = false;
   bool _pendingWindowVisuals = false;
 
+  bool _isEffectiveBlurEnabled(SettingsService settings) {
+    if (!settings.windowBlurEnabled) return false;
+    if (Platform.isWindows || Platform.isMacOS) return true;
+    if (Platform.isLinux) return settings.linuxCompositorBlurExperimental;
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -171,6 +179,10 @@ class _DacxAppState extends State<DacxApp>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_applyWindowVisualSettings());
       unawaited(_syncKeyboardState());
+      Future<void>.delayed(const Duration(milliseconds: 140), () {
+        if (!mounted) return;
+        unawaited(_applyWindowVisualSettings());
+      });
     });
   }
 
@@ -196,6 +208,7 @@ class _DacxAppState extends State<DacxApp>
   @override
   void onWindowFocus() {
     unawaited(_syncKeyboardState());
+    unawaited(_applyWindowVisualSettings());
   }
 
   @override
@@ -224,9 +237,17 @@ class _DacxAppState extends State<DacxApp>
     do {
       _pendingWindowVisuals = false;
       final s = widget.settings;
+      final blurEnabled = _isEffectiveBlurEnabled(s);
+      final bypassNativeOpacity = Platform.isWindows && blurEnabled;
 
       try {
-        await windowManager.setOpacity(s.windowOpacity);
+        if (bypassNativeOpacity) {
+          // window_manager.setOpacity enables WS_EX_LAYERED on Windows, which
+          // can flatten/disable DWM blur materials.
+          await windowManager.setIgnoreMouseEvents(false);
+        } else {
+          await windowManager.setOpacity(s.windowOpacity);
+        }
       } catch (_) {}
 
       try {
@@ -239,18 +260,29 @@ class _DacxAppState extends State<DacxApp>
           } catch (_) {}
         }
 
-        if (s.windowBlurEnabled) {
+        if (blurEnabled) {
           final strength = s.windowBlurStrength;
           if (Platform.isWindows) {
             final dark = _isDarkMode();
-            final alpha = (30 + (strength * 56)).round().clamp(24, 96);
-            await Window.setEffect(
-              effect: WindowEffect.aero,
-              color: dark
-                  ? Color.fromARGB(alpha, 18, 22, 28)
-                  : Color.fromARGB(alpha, 250, 252, 255),
-              dark: dark,
-            );
+            if (strength < 0.22) {
+              await Window.setEffect(
+                effect: WindowEffect.transparent,
+                color: Colors.transparent,
+                dark: dark,
+              );
+            } else if (strength < 0.62) {
+              await Window.setEffect(
+                effect: WindowEffect.aero,
+                color: Colors.transparent,
+                dark: dark,
+              );
+            } else {
+              await Window.setEffect(
+                effect: WindowEffect.acrylic,
+                color: Colors.transparent,
+                dark: dark,
+              );
+            }
           } else if (Platform.isMacOS) {
             final effect = switch (strength) {
               < 0.20 => WindowEffect.windowBackground,
@@ -259,6 +291,12 @@ class _DacxAppState extends State<DacxApp>
               _ => WindowEffect.fullScreenUI,
             };
             await Window.setEffect(effect: effect, dark: _isDarkMode());
+          } else if (Platform.isLinux) {
+            await Window.setEffect(
+              effect: WindowEffect.transparent,
+              color: Colors.transparent,
+              dark: _isDarkMode(),
+            );
           } else {
             await Window.setEffect(
               effect: WindowEffect.disabled,
@@ -297,6 +335,15 @@ class _DacxAppState extends State<DacxApp>
   @override
   Widget build(BuildContext context) {
     final s = widget.settings;
+    final blurEnabled = _isEffectiveBlurEnabled(s);
+    final opacitySliderT = ((s.windowOpacity - 0.65) / 0.35).clamp(0.0, 1.0);
+    final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
+        ? lerpDouble(0.10, 1.0, Curves.easeOut.transform(opacitySliderT))! *
+              lerpDouble(1.0, 0.28, s.windowBlurStrength.clamp(0.0, 1.0))!
+        : 1.0;
+    final popupAlpha = blurEnabled
+        ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
+        : 1.0;
     final seed = s.accentColor.color;
     final lightScheme = ColorScheme.fromSeed(
       seedColor: seed,
@@ -308,13 +355,15 @@ class _DacxAppState extends State<DacxApp>
     );
     final lightVisuals = WindowVisuals.fromScheme(
       lightScheme,
-      blurEnabled: s.windowBlurEnabled,
+      blurEnabled: blurEnabled,
       blurStrength: s.windowBlurStrength,
+      uiOpacity: windowsBlurUiOpacity,
     );
     final darkVisuals = WindowVisuals.fromScheme(
       darkScheme,
-      blurEnabled: s.windowBlurEnabled,
+      blurEnabled: blurEnabled,
       blurStrength: s.windowBlurStrength,
+      uiOpacity: windowsBlurUiOpacity,
     );
 
     return MaterialApp(
@@ -325,15 +374,13 @@ class _DacxAppState extends State<DacxApp>
       theme: ThemeData(
         colorScheme: lightScheme,
         useMaterial3: true,
-        scaffoldBackgroundColor: s.windowBlurEnabled
+        scaffoldBackgroundColor: blurEnabled
             ? Colors.transparent
             : lightVisuals.windowBottomColor,
         canvasColor: lightVisuals.contentColor,
         dividerColor: lightVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: lightVisuals.contentColor.withValues(
-            alpha: s.windowBlurEnabled ? 0.96 : 1.0,
-          ),
+          color: lightVisuals.contentColor.withValues(alpha: popupAlpha),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -346,15 +393,13 @@ class _DacxAppState extends State<DacxApp>
         colorScheme: darkScheme,
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: s.windowBlurEnabled
+        scaffoldBackgroundColor: blurEnabled
             ? Colors.transparent
             : darkVisuals.windowBottomColor,
         canvasColor: darkVisuals.contentColor,
         dividerColor: darkVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: darkVisuals.contentColor.withValues(
-            alpha: s.windowBlurEnabled ? 0.96 : 1.0,
-          ),
+          color: darkVisuals.contentColor.withValues(alpha: popupAlpha),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

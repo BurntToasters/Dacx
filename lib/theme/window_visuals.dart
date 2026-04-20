@@ -34,12 +34,25 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     ColorScheme scheme, {
     required bool blurEnabled,
     required double blurStrength,
+    double uiOpacity = 1.0,
   }) {
     final strength = blurStrength.clamp(0.0, 1.0).toDouble();
-    final shellAlpha = blurEnabled ? lerpDouble(0.98, 0.72, strength)! : 1.0;
-    final barAlpha = blurEnabled ? lerpDouble(0.94, 0.78, strength)! : 0.98;
-    final contentAlpha = blurEnabled ? lerpDouble(0.88, 0.68, strength)! : 0.98;
-    final overlayAlpha = blurEnabled ? lerpDouble(0.94, 0.82, strength)! : 0.99;
+    final opacity = uiOpacity.clamp(0.65, 1.0).toDouble();
+    final curvedStrength = Curves.easeOutCubic.transform(strength);
+    double withUiOpacity(double alpha) =>
+        blurEnabled ? (alpha * opacity).clamp(0.0, 1.0).toDouble() : alpha;
+    final shellAlpha = blurEnabled
+        ? withUiOpacity(lerpDouble(0.96, 0.14, curvedStrength)!)
+        : 1.0;
+    final barAlpha = blurEnabled
+        ? withUiOpacity(lerpDouble(0.90, 0.16, curvedStrength)!)
+        : 0.98;
+    final contentAlpha = blurEnabled
+        ? withUiOpacity(lerpDouble(0.82, 0.12, curvedStrength)!)
+        : 0.98;
+    final overlayAlpha = blurEnabled
+        ? withUiOpacity(lerpDouble(0.92, 0.28, curvedStrength)!)
+        : 0.99;
     final borderAlpha = blurEnabled ? lerpDouble(0.18, 0.28, strength)! : 0.14;
     final dividerAlpha = blurEnabled ? lerpDouble(0.14, 0.22, strength)! : 0.12;
     final shadowAlpha = blurEnabled ? lerpDouble(0.16, 0.28, strength)! : 0.10;

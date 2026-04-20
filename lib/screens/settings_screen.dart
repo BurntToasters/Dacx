@@ -88,6 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _themeModeTile(),
                         _accentColorTile(colorScheme),
                         _windowOpacityTile(),
+                        if (Platform.isLinux) _linuxCompositorBlurTile(),
                         _windowBlurTile(),
                         _windowBlurStrengthTile(),
                         SwitchListTile(
@@ -276,23 +277,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _windowOpacityTile() {
     final opacity = _s.windowOpacity;
     final percent = (opacity * 100).round();
+    final windowsBlurMode = Platform.isWindows && _s.windowBlurEnabled;
 
     return ListTile(
       title: const Text('Window opacity'),
-      subtitle: Slider(
-        value: opacity,
-        min: 0.65,
-        max: 1.0,
-        divisions: 14,
-        label: '$percent%',
-        onChanged: (v) => setState(() => _s.windowOpacity = v),
+      subtitle: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (windowsBlurMode)
+            const Text('With blur on (Windows), this adjusts UI translucency.'),
+          Slider(
+            value: opacity,
+            min: 0.65,
+            max: 1.0,
+            divisions: 14,
+            label: '$percent%',
+            onChanged: (v) => setState(() => _s.windowOpacity = v),
+          ),
+        ],
       ),
       trailing: Text('$percent%'),
     );
   }
 
   Widget _windowBlurTile() {
-    final isSupported = Platform.isWindows || Platform.isMacOS;
+    final isSupported =
+        Platform.isWindows ||
+        Platform.isMacOS ||
+        (Platform.isLinux && _s.linuxCompositorBlurExperimental);
     if (!isSupported && _s.windowBlurEnabled) {
       _s.windowBlurEnabled = false;
     }
@@ -300,9 +313,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SwitchListTile(
       title: const Text('Background blur'),
       subtitle: Text(
-        isSupported
-            ? 'Applies native blur behind app content'
-            : 'Not available on Linux',
+        Platform.isLinux
+            ? (_s.linuxCompositorBlurExperimental
+                  ? 'Experimental: requires compositor support'
+                  : 'Not available on Linux unless experimental mode is enabled')
+            : 'Applies native blur behind app content',
       ),
       value: _s.windowBlurEnabled,
       onChanged: isSupported
@@ -312,23 +327,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _windowBlurStrengthTile() {
-    final isSupported = Platform.isWindows || Platform.isMacOS;
+    final isSupported =
+        Platform.isWindows ||
+        Platform.isMacOS ||
+        (Platform.isLinux && _s.linuxCompositorBlurExperimental);
     final strength = _s.windowBlurStrength;
     final percent = (strength * 100).round();
 
     return ListTile(
       title: const Text('Glass strength'),
-      subtitle: Slider(
-        value: strength,
-        min: 0.0,
-        max: 1.0,
-        divisions: 10,
-        label: '$percent%',
-        onChanged: isSupported && _s.windowBlurEnabled
-            ? (v) => setState(() => _s.windowBlurStrength = v)
-            : null,
+      subtitle: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            Platform.isWindows
+                ? 'Adjusts blur material mode + translucency intensity'
+                : 'Adjusts native glass material intensity',
+          ),
+          Slider(
+            value: strength,
+            min: 0.0,
+            max: 1.0,
+            divisions: 10,
+            label: '$percent%',
+            onChanged: isSupported && _s.windowBlurEnabled
+                ? (v) => setState(() => _s.windowBlurStrength = v)
+                : null,
+          ),
+        ],
       ),
       trailing: Text('$percent%'),
+    );
+  }
+
+  Widget _linuxCompositorBlurTile() {
+    return SwitchListTile(
+      title: const Text('Experimental Linux compositor blur'),
+      subtitle: const Text(
+        'Enables transparent window path for compositors that support blur (for example KDE blur rules)',
+      ),
+      value: _s.linuxCompositorBlurExperimental,
+      onChanged: (v) => setState(() => _s.linuxCompositorBlurExperimental = v),
     );
   }
 
