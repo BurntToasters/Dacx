@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'screens/player_screen.dart';
+import 'services/debug_log_service.dart';
 import 'services/settings_service.dart';
+import 'theme/window_visuals.dart';
 
 class _NoBounceScrollBehavior extends MaterialScrollBehavior {
   const _NoBounceScrollBehavior();
@@ -44,6 +47,7 @@ void main(List<String> args) async {
 
   final prefs = await SharedPreferences.getInstance();
   final settings = SettingsService(prefs);
+  final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
 
   await windowManager.ensureInitialized();
 
@@ -91,7 +95,7 @@ void main(List<String> args) async {
   // Collect CLI file argument (first non-flag arg).
   final cliFile = _parseCliFilePath(args);
 
-  runApp(DacxApp(settings: settings, initialFile: cliFile));
+  runApp(DacxApp(settings: settings, debugLog: debugLog, initialFile: cliFile));
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (!firstFrameReady.isCompleted) {
@@ -148,9 +152,15 @@ String? _normalizeCliPath(String value) {
 
 class DacxApp extends StatefulWidget {
   final SettingsService settings;
+  final DebugLogService debugLog;
   final String? initialFile;
 
-  const DacxApp({super.key, required this.settings, this.initialFile});
+  const DacxApp({
+    super.key,
+    required this.settings,
+    required this.debugLog,
+    this.initialFile,
+  });
 
   @override
   State<DacxApp> createState() => _DacxAppState();
@@ -161,15 +171,35 @@ class _DacxAppState extends State<DacxApp>
   bool _applyingWindowVisuals = false;
   bool _pendingWindowVisuals = false;
 
+  bool _isEffectiveBlurEnabled(SettingsService settings) {
+    if (!settings.experimentalFeaturesEnabled) return false;
+    if (!settings.windowBlurEnabled) return false;
+    if (Platform.isWindows || Platform.isMacOS) return true;
+    if (Platform.isLinux) return settings.linuxCompositorBlurExperimental;
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
+    widget.debugLog.logLazy(
+      category: DebugLogCategory.system,
+      event: 'app_init',
+      detailsBuilder: () => {
+        'platform': Platform.operatingSystem,
+        'initial_file_present': widget.initialFile != null,
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
     windowManager.addListener(this);
     widget.settings.addListener(_onSettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_applyWindowVisualSettings());
       unawaited(_syncKeyboardState());
+      Future<void>.delayed(const Duration(milliseconds: 140), () {
+        if (!mounted) return;
+        unawaited(_applyWindowVisualSettings());
+      });
     });
   }
 
@@ -182,6 +212,15 @@ class _DacxAppState extends State<DacxApp>
   }
 
   void _onSettingsChanged() {
+    widget.debugLog.logLazy(
+      category: DebugLogCategory.system,
+      event: 'settings_changed_notification',
+      detailsBuilder: () => {
+        'theme_mode': widget.settings.themeMode.name,
+        'always_on_top': widget.settings.alwaysOnTop,
+        'experimental_features': widget.settings.experimentalFeaturesEnabled,
+      },
+    );
     setState(() {});
     unawaited(_applyWindowVisualSettings());
   }
@@ -195,6 +234,7 @@ class _DacxAppState extends State<DacxApp>
   @override
   void onWindowFocus() {
     unawaited(_syncKeyboardState());
+    unawaited(_applyWindowVisualSettings());
   }
 
   @override
@@ -223,9 +263,19 @@ class _DacxAppState extends State<DacxApp>
     do {
       _pendingWindowVisuals = false;
       final s = widget.settings;
+      final experimentalEnabled = s.experimentalFeaturesEnabled;
+      final blurEnabled = _isEffectiveBlurEnabled(s);
+      final bypassNativeOpacity = Platform.isWindows && blurEnabled;
+      final effectiveOpacity = experimentalEnabled ? s.windowOpacity : 1.0;
 
       try {
-        await windowManager.setOpacity(s.windowOpacity);
+        if (bypassNativeOpacity) {
+          // window_manager.setOpacity enables WS_EX_LAYERED on Windows, which
+          // can flatten/disable DWM blur materials.
+          await windowManager.setIgnoreMouseEvents(false);
+        } else {
+          await windowManager.setOpacity(effectiveOpacity);
+        }
       } catch (_) {}
 
       try {
@@ -238,18 +288,26 @@ class _DacxAppState extends State<DacxApp>
           } catch (_) {}
         }
 
-        if (s.windowBlurEnabled) {
+        if (blurEnabled) {
           final strength = s.windowBlurStrength;
           if (Platform.isWindows) {
             final dark = _isDarkMode();
-            final alpha = (100 + (strength * 110)).round().clamp(80, 210);
-            await Window.setEffect(
-              effect: WindowEffect.acrylic,
-              color: dark
-                  ? Color.fromARGB(alpha, 22, 27, 34)
-                  : Color.fromARGB(alpha, 242, 244, 247),
-              dark: dark,
-            );
+            if (strength < 0.12) {
+              await Window.setEffect(
+                effect: WindowEffect.disabled,
+                color: Colors.transparent,
+                dark: dark,
+              );
+            } else {
+              final alpha = (220 - (strength * 120)).round().clamp(90, 220);
+              await Window.setEffect(
+                effect: WindowEffect.aero,
+                color: dark
+                    ? Color.fromARGB(alpha, 24, 30, 37)
+                    : Color.fromARGB(alpha, 245, 248, 252),
+                dark: dark,
+              );
+            }
           } else if (Platform.isMacOS) {
             final effect = switch (strength) {
               < 0.20 => WindowEffect.windowBackground,
@@ -258,6 +316,12 @@ class _DacxAppState extends State<DacxApp>
               _ => WindowEffect.fullScreenUI,
             };
             await Window.setEffect(effect: effect, dark: _isDarkMode());
+          } else if (Platform.isLinux) {
+            await Window.setEffect(
+              effect: WindowEffect.transparent,
+              color: Colors.transparent,
+              dark: _isDarkMode(),
+            );
           } else {
             await Window.setEffect(
               effect: WindowEffect.disabled,
@@ -273,6 +337,19 @@ class _DacxAppState extends State<DacxApp>
           );
         }
       } catch (_) {}
+      if (widget.debugLog.isEnabled) {
+        widget.debugLog.logLazy(
+          category: DebugLogCategory.system,
+          event: 'window_visuals_applied',
+          detailsBuilder: () => {
+            'experimental_enabled': experimentalEnabled,
+            'blur_enabled': blurEnabled,
+            'bypass_native_opacity': bypassNativeOpacity,
+            'effective_opacity': effectiveOpacity.toStringAsFixed(3),
+            'blur_strength': s.windowBlurStrength.toStringAsFixed(3),
+          },
+        );
+      }
     } while (_pendingWindowVisuals && mounted);
     _applyingWindowVisuals = false;
   }
@@ -296,6 +373,16 @@ class _DacxAppState extends State<DacxApp>
   @override
   Widget build(BuildContext context) {
     final s = widget.settings;
+    final experimentalEnabled = s.experimentalFeaturesEnabled;
+    final blurEnabled = _isEffectiveBlurEnabled(s);
+    final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
+    final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
+    final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
+        ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
+        : 1.0;
+    final popupAlpha = blurEnabled
+        ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
+        : 1.0;
     final seed = s.accentColor.color;
     final lightScheme = ColorScheme.fromSeed(
       seedColor: seed,
@@ -305,9 +392,18 @@ class _DacxAppState extends State<DacxApp>
       seedColor: seed,
       brightness: Brightness.dark,
     );
-    final surfaceAlpha = s.windowBlurEnabled
-        ? (0.88 - (s.windowBlurStrength * 0.55)).clamp(0.33, 0.88)
-        : 1.0;
+    final lightVisuals = WindowVisuals.fromScheme(
+      lightScheme,
+      blurEnabled: blurEnabled,
+      blurStrength: s.windowBlurStrength,
+      uiOpacity: windowsBlurUiOpacity,
+    );
+    final darkVisuals = WindowVisuals.fromScheme(
+      darkScheme,
+      blurEnabled: blurEnabled,
+      blurStrength: s.windowBlurStrength,
+      uiOpacity: windowsBlurUiOpacity,
+    );
 
     return MaterialApp(
       title: 'Dacx',
@@ -317,21 +413,45 @@ class _DacxAppState extends State<DacxApp>
       theme: ThemeData(
         colorScheme: lightScheme,
         useMaterial3: true,
-        scaffoldBackgroundColor: lightScheme.surface.withValues(
-          alpha: surfaceAlpha,
+        scaffoldBackgroundColor: blurEnabled
+            ? Colors.transparent
+            : lightVisuals.windowBottomColor,
+        canvasColor: lightVisuals.contentColor,
+        dividerColor: lightVisuals.dividerColor,
+        popupMenuTheme: PopupMenuThemeData(
+          color: lightVisuals.contentColor.withValues(alpha: popupAlpha),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: lightVisuals.borderColor),
+          ),
         ),
-        canvasColor: lightScheme.surface.withValues(alpha: surfaceAlpha),
+        extensions: [lightVisuals],
       ),
       darkTheme: ThemeData(
         colorScheme: darkScheme,
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: darkScheme.surface.withValues(
-          alpha: surfaceAlpha,
+        scaffoldBackgroundColor: blurEnabled
+            ? Colors.transparent
+            : darkVisuals.windowBottomColor,
+        canvasColor: darkVisuals.contentColor,
+        dividerColor: darkVisuals.dividerColor,
+        popupMenuTheme: PopupMenuThemeData(
+          color: darkVisuals.contentColor.withValues(alpha: popupAlpha),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: darkVisuals.borderColor),
+          ),
         ),
-        canvasColor: darkScheme.surface.withValues(alpha: surfaceAlpha),
+        extensions: [darkVisuals],
       ),
-      home: PlayerScreen(settings: s, initialFile: widget.initialFile),
+      home: PlayerScreen(
+        settings: s,
+        debugLog: widget.debugLog,
+        initialFile: widget.initialFile,
+      ),
     );
   }
 }

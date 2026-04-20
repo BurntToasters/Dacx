@@ -54,6 +54,10 @@ class SettingsService extends ChangeNotifier {
   static const _kWindowOpacity = 'window_opacity';
   static const _kWindowBlurEnabled = 'window_blur_enabled';
   static const _kWindowBlurStrength = 'window_blur_strength';
+  static const _kExperimentalFeaturesEnabled = 'experimental_features_enabled';
+  static const _kLinuxCompositorBlurExperimental =
+      'linux_compositor_blur_experimental';
+  static const _kDebugModeEnabled = 'debug_mode_enabled';
 
   static const int maxRecentFiles = 20;
 
@@ -229,6 +233,29 @@ class SettingsService extends ChangeNotifier {
 
   set windowBlurStrength(double value) {
     _prefs.setDouble(_kWindowBlurStrength, value.clamp(0.0, 1.0));
+    notifyListeners();
+  }
+
+  bool get experimentalFeaturesEnabled =>
+      _prefs.getBool(_kExperimentalFeaturesEnabled) ?? false;
+
+  set experimentalFeaturesEnabled(bool value) {
+    _prefs.setBool(_kExperimentalFeaturesEnabled, value);
+    notifyListeners();
+  }
+
+  bool get linuxCompositorBlurExperimental =>
+      _prefs.getBool(_kLinuxCompositorBlurExperimental) ?? false;
+
+  set linuxCompositorBlurExperimental(bool value) {
+    _prefs.setBool(_kLinuxCompositorBlurExperimental, value);
+    notifyListeners();
+  }
+
+  bool get debugModeEnabled => _prefs.getBool(_kDebugModeEnabled) ?? false;
+
+  set debugModeEnabled(bool value) {
+    _prefs.setBool(_kDebugModeEnabled, value);
     notifyListeners();
   }
 

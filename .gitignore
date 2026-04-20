@@ -23,7 +23,6 @@ build/
 Thumbs.db
 
 # IDE
-.vscode/
 *.swp
 *.swo
 
@@ -36,3 +35,8 @@ release/
 dist/
 flatpak-repo/
 flatpak-build*/
+
+# VS Code
+**/.*/
+!.vscode/
+!.github/

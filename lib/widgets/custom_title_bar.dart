@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../theme/window_visuals.dart';
+
 /// Custom title bar for Windows and macOS. Returns [SizedBox.shrink] on Linux.
 class CustomTitleBar extends StatefulWidget {
   const CustomTitleBar({super.key});
@@ -42,6 +44,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     }
 
     final colorScheme = Theme.of(context).colorScheme;
+    final visuals = context.windowVisuals;
     final isMac = Platform.isMacOS;
 
     return GestureDetector(
@@ -53,61 +56,61 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
           await windowManager.maximize();
         }
       },
-      child: Container(
-        height: isMac ? 38 : 32,
-        color: Colors.transparent,
-        child: Row(
-          children: [
-            // On macOS, leave space for native traffic light buttons.
-            SizedBox(width: isMac ? 72 : 12),
-            // App icon
-            Icon(
-              Icons.play_circle_outline,
-              size: 16,
-              color: colorScheme.primary,
-            ),
-            const SizedBox(width: 8),
-            // Title
-            Text(
-              'Dacx',
-              style: TextStyle(
-                fontSize: 12,
-                color: colorScheme.onSurface.withValues(alpha: 0.8),
-                fontWeight: FontWeight.w500,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: visuals.barColor,
+          border: Border(bottom: BorderSide(color: visuals.dividerColor)),
+        ),
+        child: SizedBox(
+          height: isMac ? 38 : 32,
+          child: Row(
+            children: [
+              SizedBox(width: isMac ? 72 : 12),
+              Icon(
+                Icons.play_circle_outline,
+                size: 16,
+                color: colorScheme.primary.withValues(alpha: 0.92),
               ),
-            ),
-            // Draggable spacer
-            const Expanded(child: SizedBox.shrink()),
-            // Window buttons (Windows only — macOS uses native traffic lights)
-            if (!isMac) ...[
-              _WindowButton(
-                icon: Icons.minimize,
-                onPressed: windowManager.minimize,
-                hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
-                iconColor: colorScheme.onSurface.withValues(alpha: 0.7),
+              const SizedBox(width: 8),
+              Text(
+                'Dacx',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withValues(alpha: 0.86),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              _WindowButton(
-                icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
-                iconSize: _isMaximized ? 14 : 16,
-                onPressed: () async {
-                  if (_isMaximized) {
-                    await windowManager.unmaximize();
-                  } else {
-                    await windowManager.maximize();
-                  }
-                },
-                hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
-                iconColor: colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              _WindowButton(
-                icon: Icons.close,
-                onPressed: windowManager.close,
-                hoverColor: Colors.red,
-                hoverIconColor: Colors.white,
-                iconColor: colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
+              const Expanded(child: SizedBox.shrink()),
+              if (!isMac) ...[
+                _WindowButton(
+                  icon: Icons.minimize,
+                  onPressed: windowManager.minimize,
+                  hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
+                  iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
+                ),
+                _WindowButton(
+                  icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+                  iconSize: _isMaximized ? 14 : 16,
+                  onPressed: () async {
+                    if (_isMaximized) {
+                      await windowManager.unmaximize();
+                    } else {
+                      await windowManager.maximize();
+                    }
+                  },
+                  hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
+                  iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
+                ),
+                _WindowButton(
+                  icon: Icons.close,
+                  onPressed: windowManager.close,
+                  hoverColor: Colors.red,
+                  hoverIconColor: Colors.white,
+                  iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
