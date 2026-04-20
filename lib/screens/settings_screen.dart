@@ -87,10 +87,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _sectionHeader('Appearance'),
                         _themeModeTile(),
                         _accentColorTile(colorScheme),
-                        _windowOpacityTile(),
-                        if (Platform.isLinux) _linuxCompositorBlurTile(),
-                        _windowBlurTile(),
-                        _windowBlurStrengthTile(),
+                        _experimentalFeaturesTile(),
+                        if (_s.experimentalFeaturesEnabled) ...[
+                          _windowOpacityTile(),
+                          if (Platform.isLinux) _linuxCompositorBlurTile(),
+                          _windowBlurTile(),
+                          _windowBlurStrengthTile(),
+                        ],
                         SwitchListTile(
                           title: const Text('Always on top'),
                           value: _s.alwaysOnTop,
@@ -302,6 +305,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _windowBlurTile() {
+    if (!_s.experimentalFeaturesEnabled) {
+      if (_s.windowBlurEnabled) _s.windowBlurEnabled = false;
+      return const SizedBox.shrink();
+    }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
@@ -327,6 +334,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _windowBlurStrengthTile() {
+    if (!_s.experimentalFeaturesEnabled) {
+      return const SizedBox.shrink();
+    }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
@@ -342,7 +352,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Text(
             Platform.isWindows
-                ? 'Adjusts blur material mode + translucency intensity'
+                ? 'Adjusts native blur intensity'
                 : 'Adjusts native glass material intensity',
           ),
           Slider(
@@ -362,6 +372,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _linuxCompositorBlurTile() {
+    if (!_s.experimentalFeaturesEnabled) {
+      return const SizedBox.shrink();
+    }
     return SwitchListTile(
       title: const Text('Experimental Linux compositor blur'),
       subtitle: const Text(
@@ -369,6 +382,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       value: _s.linuxCompositorBlurExperimental,
       onChanged: (v) => setState(() => _s.linuxCompositorBlurExperimental = v),
+    );
+  }
+
+  Widget _experimentalFeaturesTile() {
+    return SwitchListTile(
+      title: const Text('Toggle Experimental Features'),
+      subtitle: const Text(
+        'Show and enable transparency and background blur controls',
+      ),
+      value: _s.experimentalFeaturesEnabled,
+      onChanged: (v) {
+        setState(() {
+          _s.experimentalFeaturesEnabled = v;
+          if (!v) {
+            _s.windowBlurEnabled = false;
+            _s.windowOpacity = 1.0;
+          }
+        });
+      },
     );
   }
 

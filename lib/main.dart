@@ -164,6 +164,7 @@ class _DacxAppState extends State<DacxApp>
   bool _pendingWindowVisuals = false;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
+    if (!settings.experimentalFeaturesEnabled) return false;
     if (!settings.windowBlurEnabled) return false;
     if (Platform.isWindows || Platform.isMacOS) return true;
     if (Platform.isLinux) return settings.linuxCompositorBlurExperimental;
@@ -237,8 +238,10 @@ class _DacxAppState extends State<DacxApp>
     do {
       _pendingWindowVisuals = false;
       final s = widget.settings;
+      final experimentalEnabled = s.experimentalFeaturesEnabled;
       final blurEnabled = _isEffectiveBlurEnabled(s);
       final bypassNativeOpacity = Platform.isWindows && blurEnabled;
+      final effectiveOpacity = experimentalEnabled ? s.windowOpacity : 1.0;
 
       try {
         if (bypassNativeOpacity) {
@@ -246,7 +249,7 @@ class _DacxAppState extends State<DacxApp>
           // can flatten/disable DWM blur materials.
           await windowManager.setIgnoreMouseEvents(false);
         } else {
-          await windowManager.setOpacity(s.windowOpacity);
+          await windowManager.setOpacity(effectiveOpacity);
         }
       } catch (_) {}
 
@@ -264,22 +267,19 @@ class _DacxAppState extends State<DacxApp>
           final strength = s.windowBlurStrength;
           if (Platform.isWindows) {
             final dark = _isDarkMode();
-            if (strength < 0.22) {
+            if (strength < 0.12) {
               await Window.setEffect(
-                effect: WindowEffect.transparent,
-                color: Colors.transparent,
-                dark: dark,
-              );
-            } else if (strength < 0.62) {
-              await Window.setEffect(
-                effect: WindowEffect.aero,
+                effect: WindowEffect.disabled,
                 color: Colors.transparent,
                 dark: dark,
               );
             } else {
+              final alpha = (220 - (strength * 120)).round().clamp(90, 220);
               await Window.setEffect(
-                effect: WindowEffect.acrylic,
-                color: Colors.transparent,
+                effect: WindowEffect.aero,
+                color: dark
+                    ? Color.fromARGB(alpha, 24, 30, 37)
+                    : Color.fromARGB(alpha, 245, 248, 252),
                 dark: dark,
               );
             }
@@ -335,11 +335,12 @@ class _DacxAppState extends State<DacxApp>
   @override
   Widget build(BuildContext context) {
     final s = widget.settings;
+    final experimentalEnabled = s.experimentalFeaturesEnabled;
     final blurEnabled = _isEffectiveBlurEnabled(s);
-    final opacitySliderT = ((s.windowOpacity - 0.65) / 0.35).clamp(0.0, 1.0);
+    final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
+    final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
     final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
-        ? lerpDouble(0.10, 1.0, Curves.easeOut.transform(opacitySliderT))! *
-              lerpDouble(1.0, 0.28, s.windowBlurStrength.clamp(0.0, 1.0))!
+        ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
         : 1.0;
     final popupAlpha = blurEnabled
         ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
