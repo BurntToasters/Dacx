@@ -215,7 +215,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   bool _shouldEnableHardwareAcceleration(String hwDec) {
     if (hwDec == 'no' || hwDec == 'auto-safe') return false;
-    if (Platform.isMacOS && kDebugMode) return false;
+    if ((Platform.isMacOS || Platform.isLinux) && kDebugMode) return false;
     return true;
   }
 
@@ -751,24 +751,4 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 }
 
-class _ExponentialEaseOut extends Curve {
-  const _ExponentialEaseOut();
 
-  @override
-  double transformInternal(double t) {
-    if (t <= 0) return 0;
-    if (t >= 1) return 1;
-    return 1 - math.pow(2, -6 * t).toDouble();
-  }
-}
-
-class _ExponentialEaseIn extends Curve {
-  const _ExponentialEaseIn();
-
-  @override
-  double transformInternal(double t) {
-    if (t <= 0) return 0;
-    if (t >= 1) return 1;
-    return math.pow(2, 6 * t - 6).toDouble();
-  }
-}

@@ -261,6 +261,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowBlurTile() {
     final isSupported = Platform.isWindows || Platform.isMacOS;
+    if (!isSupported && _s.windowBlurEnabled) {
+      _s.windowBlurEnabled = false;
+    }
 
     return SwitchListTile(
       title: const Text('Background blur'),
@@ -360,6 +363,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _keyboardShortcutsTile() {
+    final openShortcut = Platform.isMacOS ? '⌘O' : 'Ctrl+O';
     return ListTile(
       title: const Text('Keyboard shortcuts'),
       leading: const Icon(Icons.keyboard),
@@ -368,13 +372,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Keyboard Shortcuts'),
-            content: const Column(
+            content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _ShortcutRow('Space', 'Play / Pause'),
-                _ShortcutRow('←  →', 'Seek ±5 seconds'),
-                _ShortcutRow('↑  ↓', 'Volume ±5%'),
-                _ShortcutRow('M', 'Mute / Unmute'),
+                _ShortcutRow(openShortcut, 'Open File'),
+                const _ShortcutRow('Space', 'Play / Pause'),
+                const _ShortcutRow('←  →', 'Seek ±5 seconds'),
+                const _ShortcutRow('↑  ↓', 'Volume ±5%'),
+                const _ShortcutRow('M', 'Mute / Unmute'),
               ],
             ),
             actions: [
