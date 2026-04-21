@@ -444,16 +444,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowBlurTile() {
     if (!_s.experimentalFeaturesEnabled) {
-      if (_s.windowBlurEnabled) _s.windowBlurEnabled = false;
       return const SizedBox.shrink();
     }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
         (Platform.isLinux && _s.linuxCompositorBlurExperimental);
-    if (!isSupported && _s.windowBlurEnabled) {
-      _s.windowBlurEnabled = false;
-    }
+    final effectiveEnabled = isSupported && _s.windowBlurEnabled;
 
     return SwitchListTile(
       secondary: _experimentalWarningIcon(),
@@ -465,7 +462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : 'Not available on Linux unless experimental mode is enabled')
             : 'Applies native blur behind app content',
       ),
-      value: _s.windowBlurEnabled,
+      value: effectiveEnabled,
       onChanged: isSupported
           ? (v) => setState(() {
               _s.windowBlurEnabled = v;
@@ -781,6 +778,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final update = await _updateService.checkForUpdate();
       if (!mounted) return;
+      if (!_updateService.lastCheckSucceeded) {
+        _log(
+          'manual_update_check_failed',
+          category: DebugLogCategory.update,
+          severity: DebugSeverity.warn,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to check for updates.')),
+        );
+        return;
+      }
       if (update != null) {
         _log(
           'manual_update_available',

@@ -44,9 +44,19 @@ function parseTest(output, results) {
   const passedMatch = cleanOutput.match(/(\d+)\s+tests?\s+passed/i);
   const failedMatch = cleanOutput.match(/(\d+)\s+tests?\s+failed/i);
   const allPassedMatch = cleanOutput.match(/All\s+(\d+)\s+tests?\s+passed/i);
+  const allPassedNoCount = /All\s+tests?\s+passed!?/i.test(cleanOutput);
+  const progressMatches = [...cleanOutput.matchAll(/\+(\d+):/g)];
+  const lastProgressCount = progressMatches.length
+    ? parseInt(progressMatches[progressMatches.length - 1][1], 10)
+    : null;
 
   if (allPassedMatch) {
     results.test.passed = parseInt(allPassedMatch[1], 10);
+    results.test.failed = 0;
+  } else if (allPassedNoCount) {
+    results.test.passed = passedMatch
+      ? parseInt(passedMatch[1], 10)
+      : lastProgressCount;
     results.test.failed = 0;
   } else {
     results.test.passed = passedMatch ? parseInt(passedMatch[1], 10) : null;

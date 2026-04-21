@@ -10,10 +10,13 @@ class UpdateService {
   static const String _repo = 'Dacx';
   final DebugLogService? _debugLog;
   final String _debugSource;
+  bool _lastCheckSucceeded = false;
 
   UpdateService({DebugLogService? debugLog, String debugSource = 'unknown'})
     : _debugLog = debugLog,
       _debugSource = debugSource;
+
+  bool get lastCheckSucceeded => _lastCheckSucceeded;
 
   void _log(
     String event, {
@@ -39,6 +42,7 @@ class UpdateService {
   }
 
   Future<UpdateInfo?> checkForUpdate() async {
+    _lastCheckSucceeded = false;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
@@ -68,6 +72,7 @@ class UpdateService {
       final latestVersion = tagName.replaceFirst(RegExp(r'^v'), '');
 
       if (_isNewer(latestVersion, currentVersion)) {
+        _lastCheckSucceeded = true;
         _log(
           'update_available',
           detailsBuilder: () => {
@@ -82,6 +87,7 @@ class UpdateService {
         );
       }
 
+      _lastCheckSucceeded = true;
       _log(
         'up_to_date',
         detailsBuilder: () => {

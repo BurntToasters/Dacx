@@ -161,7 +161,17 @@ class SettingsService extends ChangeNotifier {
   List<String> get recentFiles {
     final raw = _prefs.getString(_kRecentFiles);
     if (raw == null) return [];
-    return (jsonDecode(raw) as List).cast<String>();
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded
+          .whereType<String>()
+          .map((entry) => entry.trim())
+          .where((entry) => entry.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   void addRecentFile(String path) {

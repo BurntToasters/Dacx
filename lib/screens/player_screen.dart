@@ -415,7 +415,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       detailsBuilder: () => {'last_check_epoch': _settings.lastUpdateCheck},
     );
     final update = await _updateService.checkForUpdate();
-    _settings.lastUpdateCheck = DateTime.now().millisecondsSinceEpoch;
+    final checkSucceeded = _updateService.lastCheckSucceeded;
+    if (checkSucceeded) {
+      _settings.lastUpdateCheck = DateTime.now().millisecondsSinceEpoch;
+    }
     if (update != null && mounted) {
       _log(
         'launch_update_available',
@@ -424,7 +427,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       _showUpdateSnackbar(update);
     } else {
-      _log('launch_update_not_available', category: DebugLogCategory.update);
+      if (checkSucceeded) {
+        _log('launch_update_not_available', category: DebugLogCategory.update);
+      } else {
+        _log(
+          'launch_update_check_failed',
+          category: DebugLogCategory.update,
+          severity: DebugSeverity.warn,
+        );
+      }
     }
   }
 
