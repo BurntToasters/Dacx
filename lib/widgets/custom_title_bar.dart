@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
+  bool _nativeCaptionVisible = Platform.isWindows;
 
   @override
   void initState() {
@@ -22,6 +24,11 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     windowManager.addListener(this);
     windowManager.isMaximized().then((v) {
       if (mounted) setState(() => _isMaximized = v);
+    });
+    unawaited(_refreshNativeCaptionVisibility());
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      unawaited(_refreshNativeCaptionVisibility());
     });
   }
 
@@ -32,14 +39,38 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   }
 
   @override
-  void onWindowMaximize() => setState(() => _isMaximized = true);
+  void onWindowMaximize() {
+    setState(() => _isMaximized = true);
+    unawaited(_refreshNativeCaptionVisibility());
+  }
 
   @override
-  void onWindowUnmaximize() => setState(() => _isMaximized = false);
+  void onWindowUnmaximize() {
+    setState(() => _isMaximized = false);
+    unawaited(_refreshNativeCaptionVisibility());
+  }
+
+  @override
+  void onWindowFocus() => unawaited(_refreshNativeCaptionVisibility());
+
+  @override
+  void onWindowRestore() => unawaited(_refreshNativeCaptionVisibility());
+
+  Future<void> _refreshNativeCaptionVisibility() async {
+    if (!Platform.isWindows) return;
+    try {
+      final titleBarHeight = await windowManager.getTitleBarHeight();
+      final nativeCaptionVisible = titleBarHeight > 8;
+      if (mounted && nativeCaptionVisible != _nativeCaptionVisible) {
+        setState(() => _nativeCaptionVisible = nativeCaptionVisible);
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isWindows && !Platform.isMacOS) {
+    if ((!Platform.isWindows && !Platform.isMacOS) ||
+        (Platform.isWindows && _nativeCaptionVisible)) {
       return const SizedBox.shrink();
     }
 

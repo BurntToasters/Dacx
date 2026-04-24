@@ -70,6 +70,20 @@ void main(List<String> args) async {
   final firstFrameReady = Completer<void>();
   var windowShown = false;
 
+  Future<void> ensureHiddenTitleBarApplied() async {
+    if (!Platform.isWindows && !Platform.isMacOS) return;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final titleBarHeight = await windowManager.getTitleBarHeight();
+        if (titleBarHeight <= 0) return;
+        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      } catch (_) {
+        return;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 48 * (attempt + 1)));
+    }
+  }
+
   Future<void> showWindowIfReady() async {
     if (windowShown ||
         !windowReady.isCompleted ||
@@ -79,6 +93,7 @@ void main(List<String> args) async {
     windowShown = true;
     await windowManager.show();
     await windowManager.focus();
+    unawaited(ensureHiddenTitleBarApplied());
   }
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
