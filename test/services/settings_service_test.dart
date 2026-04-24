@@ -60,6 +60,25 @@ void main() {
       expect(service.recentFiles, [existing.path]);
       expect(prefs.getString('recent_files'), jsonEncode([existing.path]));
     });
+
+    test('addRecentFile works when existing storage list is present', () async {
+      final tempDir = await Directory.systemTemp.createTemp('dacx-settings-');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final existing = File('${tempDir.path}/existing.mp3')
+        ..writeAsStringSync('x');
+      final incoming = File('${tempDir.path}/incoming.mp3')
+        ..writeAsStringSync('x');
+
+      SharedPreferences.setMockInitialValues({
+        'recent_files': jsonEncode([existing.path]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      service.addRecentFile(incoming.path);
+
+      expect(service.recentFiles, [incoming.path, existing.path]);
+    });
   });
 
   group('SettingsService.lastOpenDirectory', () {

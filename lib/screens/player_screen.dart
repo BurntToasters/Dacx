@@ -90,6 +90,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   };
 
   final List<StreamSubscription> _subscriptions = [];
+  Future<void> _loadQueue = Future<void>.value();
+  bool _isDisposed = false;
 
   void _log(
     String event, {
@@ -152,16 +154,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     // Apply saved playback settings.
-    _playerService.setVolume(_volume);
+    unawaited(
+      _playerService.setVolume(_volume).catchError((Object e) {
+        _log(
+          'initial_volume_apply_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
     _applyHwDec(_settings.hwDec);
 
     _subscriptions.addAll([
       _playerService.positionStream.listen((pos) {
-        if (!_isSeeking) setState(() => _position = pos);
+        if (!mounted || _isDisposed || _isSeeking) return;
+        setState(() => _position = pos);
       }),
       _playerService.durationStream.listen((dur) {
+        if (!mounted || _isDisposed) return;
         setState(() => _duration = dur);
         if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
           _log(
@@ -171,6 +183,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.playingStream.listen((playing) {
+        if (!mounted || _isDisposed) return;
         setState(() => _isPlaying = playing);
         if (widget.debugLog.isEnabled) {
           _log(
@@ -180,6 +193,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.volumeStream.listen((vol) {
+        if (!mounted || _isDisposed) return;
         setState(() => _volume = vol);
         if (widget.debugLog.isEnabled) {
           _log(
@@ -189,6 +203,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.player.stream.width.listen((w) {
+        if (!mounted || _isDisposed) return;
         final has = w != null && w > 0;
         if (has != _hasVideoOutput) {
           setState(() => _hasVideoOutput = has);
@@ -201,6 +216,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.player.stream.tracks.listen((tracks) {
+        if (!mounted || _isDisposed) return;
         final hasAlbumArt = _hasEmbeddedAlbumArtTrack(tracks);
         if (hasAlbumArt != _hasAlbumArtTrack) {
           setState(() => _hasAlbumArtTrack = hasAlbumArt);
@@ -213,11 +229,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.completedStream.listen((completed) {
-        if (completed && mounted) {
-          setState(() => _position = Duration.zero);
-          if (widget.debugLog.isEnabled) {
-            _log('playback_completed');
-          }
+        if (!mounted || _isDisposed || !completed) return;
+        setState(() => _position = Duration.zero);
+        if (widget.debugLog.isEnabled) {
+          _log('playback_completed');
         }
       }),
     ]);
@@ -242,6 +257,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
     for (final sub in _subscriptions) {
@@ -264,7 +280,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
-    windowManager.setAlwaysOnTop(_settings.alwaysOnTop);
+    unawaited(
+      windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
+        Object e,
+      ) {
+        _log(
+          'always_on_top_apply_failed',
+          category: DebugLogCategory.system,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     if (mounted) {
       setState(() {});
     }
@@ -277,10 +304,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _bootstrapMacOpenFileBridge() async {
+    if (_isDisposed) return;
     try {
       final pending = await _macOpenFileMethodChannel.invokeListMethod<dynamic>(
         'getPendingFiles',
       );
+      if (_isDisposed || !mounted) return;
       if (pending != null && pending.isNotEmpty) {
         _log(
           'mac_pending_files_found',
@@ -288,6 +317,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           detailsBuilder: () => {'count': pending.length},
         );
         for (final entry in pending) {
+          if (_isDisposed || !mounted) return;
           final path = _coerceOpenPath(entry);
           if (path == null) continue;
           await _openRequestedFile(path);
@@ -317,9 +347,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
 
+    if (_isDisposed || !mounted) return;
     _subscriptions.add(
       _macOpenFileEventChannel.receiveBroadcastStream().listen(
         (event) {
+          if (_isDisposed || !mounted) return;
           final path = _coerceOpenPath(event);
           if (path != null) {
             _log(
@@ -364,7 +396,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _applySpeed(double speed) {
-    _playerService.setRate(speed);
+    unawaited(
+      _playerService.setRate(speed).catchError((Object e) {
+        _log(
+          'playback_rate_apply_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _log(
       'playback_rate_applied',
       detailsBuilder: () => {'rate': speed.toStringAsFixed(2)},
@@ -403,7 +443,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       LoopMode.single => PlaylistMode.single,
       LoopMode.loop => PlaylistMode.loop,
     };
-    _playerService.setPlaylistMode(plMode);
+    unawaited(
+      _playerService.setPlaylistMode(plMode).catchError((Object e) {
+        _log(
+          'loop_mode_apply_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _log('loop_mode_applied', detailsBuilder: () => {'loop_mode': mode.name});
   }
 
@@ -516,7 +564,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _loadFile(String filePath) async {
+  Future<void> _loadFile(String filePath) {
+    _loadQueue = _loadQueue
+        .catchError((_) {})
+        .then((_) => _loadFileInternal(filePath));
+    return _loadQueue;
+  }
+
+  Future<void> _loadFileInternal(String filePath) async {
+    if (_isDisposed) return;
     final normalizedPath = filePath.trim();
     if (normalizedPath.isEmpty) {
       _log(
@@ -570,6 +626,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
     final gen = ++_loadGen;
+    if (!mounted || _isDisposed) return;
     setState(() {
       _currentFile = normalizedPath;
       _isAudioFile = _audioExtensions.contains(ext);
@@ -588,23 +645,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     try {
       await _playerService.open(normalizedPath, play: _settings.autoPlay);
-      _settings.addRecentFile(normalizedPath);
-      _rememberLastOpenDirectory(normalizedPath);
-      _log(
-        'file_load_succeeded',
-        detailsBuilder: () => {
-          'path': normalizedPath,
-          'auto_play': _settings.autoPlay,
-        },
-      );
-      if (mounted && gen == _loadGen) {
-        setState(() {});
-      }
-      _log(
-        'recent_file_added',
-        category: DebugLogCategory.settings,
-        detailsBuilder: () => {'path': normalizedPath},
-      );
     } catch (e) {
       final permissionDenied = _isPermissionDeniedError(e);
       _log(
@@ -629,6 +669,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         );
       }
+      return;
+    }
+
+    if (gen != _loadGen || _isDisposed) return;
+
+    _log(
+      'file_load_succeeded',
+      detailsBuilder: () => {
+        'path': normalizedPath,
+        'auto_play': _settings.autoPlay,
+      },
+    );
+
+    try {
+      _settings.addRecentFile(normalizedPath);
+      _rememberLastOpenDirectory(normalizedPath);
+      _log(
+        'recent_file_added',
+        category: DebugLogCategory.settings,
+        detailsBuilder: () => {'path': normalizedPath},
+      );
+    } catch (e) {
+      _log(
+        'recent_file_persist_failed',
+        category: DebugLogCategory.settings,
+        message: e.toString(),
+        detailsBuilder: () => {'path': normalizedPath},
+        severity: DebugSeverity.warn,
+      );
+    }
+
+    if (mounted && !_isDisposed && gen == _loadGen) {
+      setState(() {});
     }
   }
 
@@ -641,7 +714,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'count': details.files.length,
         },
       );
-      _loadFile(details.files.first.path);
+      unawaited(_loadFile(details.files.first.path));
     }
   }
 
@@ -779,7 +852,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         unawaited(_reopenLastFile());
         return KeyEventResult.handled;
       case PlayerShortcutAction.playPause:
-        _playerService.playPause();
+        unawaited(
+          _playerService.playPause().catchError((Object e) {
+            _log(
+              'shortcut_play_pause_failed',
+              category: DebugLogCategory.ui,
+              message: e.toString(),
+              severity: DebugSeverity.warn,
+            );
+          }),
+        );
         _log('shortcut_play_pause', category: DebugLogCategory.ui);
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekForward:
@@ -822,7 +904,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     var target = _position + offset;
     if (target < Duration.zero) target = Duration.zero;
     if (target > _duration) target = _duration;
-    _playerService.seek(target);
+    unawaited(
+      _playerService.seek(target).catchError((Object e) {
+        _log(
+          'seek_relative_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _log(
       'seek_relative',
       detailsBuilder: () => {'target_ms': target.inMilliseconds},
@@ -831,7 +921,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _adjustVolume(double delta) {
     final newVol = (_volume + delta).clamp(0.0, 100.0);
-    _playerService.setVolume(newVol);
+    unawaited(
+      _playerService.setVolume(newVol).catchError((Object e) {
+        _log(
+          'volume_adjust_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _settings.volume = newVol;
     _log(
       'volume_adjusted',
@@ -842,14 +940,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _toggleMute() {
     if (_volume > 0) {
       _volumeBeforeMute = _volume;
-      _playerService.setVolume(0);
+      unawaited(
+        _playerService.setVolume(0).catchError((Object e) {
+          _log(
+            'mute_toggle_failed',
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }),
+      );
       _settings.volume = 0;
       _log(
         'mute_enabled',
         detailsBuilder: () => {'previous_volume': _volumeBeforeMute},
       );
     } else {
-      _playerService.setVolume(_volumeBeforeMute);
+      unawaited(
+        _playerService.setVolume(_volumeBeforeMute).catchError((Object e) {
+          _log(
+            'mute_toggle_failed',
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }),
+      );
       _settings.volume = _volumeBeforeMute;
       _log(
         'mute_disabled',
@@ -1055,8 +1169,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             },
                             onChangeEnd: (value) {
                               _isSeeking = false;
-                              _playerService.seek(
-                                Duration(milliseconds: value.toInt()),
+                              unawaited(
+                                _playerService
+                                    .seek(Duration(milliseconds: value.toInt()))
+                                    .catchError((Object e) {
+                                      _log(
+                                        'seek_slider_failed',
+                                        message: e.toString(),
+                                        severity: DebugSeverity.warn,
+                                      );
+                                    }),
                               );
                             },
                           ),

@@ -190,7 +190,7 @@ class SettingsService extends ChangeNotifier {
   void addRecentFile(String path) {
     final normalizedPath = path.trim();
     if (normalizedPath.isEmpty) return;
-    final files = recentFiles..remove(normalizedPath);
+    final files = List<String>.from(recentFiles)..remove(normalizedPath);
     files.insert(0, normalizedPath);
     if (files.length > maxRecentFiles) {
       files.removeRange(maxRecentFiles, files.length);

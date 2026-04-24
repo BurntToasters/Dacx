@@ -71,7 +71,7 @@ void main() {
       expect(resolve(spaceEvent, hasMedia: false), isNull);
     });
 
-    test('supports repeat key events for seek/volume/mute shortcuts', () {
+    test('supports repeat key events for seek/volume shortcuts only', () {
       final seekEvent = KeyRepeatEvent(
         physicalKey: PhysicalKeyboardKey.arrowRight,
         logicalKey: LogicalKeyboardKey.arrowRight,
@@ -90,7 +90,23 @@ void main() {
 
       expect(resolve(seekEvent), PlayerShortcutAction.seekForward);
       expect(resolve(volumeEvent), PlayerShortcutAction.volumeDown);
-      expect(resolve(muteEvent), PlayerShortcutAction.toggleMute);
+      expect(resolve(muteEvent), isNull);
+    });
+
+    test('ignores play/pause and mute when primary modifier is held', () {
+      final spaceEvent = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.space,
+        logicalKey: LogicalKeyboardKey.space,
+        timeStamp: Duration.zero,
+      );
+      final muteEvent = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyM,
+        logicalKey: LogicalKeyboardKey.keyM,
+        timeStamp: Duration.zero,
+      );
+
+      expect(resolve(spaceEvent, ctrl: true), isNull);
+      expect(resolve(muteEvent, meta: true), isNull);
     });
 
     test('ignores key up events', () {

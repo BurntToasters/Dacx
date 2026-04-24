@@ -39,15 +39,22 @@ class PlayerShortcutsService {
       return PlayerShortcutAction.reopenLast;
     }
 
-    if (event is KeyDownEvent && key == LogicalKeyboardKey.keyF) {
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyF) {
       return PlayerShortcutAction.toggleFullscreen;
     }
 
-    if (event is KeyDownEvent && key == LogicalKeyboardKey.escape) {
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.escape) {
       return PlayerShortcutAction.exitFullscreen;
     }
 
-    if (key == LogicalKeyboardKey.space && hasMedia) {
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.space &&
+        hasMedia) {
       return PlayerShortcutAction.playPause;
     }
 
@@ -67,7 +74,9 @@ class PlayerShortcutsService {
       return PlayerShortcutAction.volumeDown;
     }
 
-    if (key == LogicalKeyboardKey.keyM) {
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyM) {
       return PlayerShortcutAction.toggleMute;
     }
 

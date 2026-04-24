@@ -16,7 +16,9 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
-  bool _nativeCaptionVisible = Platform.isWindows;
+  bool _nativeCaptionVisible = false;
+  int _startupProbeAttempts = 0;
+  Timer? _startupProbeTimer;
 
   @override
   void initState() {
@@ -26,14 +28,26 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
       if (mounted) setState(() => _isMaximized = v);
     });
     unawaited(_refreshNativeCaptionVisibility());
-    Future<void>.delayed(const Duration(milliseconds: 180), () {
-      if (!mounted) return;
-      unawaited(_refreshNativeCaptionVisibility());
-    });
+    if (Platform.isWindows) {
+      _startupProbeTimer = Timer.periodic(const Duration(milliseconds: 120), (
+        timer,
+      ) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        _startupProbeAttempts += 1;
+        unawaited(_refreshNativeCaptionVisibility());
+        if (_startupProbeAttempts >= 16) {
+          timer.cancel();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _startupProbeTimer?.cancel();
     windowManager.removeListener(this);
     super.dispose();
   }
@@ -59,8 +73,14 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   Future<void> _refreshNativeCaptionVisibility() async {
     if (!Platform.isWindows) return;
     try {
-      final titleBarHeight = await windowManager.getTitleBarHeight();
-      final nativeCaptionVisible = titleBarHeight > 8;
+      var titleBarHeight = await windowManager.getTitleBarHeight();
+      var nativeCaptionVisible = titleBarHeight > 8;
+      if (nativeCaptionVisible) {
+        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+        await Future<void>.delayed(const Duration(milliseconds: 42));
+        titleBarHeight = await windowManager.getTitleBarHeight();
+        nativeCaptionVisible = titleBarHeight > 8;
+      }
       if (mounted && nativeCaptionVisible != _nativeCaptionVisible) {
         setState(() => _nativeCaptionVisible = nativeCaptionVisible);
       }
