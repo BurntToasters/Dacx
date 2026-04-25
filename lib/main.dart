@@ -70,6 +70,26 @@ void main(List<String> args) async {
   final firstFrameReady = Completer<void>();
   var windowShown = false;
 
+  Future<void> ensureHiddenTitleBarApplied() async {
+    if (Platform.isMacOS) {
+      try {
+        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      } catch (_) {}
+      return;
+    }
+    if (!Platform.isWindows) return;
+    for (var attempt = 0; attempt < 6; attempt++) {
+      try {
+        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+        final titleBarHeight = await windowManager.getTitleBarHeight();
+        if (titleBarHeight <= 8) return;
+      } catch (_) {
+        return;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 36 * (attempt + 1)));
+    }
+  }
+
   Future<void> showWindowIfReady() async {
     if (windowShown ||
         !windowReady.isCompleted ||
@@ -79,15 +99,22 @@ void main(List<String> args) async {
     windowShown = true;
     await windowManager.show();
     await windowManager.focus();
+    unawaited(ensureHiddenTitleBarApplied());
   }
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-    if (savedPos != null) {
-      await windowManager.setPosition(savedPos);
-    }
-    await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
-    if (!windowReady.isCompleted) {
-      windowReady.complete();
+    try {
+      if (savedPos != null) {
+        await windowManager.setPosition(savedPos);
+      }
+      await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
+      await ensureHiddenTitleBarApplied();
+    } catch (_) {
+      // Continue to show fallback even if startup window operations fail.
+    } finally {
+      if (!windowReady.isCompleted) {
+        windowReady.complete();
+      }
     }
     await showWindowIfReady();
   });
@@ -98,6 +125,17 @@ void main(List<String> args) async {
   runApp(DacxApp(settings: settings, debugLog: debugLog, initialFile: cliFile));
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
+    if (!firstFrameReady.isCompleted) {
+      firstFrameReady.complete();
+    }
+    await showWindowIfReady();
+  });
+
+  Future<void>.delayed(const Duration(seconds: 2), () async {
+    if (windowShown) return;
+    if (!windowReady.isCompleted) {
+      windowReady.complete();
+    }
     if (!firstFrameReady.isCompleted) {
       firstFrameReady.complete();
     }
@@ -170,6 +208,7 @@ class _DacxAppState extends State<DacxApp>
     with WindowListener, WidgetsBindingObserver {
   bool _applyingWindowVisuals = false;
   bool _pendingWindowVisuals = false;
+  Timer? _geometrySaveDebounce;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
     if (!settings.experimentalFeaturesEnabled) return false;
@@ -205,6 +244,7 @@ class _DacxAppState extends State<DacxApp>
 
   @override
   void dispose() {
+    _geometrySaveDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
@@ -357,10 +397,23 @@ class _DacxAppState extends State<DacxApp>
   // ── WindowListener ───────────────────────────────────────
 
   @override
-  void onWindowResized() => _saveGeometry();
+  void onWindowResize() => _scheduleGeometrySave();
 
   @override
-  void onWindowMoved() => _saveGeometry();
+  void onWindowResized() => _scheduleGeometrySave();
+
+  @override
+  void onWindowMove() => _scheduleGeometrySave();
+
+  @override
+  void onWindowMoved() => _scheduleGeometrySave();
+
+  void _scheduleGeometrySave() {
+    _geometrySaveDebounce?.cancel();
+    _geometrySaveDebounce = Timer(const Duration(milliseconds: 180), () {
+      unawaited(_saveGeometry());
+    });
+  }
 
   Future<void> _saveGeometry() async {
     if (!widget.settings.rememberWindow) return;

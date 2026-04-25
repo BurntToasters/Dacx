@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import '../services/player_service.dart';
+import '../services/player_shortcuts_service.dart';
 import '../services/settings_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/debug_log_service.dart';
@@ -89,6 +90,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   };
 
   final List<StreamSubscription> _subscriptions = [];
+  Future<void> _loadQueue = Future<void>.value();
+  bool _isDisposed = false;
 
   void _log(
     String event, {
@@ -119,6 +122,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       debugSource: 'player_screen',
     );
     _playerService = PlayerService();
+    _settings.pruneRecentFiles(notifyListeners: false);
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
     final hwReason = HardwareAccelerationService.debugStatusReason(hwDec);
@@ -150,16 +154,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     // Apply saved playback settings.
-    _playerService.setVolume(_volume);
+    unawaited(
+      _playerService.setVolume(_volume).catchError((Object e) {
+        _log(
+          'initial_volume_apply_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
     _applyHwDec(_settings.hwDec);
 
     _subscriptions.addAll([
       _playerService.positionStream.listen((pos) {
-        if (!_isSeeking) setState(() => _position = pos);
+        if (!mounted || _isDisposed || _isSeeking) return;
+        setState(() => _position = pos);
       }),
       _playerService.durationStream.listen((dur) {
+        if (!mounted || _isDisposed) return;
         setState(() => _duration = dur);
         if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
           _log(
@@ -169,6 +183,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.playingStream.listen((playing) {
+        if (!mounted || _isDisposed) return;
         setState(() => _isPlaying = playing);
         if (widget.debugLog.isEnabled) {
           _log(
@@ -178,6 +193,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.volumeStream.listen((vol) {
+        if (!mounted || _isDisposed) return;
         setState(() => _volume = vol);
         if (widget.debugLog.isEnabled) {
           _log(
@@ -187,6 +203,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.player.stream.width.listen((w) {
+        if (!mounted || _isDisposed) return;
         final has = w != null && w > 0;
         if (has != _hasVideoOutput) {
           setState(() => _hasVideoOutput = has);
@@ -199,6 +216,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.player.stream.tracks.listen((tracks) {
+        if (!mounted || _isDisposed) return;
         final hasAlbumArt = _hasEmbeddedAlbumArtTrack(tracks);
         if (hasAlbumArt != _hasAlbumArtTrack) {
           setState(() => _hasAlbumArtTrack = hasAlbumArt);
@@ -211,11 +229,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }),
       _playerService.completedStream.listen((completed) {
-        if (completed && mounted) {
-          setState(() => _position = Duration.zero);
-          if (widget.debugLog.isEnabled) {
-            _log('playback_completed');
-          }
+        if (!mounted || _isDisposed || !completed) return;
+        setState(() => _position = Duration.zero);
+        if (widget.debugLog.isEnabled) {
+          _log('playback_completed');
         }
       }),
     ]);
@@ -240,6 +257,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
     for (final sub in _subscriptions) {
@@ -262,7 +280,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
-    windowManager.setAlwaysOnTop(_settings.alwaysOnTop);
+    unawaited(
+      windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
+        Object e,
+      ) {
+        _log(
+          'always_on_top_apply_failed',
+          category: DebugLogCategory.system,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     if (mounted) {
       setState(() {});
     }
@@ -275,10 +304,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _bootstrapMacOpenFileBridge() async {
+    if (_isDisposed) return;
     try {
       final pending = await _macOpenFileMethodChannel.invokeListMethod<dynamic>(
         'getPendingFiles',
       );
+      if (_isDisposed || !mounted) return;
       if (pending != null && pending.isNotEmpty) {
         _log(
           'mac_pending_files_found',
@@ -286,6 +317,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           detailsBuilder: () => {'count': pending.length},
         );
         for (final entry in pending) {
+          if (_isDisposed || !mounted) return;
           final path = _coerceOpenPath(entry);
           if (path == null) continue;
           await _openRequestedFile(path);
@@ -315,9 +347,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
 
+    if (_isDisposed || !mounted) return;
     _subscriptions.add(
       _macOpenFileEventChannel.receiveBroadcastStream().listen(
         (event) {
+          if (_isDisposed || !mounted) return;
           final path = _coerceOpenPath(event);
           if (path != null) {
             _log(
@@ -362,7 +396,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _applySpeed(double speed) {
-    _playerService.setRate(speed);
+    unawaited(
+      _playerService.setRate(speed).catchError((Object e) {
+        _log(
+          'playback_rate_apply_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _log(
       'playback_rate_applied',
       detailsBuilder: () => {'rate': speed.toStringAsFixed(2)},
@@ -401,7 +443,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       LoopMode.single => PlaylistMode.single,
       LoopMode.loop => PlaylistMode.loop,
     };
-    _playerService.setPlaylistMode(plMode);
+    unawaited(
+      _playerService.setPlaylistMode(plMode).catchError((Object e) {
+        _log(
+          'loop_mode_apply_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _log('loop_mode_applied', detailsBuilder: () => {'loop_mode': mode.name});
   }
 
@@ -462,10 +512,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _openFile() async {
     _log('file_picker_open_requested');
     try {
+      final initialDirectory = _settings.lastOpenDirectory;
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         lockParentWindow: true,
         allowMultiple: false,
+        initialDirectory: initialDirectory,
       );
 
       if (result == null) {
@@ -496,7 +548,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             : e.code;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('File picker failed: $detail')));
+        ).showSnackBar(SnackBar(content: Text('File picker failed. $detail')));
       }
     } catch (e) {
       _log(
@@ -512,28 +564,71 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _loadFile(String filePath) async {
-    final ext = p.extension(filePath).toLowerCase().replaceFirst('.', '');
+  Future<void> _loadFile(String filePath) {
+    _loadQueue = _loadQueue
+        .catchError((_) {})
+        .then((_) => _loadFileInternal(filePath));
+    return _loadQueue;
+  }
+
+  Future<void> _loadFileInternal(String filePath) async {
+    if (_isDisposed) return;
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      _log(
+        'file_load_invalid_path',
+        detailsBuilder: () => {'path': filePath},
+        severity: DebugSeverity.warn,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid file path. Try another file.')),
+        );
+      }
+      return;
+    }
+
+    if (!File(normalizedPath).existsSync()) {
+      _log(
+        'file_load_missing',
+        detailsBuilder: () => {'path': normalizedPath},
+        severity: DebugSeverity.warn,
+      );
+      _settings.pruneRecentFiles();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('File not found. It may have moved or been deleted.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final ext = p.extension(normalizedPath).toLowerCase().replaceFirst('.', '');
     _log(
       'file_load_started',
-      detailsBuilder: () => {'path': filePath, 'extension': ext},
+      detailsBuilder: () => {'path': normalizedPath, 'extension': ext},
     );
     if (!_supportedExtensions.contains(ext)) {
       _log(
         'file_load_unsupported_extension',
-        detailsBuilder: () => {'extension': ext, 'path': filePath},
+        detailsBuilder: () => {'extension': ext, 'path': normalizedPath},
         severity: DebugSeverity.warn,
       );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Unsupported file type: .$ext')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unsupported file type. Open an audio/video file.'),
+          ),
+        );
       }
       return;
     }
     final gen = ++_loadGen;
+    if (!mounted || _isDisposed) return;
     setState(() {
-      _currentFile = filePath;
+      _currentFile = normalizedPath;
       _isAudioFile = _audioExtensions.contains(ext);
       _hasVideoOutput = false;
       _hasAlbumArtTrack = false;
@@ -548,28 +643,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
     );
 
-    _settings.addRecentFile(filePath);
-    _log(
-      'recent_file_added',
-      category: DebugLogCategory.settings,
-      detailsBuilder: () => {'path': filePath},
-    );
-
     try {
-      await _playerService.open(filePath, play: _settings.autoPlay);
-      _log(
-        'file_load_succeeded',
-        detailsBuilder: () => {
-          'path': filePath,
-          'auto_play': _settings.autoPlay,
-        },
-      );
+      await _playerService.open(normalizedPath, play: _settings.autoPlay);
     } catch (e) {
+      final permissionDenied = _isPermissionDeniedError(e);
       _log(
-        'file_load_failed',
+        permissionDenied ? 'file_load_permission_denied' : 'file_load_failed',
         message: e.toString(),
-        detailsBuilder: () => {'path': filePath},
-        severity: DebugSeverity.error,
+        detailsBuilder: () => {'path': normalizedPath},
+        severity: permissionDenied ? DebugSeverity.warn : DebugSeverity.error,
       );
       if (gen != _loadGen) return;
       if (mounted) {
@@ -577,10 +659,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _currentFile = null;
           _isAudioFile = false;
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              permissionDenied
+                  ? 'Permission denied. Check file access and try again.'
+                  : 'Could not open file. Try another file.',
+            ),
+          ),
+        );
       }
+      return;
+    }
+
+    if (gen != _loadGen || _isDisposed) return;
+
+    _log(
+      'file_load_succeeded',
+      detailsBuilder: () => {
+        'path': normalizedPath,
+        'auto_play': _settings.autoPlay,
+      },
+    );
+
+    try {
+      _settings.addRecentFile(normalizedPath);
+      _rememberLastOpenDirectory(normalizedPath);
+      _log(
+        'recent_file_added',
+        category: DebugLogCategory.settings,
+        detailsBuilder: () => {'path': normalizedPath},
+      );
+    } catch (e) {
+      _log(
+        'recent_file_persist_failed',
+        category: DebugLogCategory.settings,
+        message: e.toString(),
+        detailsBuilder: () => {'path': normalizedPath},
+        severity: DebugSeverity.warn,
+      );
+    }
+
+    if (mounted && !_isDisposed && gen == _loadGen) {
+      setState(() {});
     }
   }
 
@@ -593,7 +714,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'count': details.files.length,
         },
       );
-      _loadFile(details.files.first.path);
+      unawaited(_loadFile(details.files.first.path));
     }
   }
 
@@ -610,8 +731,48 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _loadRecentFile(String path) {
+    _settings.pruneRecentFiles();
     _log('recent_file_open_requested', detailsBuilder: () => {'path': path});
-    _loadFile(path);
+    unawaited(_openRequestedFile(path));
+  }
+
+  Future<void> _reopenLastFile() async {
+    _settings.pruneRecentFiles();
+    final recents = _settings.recentFiles;
+    if (recents.isEmpty) {
+      _log('reopen_last_fallback_open_picker', category: DebugLogCategory.ui);
+      await _openFile();
+      return;
+    }
+    final lastPath = recents.first;
+    _log(
+      'reopen_last_requested',
+      category: DebugLogCategory.ui,
+      detailsBuilder: () => {'path': lastPath},
+    );
+    await _openRequestedFile(lastPath);
+  }
+
+  void _rememberLastOpenDirectory(String filePath) {
+    final dir = p.dirname(filePath).trim();
+    if (dir.isEmpty || dir == '.') return;
+    _settings.lastOpenDirectory = dir;
+  }
+
+  bool _isPermissionDeniedError(Object error) {
+    final lower = error.toString().toLowerCase();
+    if (lower.contains('permission denied') ||
+        lower.contains('access is denied') ||
+        lower.contains('operation not permitted')) {
+      return true;
+    }
+    if (error is FileSystemException) {
+      final code = error.osError?.errorCode;
+      if (code == 1 || code == 5 || code == 13) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // ── Navigation ────────────────────────────────────────────
@@ -673,48 +834,67 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Keyboard shortcuts ────────────────────────────────────
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
     final hk = HardwareKeyboard.instance;
+    final shortcut = PlayerShortcutsService.resolve(
+      event: event,
+      hasMedia: _currentFile != null,
+      isMetaPressed: hk.isMetaPressed,
+      isControlPressed: hk.isControlPressed,
+    );
 
-    if (event is KeyDownEvent &&
-        (hk.isMetaPressed || hk.isControlPressed) &&
-        key == LogicalKeyboardKey.keyO) {
-      _log('shortcut_open_file', category: DebugLogCategory.ui);
-      _openFile();
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.space) {
-      if (_currentFile != null) {
-        _playerService.playPause();
+    switch (shortcut) {
+      case PlayerShortcutAction.openFile:
+        _log('shortcut_open_file', category: DebugLogCategory.ui);
+        _openFile();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.reopenLast:
+        _log('shortcut_reopen_last', category: DebugLogCategory.ui);
+        unawaited(_reopenLastFile());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.playPause:
+        unawaited(
+          _playerService.playPause().catchError((Object e) {
+            _log(
+              'shortcut_play_pause_failed',
+              category: DebugLogCategory.ui,
+              message: e.toString(),
+              severity: DebugSeverity.warn,
+            );
+          }),
+        );
         _log('shortcut_play_pause', category: DebugLogCategory.ui);
         return KeyEventResult.handled;
-      }
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _log('shortcut_seek_forward', category: DebugLogCategory.ui);
-      _seekRelative(const Duration(seconds: 5));
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
-      _log('shortcut_seek_back', category: DebugLogCategory.ui);
-      _seekRelative(const Duration(seconds: -5));
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      _log('shortcut_volume_up', category: DebugLogCategory.ui);
-      _adjustVolume(5);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      _log('shortcut_volume_down', category: DebugLogCategory.ui);
-      _adjustVolume(-5);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyM) {
-      _log('shortcut_toggle_mute', category: DebugLogCategory.ui);
-      _toggleMute();
-      return KeyEventResult.handled;
+      case PlayerShortcutAction.seekForward:
+        _log('shortcut_seek_forward', category: DebugLogCategory.ui);
+        _seekRelative(const Duration(seconds: 5));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.seekBack:
+        _log('shortcut_seek_back', category: DebugLogCategory.ui);
+        _seekRelative(const Duration(seconds: -5));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.volumeUp:
+        _log('shortcut_volume_up', category: DebugLogCategory.ui);
+        _adjustVolume(5);
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.volumeDown:
+        _log('shortcut_volume_down', category: DebugLogCategory.ui);
+        _adjustVolume(-5);
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.toggleMute:
+        _log('shortcut_toggle_mute', category: DebugLogCategory.ui);
+        _toggleMute();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.toggleFullscreen:
+        _log('shortcut_toggle_fullscreen', category: DebugLogCategory.ui);
+        unawaited(_toggleFullscreen());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.exitFullscreen:
+        _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
+        unawaited(_exitFullscreen());
+        return KeyEventResult.handled;
+      case null:
+        return KeyEventResult.ignored;
     }
-    return KeyEventResult.ignored;
   }
 
   double _volumeBeforeMute = 100.0;
@@ -724,7 +904,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     var target = _position + offset;
     if (target < Duration.zero) target = Duration.zero;
     if (target > _duration) target = _duration;
-    _playerService.seek(target);
+    unawaited(
+      _playerService.seek(target).catchError((Object e) {
+        _log(
+          'seek_relative_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _log(
       'seek_relative',
       detailsBuilder: () => {'target_ms': target.inMilliseconds},
@@ -733,7 +921,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _adjustVolume(double delta) {
     final newVol = (_volume + delta).clamp(0.0, 100.0);
-    _playerService.setVolume(newVol);
+    unawaited(
+      _playerService.setVolume(newVol).catchError((Object e) {
+        _log(
+          'volume_adjust_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
     _settings.volume = newVol;
     _log(
       'volume_adjusted',
@@ -744,18 +940,68 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _toggleMute() {
     if (_volume > 0) {
       _volumeBeforeMute = _volume;
-      _playerService.setVolume(0);
+      unawaited(
+        _playerService.setVolume(0).catchError((Object e) {
+          _log(
+            'mute_toggle_failed',
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }),
+      );
       _settings.volume = 0;
       _log(
         'mute_enabled',
         detailsBuilder: () => {'previous_volume': _volumeBeforeMute},
       );
     } else {
-      _playerService.setVolume(_volumeBeforeMute);
+      unawaited(
+        _playerService.setVolume(_volumeBeforeMute).catchError((Object e) {
+          _log(
+            'mute_toggle_failed',
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }),
+      );
       _settings.volume = _volumeBeforeMute;
       _log(
         'mute_disabled',
         detailsBuilder: () => {'restored_volume': _volumeBeforeMute},
+      );
+    }
+  }
+
+  Future<void> _toggleFullscreen() async {
+    try {
+      final enabled = await windowManager.isFullScreen();
+      await windowManager.setFullScreen(!enabled);
+      _log(
+        'fullscreen_toggled',
+        category: DebugLogCategory.ui,
+        detailsBuilder: () => {'enabled': !enabled},
+      );
+    } catch (e) {
+      _log(
+        'fullscreen_toggle_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
+  Future<void> _exitFullscreen() async {
+    try {
+      if (await windowManager.isFullScreen()) {
+        await windowManager.setFullScreen(false);
+      }
+    } catch (e) {
+      _log(
+        'fullscreen_exit_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
       );
     }
   }
@@ -835,7 +1081,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   ),
                                 );
                               },
-                              child: _buildMediaSurface(),
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onDoubleTap: _currentFile == null
+                                    ? null
+                                    : () {
+                                        _log(
+                                          'media_surface_double_tap',
+                                          category: DebugLogCategory.ui,
+                                        );
+                                        unawaited(_toggleFullscreen());
+                                      },
+                                child: _buildMediaSurface(),
+                              ),
                             ),
                             IgnorePointer(
                               child: AnimatedOpacity(
@@ -911,8 +1169,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             },
                             onChangeEnd: (value) {
                               _isSeeking = false;
-                              _playerService.seek(
-                                Duration(milliseconds: value.toInt()),
+                              unawaited(
+                                _playerService
+                                    .seek(Duration(milliseconds: value.toInt()))
+                                    .catchError((Object e) {
+                                      _log(
+                                        'seek_slider_failed',
+                                        message: e.toString(),
+                                        severity: DebugSeverity.warn,
+                                      );
+                                    }),
                               );
                             },
                           ),
@@ -955,6 +1221,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               });
             },
             onOpenFile: _openFile,
+            onReopenLast: () {
+              _log(
+                'control_reopen_last_pressed',
+                category: DebugLogCategory.ui,
+              );
+              unawaited(_reopenLastFile());
+            },
             onVolumeChanged: (vol) async {
               _log(
                 'control_volume_changed',
@@ -1003,10 +1276,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _openFile,
-            icon: const Icon(Icons.folder_open),
-            label: const Text('Open File'),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: [
+              FilledButton.icon(
+                onPressed: _openFile,
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Open File'),
+              ),
+              FilledButton.tonalIcon(
+                key: const Key('reopen-last-empty-button'),
+                onPressed: _reopenLastFile,
+                icon: const Icon(Icons.history),
+                label: const Text('Reopen Last'),
+              ),
+            ],
           ),
         ],
       ),

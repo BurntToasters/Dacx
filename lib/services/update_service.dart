@@ -8,6 +8,9 @@ import 'debug_log_service.dart';
 class UpdateService {
   static const String _owner = 'BurntToasters';
   static const String _repo = 'Dacx';
+  static final RegExp _versionPattern = RegExp(
+    r'^\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?$',
+  );
   final DebugLogService? _debugLog;
   final String _debugSource;
   bool _lastCheckSucceeded = false;
@@ -69,7 +72,23 @@ class UpdateService {
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final tagName = data['tag_name'] as String? ?? '';
-      final latestVersion = tagName.replaceFirst(RegExp(r'^v'), '');
+      final latestVersion = tagName.replaceFirst(RegExp(r'^v'), '').trim();
+      final releaseUrl = data['html_url'] as String? ?? '';
+      final notes = data['body'] as String? ?? '';
+
+      if (!_versionPattern.hasMatch(latestVersion) ||
+          !_isLaunchableUrl(releaseUrl)) {
+        _log(
+          'check_invalid_payload',
+          severity: DebugSeverity.warn,
+          detailsBuilder: () => {
+            'tag_name': tagName,
+            'latest_version': latestVersion,
+            'url': releaseUrl,
+          },
+        );
+        return null;
+      }
 
       if (_isNewer(latestVersion, currentVersion)) {
         _lastCheckSucceeded = true;
@@ -82,8 +101,8 @@ class UpdateService {
         );
         return UpdateInfo(
           version: latestVersion,
-          url: data['html_url'] as String? ?? '',
-          notes: data['body'] as String? ?? '',
+          url: releaseUrl,
+          notes: notes,
         );
       }
 
@@ -119,6 +138,12 @@ class UpdateService {
       severity: DebugSeverity.warn,
       detailsBuilder: () => {'url': url},
     );
+  }
+
+  bool _isLaunchableUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null) return false;
+    return uri.hasScheme && (uri.scheme == 'https' || uri.scheme == 'http');
   }
 
   static String _stripPreRelease(String v) => v.split('-').first;

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,6 +49,7 @@ class SettingsService extends ChangeNotifier {
   static const _kWindowX = 'window_x';
   static const _kWindowY = 'window_y';
   static const _kRecentFiles = 'recent_files';
+  static const _kLastOpenDirectory = 'last_open_directory';
   static const _kUpdateCheck = 'update_check_enabled';
   static const _kLastUpdateCheck = 'update_last_check';
   static const _kHwDec = 'system_hwdec';
@@ -161,26 +163,59 @@ class SettingsService extends ChangeNotifier {
   List<String> get recentFiles {
     final raw = _prefs.getString(_kRecentFiles);
     if (raw == null) return [];
+    final decoded = _decodeStoredRecentFiles(raw);
+    return decoded.where(_recentFilePathExists).toList(growable: false);
+  }
+
+  String? get lastOpenDirectory {
+    final stored = _prefs.getString(_kLastOpenDirectory)?.trim();
+    if (stored == null || stored.isEmpty) return null;
     try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return [];
-      return decoded
-          .whereType<String>()
-          .map((entry) => entry.trim())
-          .where((entry) => entry.isNotEmpty)
-          .toList(growable: false);
+      if (!Directory(stored).existsSync()) return null;
+      return stored;
     } catch (_) {
-      return [];
+      return null;
     }
   }
 
+  set lastOpenDirectory(String? value) {
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) {
+      _prefs.remove(_kLastOpenDirectory);
+      return;
+    }
+    _prefs.setString(_kLastOpenDirectory, normalized);
+  }
+
   void addRecentFile(String path) {
-    final files = recentFiles..remove(path);
-    files.insert(0, path);
+    final normalizedPath = path.trim();
+    if (normalizedPath.isEmpty) return;
+    final files = List<String>.from(recentFiles)..remove(normalizedPath);
+    files.insert(0, normalizedPath);
     if (files.length > maxRecentFiles) {
       files.removeRange(maxRecentFiles, files.length);
     }
     _prefs.setString(_kRecentFiles, jsonEncode(files));
+  }
+
+  bool pruneRecentFiles({bool notifyListeners = true}) {
+    final raw = _prefs.getString(_kRecentFiles);
+    if (raw == null) return false;
+
+    final parsed = _decodeStoredRecentFiles(raw);
+    final pruned = parsed.where(_recentFilePathExists).toList(growable: false);
+    final nextRaw = pruned.isEmpty ? null : jsonEncode(pruned);
+    if (nextRaw == raw) return false;
+
+    if (nextRaw == null) {
+      _prefs.remove(_kRecentFiles);
+    } else {
+      _prefs.setString(_kRecentFiles, nextRaw);
+    }
+    if (notifyListeners) {
+      this.notifyListeners();
+    }
+    return true;
   }
 
   void clearRecentFiles() {
@@ -273,5 +308,27 @@ class SettingsService extends ChangeNotifier {
   Future<void> resetAll() async {
     await _prefs.clear();
     notifyListeners();
+  }
+
+  List<String> _decodeStoredRecentFiles(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded
+          .whereType<String>()
+          .map((entry) => entry.trim())
+          .where((entry) => entry.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  bool _recentFilePathExists(String path) {
+    try {
+      return File(path).existsSync();
+    } catch (_) {
+      return false;
+    }
   }
 }

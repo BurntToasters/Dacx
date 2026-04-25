@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,9 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
+  bool _nativeCaptionVisible = false;
+  int _startupProbeAttempts = 0;
+  Timer? _startupProbeTimer;
 
   @override
   void initState() {
@@ -23,23 +27,70 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     windowManager.isMaximized().then((v) {
       if (mounted) setState(() => _isMaximized = v);
     });
+    unawaited(_refreshNativeCaptionVisibility());
+    if (Platform.isWindows) {
+      _startupProbeTimer = Timer.periodic(const Duration(milliseconds: 120), (
+        timer,
+      ) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        _startupProbeAttempts += 1;
+        unawaited(_refreshNativeCaptionVisibility());
+        if (_startupProbeAttempts >= 16) {
+          timer.cancel();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _startupProbeTimer?.cancel();
     windowManager.removeListener(this);
     super.dispose();
   }
 
   @override
-  void onWindowMaximize() => setState(() => _isMaximized = true);
+  void onWindowMaximize() {
+    setState(() => _isMaximized = true);
+    unawaited(_refreshNativeCaptionVisibility());
+  }
 
   @override
-  void onWindowUnmaximize() => setState(() => _isMaximized = false);
+  void onWindowUnmaximize() {
+    setState(() => _isMaximized = false);
+    unawaited(_refreshNativeCaptionVisibility());
+  }
+
+  @override
+  void onWindowFocus() => unawaited(_refreshNativeCaptionVisibility());
+
+  @override
+  void onWindowRestore() => unawaited(_refreshNativeCaptionVisibility());
+
+  Future<void> _refreshNativeCaptionVisibility() async {
+    if (!Platform.isWindows) return;
+    try {
+      var titleBarHeight = await windowManager.getTitleBarHeight();
+      var nativeCaptionVisible = titleBarHeight > 8;
+      if (nativeCaptionVisible) {
+        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+        await Future<void>.delayed(const Duration(milliseconds: 42));
+        titleBarHeight = await windowManager.getTitleBarHeight();
+        nativeCaptionVisible = titleBarHeight > 8;
+      }
+      if (mounted && nativeCaptionVisible != _nativeCaptionVisible) {
+        setState(() => _nativeCaptionVisible = nativeCaptionVisible);
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isWindows && !Platform.isMacOS) {
+    if ((!Platform.isWindows && !Platform.isMacOS) ||
+        (Platform.isWindows && _nativeCaptionVisible)) {
       return const SizedBox.shrink();
     }
 

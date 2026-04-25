@@ -13,6 +13,7 @@ class TransportControls extends StatelessWidget {
   final VoidCallback onPlayPause;
   final VoidCallback onStop;
   final VoidCallback onOpenFile;
+  final VoidCallback onReopenLast;
   final ValueChanged<double> onVolumeChanged;
   final ValueChanged<LoopMode> onLoopModeChanged;
   final ValueChanged<String> onRecentFileSelected;
@@ -29,6 +30,7 @@ class TransportControls extends StatelessWidget {
     required this.onPlayPause,
     required this.onStop,
     required this.onOpenFile,
+    required this.onReopenLast,
     required this.onVolumeChanged,
     required this.onLoopModeChanged,
     required this.onRecentFileSelected,
@@ -64,6 +66,12 @@ class TransportControls extends StatelessWidget {
         children: [
           // Open button (with recent files popup)
           _buildOpenButton(context),
+          IconButton(
+            key: const Key('reopen-last-transport-button'),
+            icon: const Icon(Icons.history),
+            tooltip: 'Reopen last file (Ctrl/Cmd+R)',
+            onPressed: onReopenLast,
+          ),
           const SizedBox(width: 8),
           IconButton(
             icon: AnimatedSwitcher(

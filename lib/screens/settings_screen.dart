@@ -828,6 +828,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _keyboardShortcutsTile() {
     final openShortcut = Platform.isMacOS ? '⌘O' : 'Ctrl+O';
+    final reopenShortcut = Platform.isMacOS ? '⌘R' : 'Ctrl+R';
     return ListTile(
       title: const Text('Keyboard shortcuts'),
       leading: const Icon(Icons.keyboard),
@@ -841,10 +842,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _ShortcutRow(openShortcut, 'Open File'),
+                _ShortcutRow(reopenShortcut, 'Reopen Last'),
                 const _ShortcutRow('Space', 'Play / Pause'),
                 const _ShortcutRow('←  →', 'Seek ±5 seconds'),
                 const _ShortcutRow('↑  ↓', 'Volume ±5%'),
                 const _ShortcutRow('M', 'Mute / Unmute'),
+                const _ShortcutRow('F', 'Toggle Fullscreen'),
+                const _ShortcutRow('Esc', 'Exit Fullscreen'),
               ],
             ),
             actions: [
