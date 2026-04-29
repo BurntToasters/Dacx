@@ -45,6 +45,11 @@ class PlayerService {
     await player.setPlaylistMode(mode);
   }
 
+  Future<void> setVideoTrack(VideoTrack track) async {
+    if (_disposed) return;
+    await player.setVideoTrack(track);
+  }
+
   void dispose() {
     _disposed = true;
     player.dispose();
