@@ -69,6 +69,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isAudioFile = false;
   bool _hasVideoOutput = false;
   bool _hasAlbumArtTrack = false;
+  String? _albumArtTrackId;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -217,15 +218,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }),
       _playerService.player.stream.tracks.listen((tracks) {
         if (!mounted || _isDisposed) return;
-        final hasAlbumArt = _hasEmbeddedAlbumArtTrack(tracks);
-        if (hasAlbumArt != _hasAlbumArtTrack) {
-          setState(() => _hasAlbumArtTrack = hasAlbumArt);
-          if (widget.debugLog.isEnabled) {
-            _log(
-              'album_art_track_changed',
-              detailsBuilder: () => {'has_album_art_track': hasAlbumArt},
-            );
-          }
+        final albumArtTrack = _firstEmbeddedAlbumArtTrack(tracks);
+        final hasAlbumArt = albumArtTrack != null;
+        final nextTrackId = albumArtTrack?.id;
+        final trackChanged = nextTrackId != _albumArtTrackId;
+        final hasArtChanged = hasAlbumArt != _hasAlbumArtTrack;
+
+        if (hasArtChanged || trackChanged) {
+          setState(() {
+            _hasAlbumArtTrack = hasAlbumArt;
+            _albumArtTrackId = nextTrackId;
+          });
+          _log(
+            'album_art_track_changed',
+            detailsBuilder: () => {
+              'has_album_art_track': hasAlbumArt,
+              'track_id': nextTrackId,
+            },
+          );
+        }
+
+        if (!_isAudioFile || !trackChanged) return;
+
+        if (albumArtTrack != null) {
+          unawaited(
+            _playerService.setVideoTrack(albumArtTrack).catchError((Object e) {
+              _log(
+                'album_art_track_select_failed',
+                message: e.toString(),
+                severity: DebugSeverity.warn,
+              );
+            }),
+          );
         }
       }),
       _playerService.completedStream.listen((completed) {
@@ -632,6 +656,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _isAudioFile = _audioExtensions.contains(ext);
       _hasVideoOutput = false;
       _hasAlbumArtTrack = false;
+      _albumArtTrackId = null;
       _position = Duration.zero;
       _duration = Duration.zero;
     });
@@ -658,6 +683,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() {
           _currentFile = null;
           _isAudioFile = false;
+          _albumArtTrackId = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1216,6 +1242,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 _isAudioFile = false;
                 _hasVideoOutput = false;
                 _hasAlbumArtTrack = false;
+                _albumArtTrackId = null;
                 _position = Duration.zero;
                 _duration = Duration.zero;
               });
@@ -1311,7 +1338,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(32, 34, 32, 30),
+          clipBehavior: Clip.antiAlias,
+          padding: const EdgeInsets.fromLTRB(32, 34, 32, 38),
           decoration: BoxDecoration(
             color: visuals.contentColor,
             borderRadius: BorderRadius.circular(28),
@@ -1374,7 +1402,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     if (_isAudioFile) {
-      final showAlbumArt = _hasAlbumArtTrack && _hasVideoOutput;
+      final showAlbumArt = _hasAlbumArtTrack;
       return KeyedSubtree(
         key: ValueKey(showAlbumArt ? 'media-audio-with-art' : 'media-audio'),
         child: _buildAudioBackground(showAlbumArt: showAlbumArt),
@@ -1409,15 +1437,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
               color: colorScheme.primary.withValues(alpha: 0.88),
             ),
           const SizedBox(height: 24),
-          Text(
-            fileName,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.88),
-              fontWeight: FontWeight.w500,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              fileName,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: colorScheme.onSurface.withValues(alpha: 0.88),
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 10),
           Text(
@@ -1463,11 +1494,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  bool _hasEmbeddedAlbumArtTrack(Tracks tracks) {
-    return tracks.video.any((track) {
+  VideoTrack? _firstEmbeddedAlbumArtTrack(Tracks tracks) {
+    for (final track in tracks.video) {
       final id = track.id.toLowerCase();
-      if (id == 'auto' || id == 'no') return false;
-      return track.albumart == true || track.image == true;
-    });
+      if (id == 'auto' || id == 'no') continue;
+      if (track.albumart == true || track.image == true) {
+        return track;
+      }
+    }
+    return null;
   }
 }

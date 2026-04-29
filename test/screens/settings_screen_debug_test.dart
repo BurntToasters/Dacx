@@ -31,13 +31,9 @@ ThemeData _theme() {
 }
 
 class _FakeUrlLauncherPlatform extends UrlLauncherPlatform {
-  _FakeUrlLauncherPlatform({
-    this.canLaunchResult = true,
-    this.launchResult = true,
-  });
+  _FakeUrlLauncherPlatform({this.canLaunchResult = true});
 
   final bool canLaunchResult;
-  final bool launchResult;
   final List<String> canLaunchCalls = <String>[];
   final List<({String url, LaunchOptions options})> launchUrlCalls =
       <({String url, LaunchOptions options})>[];
@@ -54,7 +50,7 @@ class _FakeUrlLauncherPlatform extends UrlLauncherPlatform {
   @override
   Future<bool> launchUrl(String url, LaunchOptions options) async {
     launchUrlCalls.add((url: url, options: options));
-    return launchResult;
+    return true;
   }
 }
 
@@ -163,11 +159,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('Help ?'), 300);
+      await tester.scrollUntilVisible(find.text('Help'), 300);
       await tester.pumpAndSettle();
 
-      expect(find.text('Help ?'), findsOneWidget);
-      expect(find.text('❤️ Support this project'), findsOneWidget);
+      expect(find.text('Help'), findsOneWidget);
+      expect(find.text('Support this project'), findsOneWidget);
     });
 
     testWidgets('FAQ action launches expected URL externally', (tester) async {
@@ -186,8 +182,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('Help ?'), 300);
-      await tester.tap(find.text('Help ?'));
+      await tester.scrollUntilVisible(find.text('Help'), 300);
+      await tester.tap(find.text('Help'));
       await tester.pumpAndSettle();
 
       expect(
@@ -223,8 +219,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('❤️ Support this project'), 300);
-      await tester.tap(find.text('❤️ Support this project'));
+      await tester.scrollUntilVisible(find.text('Support this project'), 300);
+      await tester.tap(find.text('Support this project'));
       await tester.pumpAndSettle();
 
       expect(launcher.canLaunchCalls, contains('https://rosie.run/support'));
@@ -254,8 +250,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('Help ?'), 300);
-      await tester.tap(find.text('Help ?'));
+      await tester.scrollUntilVisible(find.text('Help'), 300);
+      await tester.tap(find.text('Help'));
       await tester.pumpAndSettle();
 
       expect(

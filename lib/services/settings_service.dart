@@ -161,21 +161,12 @@ class SettingsService extends ChangeNotifier {
   }
 
   List<String> get recentFiles {
-    final raw = _prefs.getString(_kRecentFiles);
-    if (raw == null) return [];
-    final decoded = _decodeStoredRecentFiles(raw);
-    return decoded.where(_recentFilePathExists).toList(growable: false);
+    return _readStoredRecentFiles();
   }
 
   String? get lastOpenDirectory {
     final stored = _prefs.getString(_kLastOpenDirectory)?.trim();
-    if (stored == null || stored.isEmpty) return null;
-    try {
-      if (!Directory(stored).existsSync()) return null;
-      return stored;
-    } catch (_) {
-      return null;
-    }
+    return (stored == null || stored.isEmpty) ? null : stored;
   }
 
   set lastOpenDirectory(String? value) {
@@ -201,7 +192,6 @@ class SettingsService extends ChangeNotifier {
   bool pruneRecentFiles({bool notifyListeners = true}) {
     final raw = _prefs.getString(_kRecentFiles);
     if (raw == null) return false;
-
     final parsed = _decodeStoredRecentFiles(raw);
     final pruned = parsed.where(_recentFilePathExists).toList(growable: false);
     final nextRaw = pruned.isEmpty ? null : jsonEncode(pruned);
@@ -322,6 +312,12 @@ class SettingsService extends ChangeNotifier {
     } catch (_) {
       return [];
     }
+  }
+
+  List<String> _readStoredRecentFiles() {
+    final raw = _prefs.getString(_kRecentFiles);
+    if (raw == null) return const [];
+    return _decodeStoredRecentFiles(raw);
   }
 
   bool _recentFilePathExists(String path) {

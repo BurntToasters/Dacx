@@ -1,0 +1,42 @@
+app-id: run.rosie.dacx
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+command: dacx
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Notifications
+
+modules:
+  - name: dacx
+    buildsystem: simple
+    build-commands:
+      - install -d /app/bin
+      - install -d /app/lib/dacx
+      - install -d /app/share/applications
+      - install -d /app/share/icons/hicolor/256x256/apps
+      - install -d /app/share/metainfo
+      - cp -r bundle/. /app/lib/dacx/
+      - install -m 755 flatpak-dacx-launcher.sh /app/bin/dacx
+      - install -m 644 run.rosie.dacx.desktop /app/share/applications/run.rosie.dacx.desktop
+      - install -m 644 run.rosie.dacx.metainfo.xml /app/share/metainfo/run.rosie.dacx.metainfo.xml
+      - install -m 644 run.rosie.dacx.png /app/share/icons/hicolor/256x256/apps/run.rosie.dacx.png
+    sources:
+      - type: dir
+        path: build/linux/x64/release/bundle
+        dest: bundle
+      - type: file
+        path: flatpak/dacx-launcher.sh
+        dest-filename: flatpak-dacx-launcher.sh
+      - type: file
+        path: flatpak/run.rosie.dacx.desktop
+      - type: file
+        path: run.rosie.dacx.metainfo.xml
+      - type: file
+        path: assets/icon/icon.png
+        dest-filename: run.rosie.dacx.png

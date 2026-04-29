@@ -104,29 +104,34 @@ class DebugLogService extends ChangeNotifier {
     notifyListeners();
   }
 
-  String exportText() {
+  String exportText({bool redactSensitive = true}) {
     if (_entries.isEmpty) return 'No debug log entries.';
     final lines = <String>[];
     for (final entry in _entries) {
-      lines.add(_formatEntry(entry));
+      lines.add(_formatEntry(entry, redactSensitive: redactSensitive));
     }
     return lines.join('\n');
   }
 
-  String _formatEntry(DebugLogEntry entry) {
+  String _formatEntry(DebugLogEntry entry, {required bool redactSensitive}) {
     final ts = entry.timestamp.toIso8601String();
     final sev = entry.severity.name.toUpperCase();
     final cat = entry.category.name.toUpperCase();
     final buf = StringBuffer('[$ts] [$sev] [$cat] ${entry.event}');
-    if (entry.message != null && entry.message!.trim().isNotEmpty) {
-      buf.write(' - ${entry.message!.trim()}');
+    final renderedMessage = redactSensitive
+        ? _sanitizeText(entry.message)
+        : entry.message?.trim();
+    if (renderedMessage != null && renderedMessage.isNotEmpty) {
+      buf.write(' - $renderedMessage');
     }
     if (entry.details.isNotEmpty) {
       final keys = entry.details.keys.toList()..sort();
       final rendered = keys
           .map((key) {
             final value = entry.details[key];
-            final safe = value?.toString().replaceAll('\n', r'\n');
+            final safe = redactSensitive
+                ? _sanitizeDetailValue(key, value)
+                : value?.toString().replaceAll('\n', r'\n');
             return '$key=$safe';
           })
           .join(', ');
@@ -134,4 +139,58 @@ class DebugLogService extends ChangeNotifier {
     }
     return buf.toString();
   }
+
+  String? _sanitizeDetailValue(String key, Object? value) {
+    final text = value?.toString();
+    if (text == null) return null;
+    final normalized = text.replaceAll('\n', r'\n');
+    if (_isPathLikeKey(key)) {
+      return _redactPath(normalized);
+    }
+    return _sanitizeText(normalized);
+  }
+
+  String? _sanitizeText(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (_looksLikePath(trimmed)) {
+      return _redactPath(trimmed);
+    }
+    return value
+        .replaceAllMapped(_pathPattern, (match) {
+          final prefix = match.group(1) ?? '';
+          final candidate = match.group(2) ?? '';
+          return '$prefix${_redactPath(candidate)}';
+        })
+        .replaceAll('\n', r'\n');
+  }
+
+  bool _isPathLikeKey(String key) {
+    final normalized = key.toLowerCase();
+    return normalized.contains('path') ||
+        normalized.contains('file') ||
+        normalized.contains('dir') ||
+        normalized.contains('cwd');
+  }
+
+  bool _looksLikePath(String value) {
+    return value.startsWith('/') ||
+        value.startsWith(r'\\') ||
+        RegExp(r'^[A-Za-z]:[\\/]').hasMatch(value);
+  }
+
+  String _redactPath(String value) {
+    final normalized = value.replaceAll('\\', '/');
+    final segments = normalized
+        .split('/')
+        .where((segment) => segment.isNotEmpty);
+    final basename = segments.isEmpty ? 'path' : segments.last;
+    return '<path:$basename>';
+  }
+
+  static final RegExp _pathPattern = RegExp(
+    r"""(^|[\s(="'])((?:[A-Za-z]:[\\/]|\\\\)[^\s,|;"')]+|/(?!/)[^\s,|;"')]+(?:/[^\s,|;"')]+)*)""",
+    multiLine: true,
+  );
 }

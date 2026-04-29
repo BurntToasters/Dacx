@@ -5,6 +5,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'debug_log_service.dart';
 
+typedef PackageInfoLoader = Future<PackageInfo> Function();
+typedef HttpGet =
+    Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
+typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
+typedef LaunchUrlFn = Future<bool> Function(Uri uri, {LaunchMode mode});
+
 class UpdateService {
   static const String _owner = 'BurntToasters';
   static const String _repo = 'Dacx';
@@ -13,11 +19,25 @@ class UpdateService {
   );
   final DebugLogService? _debugLog;
   final String _debugSource;
+  final PackageInfoLoader _packageInfoLoader;
+  final HttpGet _httpGet;
+  final CanLaunchUrlFn _canLaunch;
+  final LaunchUrlFn _launch;
   bool _lastCheckSucceeded = false;
 
-  UpdateService({DebugLogService? debugLog, String debugSource = 'unknown'})
-    : _debugLog = debugLog,
-      _debugSource = debugSource;
+  UpdateService({
+    DebugLogService? debugLog,
+    String debugSource = 'unknown',
+    PackageInfoLoader? packageInfoLoader,
+    HttpGet? httpGet,
+    CanLaunchUrlFn? canLaunch,
+    LaunchUrlFn? launch,
+  }) : _debugLog = debugLog,
+       _debugSource = debugSource,
+       _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
+       _httpGet = httpGet ?? http.get,
+       _canLaunch = canLaunch ?? canLaunchUrl,
+       _launch = launch ?? launchUrl;
 
   bool get lastCheckSucceeded => _lastCheckSucceeded;
 
@@ -47,7 +67,7 @@ class UpdateService {
   Future<UpdateInfo?> checkForUpdate() async {
     _lastCheckSucceeded = false;
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
+      final packageInfo = await _packageInfoLoader();
       final currentVersion = packageInfo.version;
       _log(
         'check_started',
@@ -57,9 +77,10 @@ class UpdateService {
       final uri = Uri.parse(
         'https://api.github.com/repos/$_owner/$_repo/releases/latest',
       );
-      final response = await http
-          .get(uri, headers: {'Accept': 'application/vnd.github.v3+json'})
-          .timeout(const Duration(seconds: 10));
+      final response = await _httpGet(
+        uri,
+        headers: {'Accept': 'application/vnd.github.v3+json'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
         _log(
@@ -126,10 +147,18 @@ class UpdateService {
   }
 
   Future<void> openReleasePage(String url) async {
+    if (!_isLaunchableUrl(url)) {
+      _log(
+        'open_release_page_failed',
+        severity: DebugSeverity.warn,
+        detailsBuilder: () => {'url': url},
+      );
+      return;
+    }
     final uri = Uri.parse(url);
     _log('open_release_page_requested', detailsBuilder: () => {'url': url});
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (await _canLaunch(uri)) {
+      await _launch(uri, mode: LaunchMode.externalApplication);
       _log('open_release_page_launched', detailsBuilder: () => {'url': url});
       return;
     }
@@ -143,7 +172,10 @@ class UpdateService {
   bool _isLaunchableUrl(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null) return false;
-    return uri.hasScheme && (uri.scheme == 'https' || uri.scheme == 'http');
+    return uri.hasScheme &&
+        uri.scheme == 'https' &&
+        uri.host.isNotEmpty &&
+        !uri.hasPort;
   }
 
   static String _stripPreRelease(String v) => v.split('-').first;

@@ -66,16 +66,39 @@ function detectArch() {
   return normalizeArch(process.arch);
 }
 
+function resolveManifestPath() {
+  const candidates = [
+    process.env.FLATPAK_MANIFEST,
+    "run.rosie.dacx.yml",
+    "run.rosie.dacx.yaml",
+    "flatpak/run.rosie.dacx.yml",
+    "flatpak/run.rosie.dacx.yaml",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const manifestPath = path.resolve(root, candidate);
+    if (fs.existsSync(manifestPath)) {
+      return manifestPath;
+    }
+  }
+
+  throw new Error(
+    "Flatpak manifest not found. Set FLATPAK_MANIFEST or add run.rosie.dacx.yml.",
+  );
+}
+
 function main() {
   if (process.platform !== "linux") {
     throw new Error("Flatpak bundling is only supported on Linux hosts.");
   }
 
+  const manifestPath = resolveManifestPath();
+
   run("flatpak-builder", [
     "--repo=flatpak-repo",
     "--force-clean",
     "flatpak-build",
-    "run.rosie.dacx.yml",
+    path.relative(root, manifestPath),
   ]);
 
   const arch = detectArch();

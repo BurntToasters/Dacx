@@ -47,6 +47,53 @@ void main() {
       },
     );
 
+    test('exportText redacts local paths by default', () {
+      final service = DebugLogService(isEnabled: () => true);
+
+      service.log(
+        category: DebugLogCategory.system,
+        event: 'open_file',
+        message:
+            r'Failed to open C:\Users\Burnt\Documents\GitHub\DACX\video.mp4',
+        details: {
+          'path': r'C:\Users\Burnt\Documents\GitHub\DACX\video.mp4',
+          'cwd': '/home/burnt/dacx',
+          'url': 'https://github.com/BurntToasters/Dacx/releases/latest',
+        },
+      );
+
+      final output = service.exportText();
+
+      expect(output, contains('<path:video.mp4>'));
+      expect(output, contains('<path:dacx>'));
+      expect(
+        output,
+        contains('url=https://github.com/BurntToasters/Dacx/releases/latest'),
+      );
+      expect(
+        output,
+        isNot(contains(r'C:\Users\Burnt\Documents\GitHub\DACX\video.mp4')),
+      );
+      expect(output, isNot(contains('/home/burnt/dacx')));
+    });
+
+    test('exportText can include raw values when redaction disabled', () {
+      final service = DebugLogService(isEnabled: () => true);
+
+      service.log(
+        category: DebugLogCategory.system,
+        event: 'open_file',
+        details: {'path': r'C:\Users\Burnt\Documents\GitHub\DACX\video.mp4'},
+      );
+
+      final output = service.exportText(redactSensitive: false);
+
+      expect(
+        output,
+        contains(r'C:\Users\Burnt\Documents\GitHub\DACX\video.mp4'),
+      );
+    });
+
     test('does not capture events when disabled', () {
       final service = DebugLogService(isEnabled: () => false);
 

@@ -28,7 +28,9 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   SettingsService get _s => widget.settings;
-  static final Uri _helpFaqUri = Uri.parse('https://help.rosie.run/dacx/en-us/faq');
+  static final Uri _helpFaqUri = Uri.parse(
+    'https://help.rosie.run/dacx/en-us/faq',
+  );
   static final Uri _supportProjectUri = Uri.parse('https://rosie.run/support');
   late final UpdateService _updateService;
   bool _contentVisible = false;
@@ -730,7 +732,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Debug log copied to clipboard.')),
+      const SnackBar(content: Text('Redacted debug log copied to clipboard.')),
     );
   }
 
