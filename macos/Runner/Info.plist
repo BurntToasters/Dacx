@@ -32,6 +32,8 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Dacx Audio Media</string>
+			<key>UTTypeIconFile</key>
+			<string>dacx_music_icon.icns</string>
 			<key>UTTypeIdentifier</key>
 			<string>run.rosie.dacx.audio</string>
 			<key>UTTypeTagSpecification</key>
@@ -110,6 +112,8 @@
 			<string>Dacx Audio Media</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>dacx_music_icon</string>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>

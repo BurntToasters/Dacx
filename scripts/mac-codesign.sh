@@ -16,6 +16,9 @@ APP_BUNDLE="$BUILD_DIR/${APP_NAME}.app"
 ZIP_NAME="${APP_NAME}-${PKG_VERSION}-macos.zip"
 ZIP_PATH="$ROOT/release/$ZIP_NAME"
 ENTITLEMENTS_FILE="$ROOT/macos/Runner/Release.entitlements"
+MUSIC_ICON_SOURCE="$ROOT/assets/dacx_music_icon.png"
+MUSIC_ICON_NAME="dacx_music_icon.icns"
+MUSIC_ICON_DEST="$APP_BUNDLE/Contents/Resources/$MUSIC_ICON_NAME"
 
 # Validate
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY in .env}"
@@ -32,6 +35,33 @@ fi
 if [[ ! -f "$ENTITLEMENTS_FILE" ]]; then
   echo "ERROR: Entitlements file not found at $ENTITLEMENTS_FILE"
   exit 1
+fi
+
+if [[ -f "$MUSIC_ICON_SOURCE" ]]; then
+  ICONSET_DIR="$ROOT/build/mac-audio-icon.iconset"
+  rm -rf "$ICONSET_DIR"
+  mkdir -p "$ICONSET_DIR"
+
+  while IFS=: read -r icon_name size; do
+    sips -z "$size" "$size" "$MUSIC_ICON_SOURCE" --out "$ICONSET_DIR/$icon_name" >/dev/null
+  done <<'EOF'
+icon_16x16.png:16
+icon_16x16@2x.png:32
+icon_32x32.png:32
+icon_32x32@2x.png:64
+icon_128x128.png:128
+icon_128x128@2x.png:256
+icon_256x256.png:256
+icon_256x256@2x.png:512
+icon_512x512.png:512
+icon_512x512@2x.png:1024
+EOF
+
+  iconutil -c icns "$ICONSET_DIR" -o "$MUSIC_ICON_DEST"
+  rm -rf "$ICONSET_DIR"
+  echo "Prepared audio document icon at $MUSIC_ICON_DEST"
+else
+  echo "WARN: Missing $MUSIC_ICON_SOURCE; audio files will use the default document icon."
 fi
 
 # Signing
