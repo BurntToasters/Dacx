@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -1421,44 +1422,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? p.basenameWithoutExtension(_currentFile!)
         : '';
     final colorScheme = Theme.of(context).colorScheme;
-    final shortestSide = MediaQuery.sizeOf(context).shortestSide;
-    final albumArtSize = shortestSide.clamp(220.0, 360.0).toDouble();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+        final shortestSideSize = shortestSide.clamp(220.0, 360.0).toDouble();
+        final maxByHeight = (constraints.maxHeight - 260).clamp(170.0, 360.0);
+        final albumArtSize = math.min(shortestSideSize, maxByHeight);
 
-    return Center(
-      child: _buildCenterPanel(
-        maxWidth: 700,
-        children: [
-          if (showAlbumArt)
-            _buildAlbumArtSurface(size: albumArtSize)
-          else
-            _buildCenterIconSurface(
-              icon: Icons.album,
-              size: 54,
-              color: colorScheme.primary.withValues(alpha: 0.88),
-            ),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              fileName,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.88),
-                fontWeight: FontWeight.w500,
+        return Center(
+          child: _buildCenterPanel(
+            maxWidth: 700,
+            children: [
+              if (showAlbumArt)
+                _buildAlbumArtSurface(size: albumArtSize)
+              else
+                _buildCenterIconSurface(
+                  icon: Icons.album,
+                  size: 54,
+                  color: colorScheme.primary.withValues(alpha: 0.88),
+                ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  fileName,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: colorScheme.onSurface.withValues(alpha: 0.88),
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+              const SizedBox(height: 10),
+              Text(
+                'Audio playback',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.62),
+                  height: 1.2,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Audio playback',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.62),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
