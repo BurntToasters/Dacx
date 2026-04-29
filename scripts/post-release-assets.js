@@ -55,6 +55,7 @@ function copyReleaseAssets(releaseDir = RELEASE_DIR, destination) {
   }
 
   fs.mkdirSync(resolvedDestination, { recursive: true });
+  cleanMirrorDestination(resolvedDestination, releaseDir);
   const entries = fs.readdirSync(releaseDir);
 
   for (const entry of entries) {
@@ -62,6 +63,38 @@ function copyReleaseAssets(releaseDir = RELEASE_DIR, destination) {
     const destinationPath = path.join(resolvedDestination, entry);
     fs.cpSync(sourcePath, destinationPath, { recursive: true, force: true, errorOnExist: false });
   }
+}
+
+function cleanMirrorDestination(destination, releaseDir) {
+  const releaseEntries = new Set(fs.readdirSync(releaseDir));
+  const destinationEntries = fs.readdirSync(destination, { withFileTypes: true });
+
+  for (const entry of destinationEntries) {
+    const entryPath = path.join(destination, entry.name);
+    if (releaseEntries.has(entry.name) || isConflictArtifact(entry.name)) {
+      removePath(entryPath);
+    }
+  }
+}
+
+function isConflictArtifact(name) {
+  const lower = name.toLowerCase();
+  if (!lower.includes('-conflict')) return false;
+  return (
+    lower.endsWith('.deb') ||
+    lower.endsWith('.rpm') ||
+    lower.endsWith('.tar') ||
+    lower.endsWith('.tar.gz') ||
+    lower.endsWith('.zip') ||
+    lower.endsWith('.appimage') ||
+    lower.endsWith('.flatpak') ||
+    lower.endsWith('.dmg') ||
+    lower.endsWith('.exe') ||
+    lower.endsWith('.msi') ||
+    lower.endsWith('.pkg') ||
+    lower.endsWith('.asc') ||
+    lower.endsWith('.sig')
+  );
 }
 
 function run({ releaseDir = RELEASE_DIR, env = process.env } = {}) {
