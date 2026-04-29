@@ -32,7 +32,7 @@ import { fileURLToPath } from "url";
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
 const VERSION = pkg.version;
-const SUPPORTED_MEDIA_EXTENSIONS = [
+const AUDIO_EXTENSIONS = [
   "mp3",
   "flac",
   "wav",
@@ -43,6 +43,8 @@ const SUPPORTED_MEDIA_EXTENSIONS = [
   "opus",
   "ape",
   "alac",
+];
+const VIDEO_EXTENSIONS = [
   "mp4",
   "mkv",
   "avi",
@@ -52,6 +54,10 @@ const SUPPORTED_MEDIA_EXTENSIONS = [
   "flv",
   "m4v",
 ];
+const SUPPORTED_MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
+const MUSIC_FILE_ICON_SOURCE_PNG = path.join(root, "assets", "dacx_music_icon.png");
+const WINDOWS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.ico";
+const MACOS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.icns";
 
 const platform = process.argv[2];
 if (!platform) {
@@ -84,6 +90,91 @@ function hasCommand(cmd) {
 
 function removeIfExists(filePath) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
+function ensureWindowsAudioFileIcon(buildDir) {
+  if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
+    console.warn(
+      `  ⚠ Missing ${path.relative(root, MUSIC_FILE_ICON_SOURCE_PNG)}; ` +
+      "audio files will use the app icon.",
+    );
+    return null;
+  }
+
+  if (!hasCommand("magick")) {
+    console.warn(
+      "  ⚠ ImageMagick (magick) not found; audio files will use the app icon.",
+    );
+    return null;
+  }
+
+  const outPath = path.join(buildDir, WINDOWS_MUSIC_FILE_ICON_NAME);
+  run(
+    `magick "${MUSIC_FILE_ICON_SOURCE_PNG}" ` +
+    "-define icon:auto-resize=16,24,32,48,64,128,256 " +
+    `"${outPath}"`,
+  );
+  console.log(`  ✓ ${WINDOWS_MUSIC_FILE_ICON_NAME}`);
+  return WINDOWS_MUSIC_FILE_ICON_NAME;
+}
+
+function ensureMacAudioFileIconInBundle(appBundle) {
+  if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
+    console.warn(
+      `  ⚠ Missing ${path.relative(root, MUSIC_FILE_ICON_SOURCE_PNG)}; ` +
+      "audio files will use the default document icon.",
+    );
+    return false;
+  }
+
+  const resourcesDir = path.join(appBundle, "Contents", "Resources");
+  fs.mkdirSync(resourcesDir, { recursive: true });
+  const outPath = path.join(resourcesDir, MACOS_MUSIC_FILE_ICON_NAME);
+
+  if (hasCommand("magick")) {
+    run(`magick "${MUSIC_FILE_ICON_SOURCE_PNG}" "${outPath}"`);
+    console.log(`  ✓ ${MACOS_MUSIC_FILE_ICON_NAME}`);
+    return true;
+  }
+
+  if (hasCommand("iconutil") && hasCommand("sips")) {
+    const iconsetDir = path.join(root, "build", "mac-audio-icon.iconset");
+    if (fs.existsSync(iconsetDir)) {
+      fs.rmSync(iconsetDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(iconsetDir, { recursive: true });
+
+    const iconsetOutputs = [
+      ["icon_16x16.png", 16],
+      ["icon_16x16@2x.png", 32],
+      ["icon_32x32.png", 32],
+      ["icon_32x32@2x.png", 64],
+      ["icon_128x128.png", 128],
+      ["icon_128x128@2x.png", 256],
+      ["icon_256x256.png", 256],
+      ["icon_256x256@2x.png", 512],
+      ["icon_512x512.png", 512],
+      ["icon_512x512@2x.png", 1024],
+    ];
+
+    for (const [fileName, size] of iconsetOutputs) {
+      run(
+        `sips -z ${size} ${size} "${MUSIC_FILE_ICON_SOURCE_PNG}" ` +
+        `--out "${path.join(iconsetDir, fileName)}"`,
+      );
+    }
+
+    run(`iconutil -c icns "${iconsetDir}" -o "${outPath}"`);
+    fs.rmSync(iconsetDir, { recursive: true, force: true });
+    console.log(`  ✓ ${MACOS_MUSIC_FILE_ICON_NAME}`);
+    return true;
+  }
+
+  console.warn(
+    "  ⚠ Could not generate macOS audio file icon " +
+    "(needs ImageMagick or sips+iconutil).",
+  );
+  return false;
 }
 
 function escapePowerShellSingleQuoted(value) {
@@ -247,12 +338,18 @@ function escapeXmlAttr(value) {
     .replace(/>/g, "&gt;");
 }
 
-function renderInnoOpenWithRegistryLines() {
+function renderInnoOpenWithRegistryLines(audioIconFileName) {
   const openCommandValue = '"""{app}\\{#AppExeName}"" ""%1"""';
+  const audioIconValue = audioIconFileName
+    ? `{app}\\${audioIconFileName},0`
+    : "{app}\\{#AppExeName},0";
   const lines = [
-    'Root: HKCR; Subkey: "Dacx.Media"; ValueType: string; ValueData: "Dacx Media File"; Flags: uninsdeletekey',
-    'Root: HKCR; Subkey: "Dacx.Media\\DefaultIcon"; ValueType: string; ValueData: "{app}\\{#AppExeName},0"; Flags: uninsdeletekey',
-    `Root: HKCR; Subkey: "Dacx.Media\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
+    'Root: HKCR; Subkey: "Dacx.Audio"; ValueType: string; ValueData: "Dacx Audio File"; Flags: uninsdeletekey',
+    `Root: HKCR; Subkey: "Dacx.Audio\\DefaultIcon"; ValueType: string; ValueData: "${audioIconValue}"; Flags: uninsdeletekey`,
+    `Root: HKCR; Subkey: "Dacx.Audio\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
+    'Root: HKCR; Subkey: "Dacx.Video"; ValueType: string; ValueData: "Dacx Video File"; Flags: uninsdeletekey',
+    'Root: HKCR; Subkey: "Dacx.Video\\DefaultIcon"; ValueType: string; ValueData: "{app}\\{#AppExeName},0"; Flags: uninsdeletekey',
+    `Root: HKCR; Subkey: "Dacx.Video\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
     `Root: HKCR; Subkey: "Applications\\{#AppExeName}\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
   ];
 
@@ -260,27 +357,48 @@ function renderInnoOpenWithRegistryLines() {
     lines.push(
       `Root: HKCR; Subkey: "Applications\\{#AppExeName}\\SupportedTypes"; ValueType: string; ValueName: ".${ext}"; ValueData: ""; Flags: uninsdeletevalue`,
     );
+  }
+
+  for (const ext of AUDIO_EXTENSIONS) {
     lines.push(
-      `Root: HKCR; Subkey: ".${ext}\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Media"; ValueData: ""; Flags: uninsdeletevalue`,
+      `Root: HKCR; Subkey: ".${ext}\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Audio"; ValueData: ""; Flags: uninsdeletevalue`,
+    );
+  }
+
+  for (const ext of VIDEO_EXTENSIONS) {
+    lines.push(
+      `Root: HKCR; Subkey: ".${ext}\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Video"; ValueData: ""; Flags: uninsdeletevalue`,
     );
   }
   return lines.join("\n");
 }
 
-function renderWixV4FileAssociationComponent() {
+function renderWixV4FileAssociationComponent(audioIconFileName) {
+  const audioIconValue = audioIconFileName
+    ? `[INSTALLFOLDER]${audioIconFileName},0`
+    : "[INSTALLFOLDER]dacx.exe,0";
   const lines = [
     '      <Component Id="CMP_FILE_ASSOC" Guid="*">',
-    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Media">',
-    '          <RegistryValue Type="string" Value="Dacx Media File" KeyPath="yes" />',
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Audio">',
+    '          <RegistryValue Type="string" Value="Dacx Audio File" KeyPath="yes" />',
     "        </RegistryKey>",
-    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Media\\\\DefaultIcon">',
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Audio\\\\DefaultIcon">',
+    `          <RegistryValue Type="string" Value="${audioIconValue}" />`,
+    "        </RegistryKey>",
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Audio\\\\shell\\\\open\\\\command">',
+    '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+    "        </RegistryKey>",
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Video">',
+    '          <RegistryValue Type="string" Value="Dacx Video File" />',
+    "        </RegistryKey>",
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Video\\\\DefaultIcon">',
     '          <RegistryValue Type="string" Value="[INSTALLFOLDER]dacx.exe,0" />',
     "        </RegistryKey>",
-    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Media\\\\shell\\\\open\\\\command">',
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Video\\\\shell\\\\open\\\\command">',
     '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "        </RegistryKey>",
     '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Applications\\\\dacx.exe\\\\shell\\\\open\\\\command">',
-    '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+      '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "        </RegistryKey>",
   ];
 
@@ -292,11 +410,24 @@ function renderWixV4FileAssociationComponent() {
       `          <RegistryValue Name=".${ext}" Type="string" Value="" />`,
     );
     lines.push("        </RegistryKey>");
+  }
+
+  for (const ext of AUDIO_EXTENSIONS) {
     lines.push(
       `        <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
     );
     lines.push(
-      '          <RegistryValue Name="Dacx.Media" Type="string" Value="" />',
+      '          <RegistryValue Name="Dacx.Audio" Type="string" Value="" />',
+    );
+    lines.push("        </RegistryKey>");
+  }
+
+  for (const ext of VIDEO_EXTENSIONS) {
+    lines.push(
+      `        <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
+    );
+    lines.push(
+      '          <RegistryValue Name="Dacx.Video" Type="string" Value="" />',
     );
     lines.push("        </RegistryKey>");
   }
@@ -305,20 +436,32 @@ function renderWixV4FileAssociationComponent() {
   return lines.join("\n");
 }
 
-function renderWixV3FileAssociationComponent() {
+function renderWixV3FileAssociationComponent(audioIconFileName) {
+  const audioIconValue = audioIconFileName
+    ? `[INSTALLFOLDER]${audioIconFileName},0`
+    : "[INSTALLFOLDER]dacx.exe,0";
   const lines = [
     '          <Component Id="CMP_FILE_ASSOC" Guid="*" Win64="yes">',
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Media">',
-    '              <RegistryValue Type="string" Value="Dacx Media File" KeyPath="yes" />',
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio">',
+    '              <RegistryValue Type="string" Value="Dacx Audio File" KeyPath="yes" />',
     "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Media\\DefaultIcon">',
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio\\DefaultIcon">',
+    `              <RegistryValue Type="string" Value="${audioIconValue}" />`,
+    "            </RegistryKey>",
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio\\shell\\open\\command">',
+    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+    "            </RegistryKey>",
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video">',
+    '              <RegistryValue Type="string" Value="Dacx Video File" />',
+    "            </RegistryKey>",
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video\\DefaultIcon">',
     '              <RegistryValue Type="string" Value="[INSTALLFOLDER]dacx.exe,0" />',
     "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Media\\shell\\open\\command">',
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video\\shell\\open\\command">',
     '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "            </RegistryKey>",
     '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe\\shell\\open\\command">',
-    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+      '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "            </RegistryKey>",
   ];
 
@@ -330,11 +473,24 @@ function renderWixV3FileAssociationComponent() {
       `              <RegistryValue Name=".${ext}" Type="string" Value="" />`,
     );
     lines.push("            </RegistryKey>");
+  }
+
+  for (const ext of AUDIO_EXTENSIONS) {
     lines.push(
       `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
     );
     lines.push(
-      '              <RegistryValue Name="Dacx.Media" Type="string" Value="" />',
+      '              <RegistryValue Name="Dacx.Audio" Type="string" Value="" />',
+    );
+    lines.push("            </RegistryKey>");
+  }
+
+  for (const ext of VIDEO_EXTENSIONS) {
+    lines.push(
+      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
+    );
+    lines.push(
+      '              <RegistryValue Name="Dacx.Video" Type="string" Value="" />',
     );
     lines.push("            </RegistryKey>");
   }
@@ -381,6 +537,8 @@ function packageWindows() {
     process.exit(1);
   }
 
+  const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
+
   // 1. Portable zip
   const zipName = "Dacx-Windows-x64.zip";
   const zipPath = path.join(releaseDir, zipName);
@@ -404,13 +562,13 @@ function packageWindows() {
   console.log(`  ✓ ${zipName}`);
 
   // 2. EXE installer (Inno Setup)
-  buildWindowsExeInstaller(buildDir);
+  buildWindowsExeInstaller(buildDir, audioIconFileName);
 
   // 3. MSI installer (WiX Toolset)
-  buildWindowsMsiInstaller(buildDir);
+  buildWindowsMsiInstaller(buildDir, audioIconFileName);
 }
 
-function buildWindowsExeInstaller(buildDir) {
+function buildWindowsExeInstaller(buildDir, audioIconFileName) {
   const isccPath = resolveInnoSetupCompilerPath();
   if (!isccPath) {
     console.error("Inno Setup compiler was not found.");
@@ -473,7 +631,7 @@ Name: "{autoprograms}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"
 Name: "{autodesktop}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"; Tasks: desktopicon
 
 [Registry]
-${renderInnoOpenWithRegistryLines()}
+${renderInnoOpenWithRegistryLines(audioIconFileName)}
 `;
 
   fs.writeFileSync(issPath, script);
@@ -496,17 +654,17 @@ ${renderInnoOpenWithRegistryLines()}
   console.log(`  ✓ ${outName}`);
 }
 
-function buildWindowsMsiInstaller(buildDir) {
+function buildWindowsMsiInstaller(buildDir, audioIconFileName) {
   // Prefer WiX v4+ (wix build), fall back to WiX v3 (candle + light).
   const wixV4Path = resolveWixV4PlusTool();
   if (wixV4Path) {
-    buildWindowsMsiInstallerV4(buildDir, wixV4Path);
+    buildWindowsMsiInstallerV4(buildDir, wixV4Path, audioIconFileName);
     return;
   }
 
   const wixV3Paths = resolveWixV3ToolPaths();
   if (wixV3Paths) {
-    buildWindowsMsiInstallerV3(buildDir, wixV3Paths);
+    buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName);
     return;
   }
 
@@ -521,7 +679,7 @@ function buildWindowsMsiInstaller(buildDir) {
   process.exit(1);
 }
 
-function buildWindowsMsiInstallerV4(buildDir, wixPath) {
+function buildWindowsMsiInstallerV4(buildDir, wixPath, audioIconFileName) {
   const outName = "Dacx-Windows-x64.msi";
   const outPath = path.join(releaseDir, outName);
   removeIfExists(outPath);
@@ -530,7 +688,7 @@ function buildWindowsMsiInstallerV4(buildDir, wixPath) {
   fs.mkdirSync(installerDir, { recursive: true });
   const wxsPath = path.join(installerDir, "dacx-installer.wxs");
 
-  writeWindowsWixV4Source(buildDir, wxsPath);
+  writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName);
 
   const majorVersion = getWixMajorVersion(wixPath);
   const acceptEulaFlag = majorVersion >= 7 ? " -acceptEula wix7" : "";
@@ -555,7 +713,7 @@ function buildWindowsMsiInstallerV4(buildDir, wixPath) {
   console.log(`  ✓ ${outName}`);
 }
 
-function buildWindowsMsiInstallerV3(buildDir, wixV3Paths) {
+function buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName) {
   const outName = "Dacx-Windows-x64.msi";
   const outPath = path.join(releaseDir, outName);
   removeIfExists(outPath);
@@ -565,7 +723,7 @@ function buildWindowsMsiInstallerV3(buildDir, wixV3Paths) {
   const wxsPath = path.join(installerDir, "dacx-installer.wxs");
   const wixobjPath = path.join(installerDir, "dacx-installer.wixobj");
 
-  writeWindowsWixSource(buildDir, wxsPath);
+  writeWindowsWixSource(buildDir, wxsPath, audioIconFileName);
 
   run(`"${wixV3Paths.candlePath}" -nologo -arch x64 -out "${wixobjPath}" "${wxsPath}"`);
   run(`"${wixV3Paths.lightPath}" -nologo -spdb -out "${outPath}" "${wixobjPath}"`);
@@ -577,7 +735,7 @@ function buildWindowsMsiInstallerV3(buildDir, wixV3Paths) {
   console.log(`  ✓ ${outName}`);
 }
 
-function writeWindowsWixV4Source(buildDir, wxsPath) {
+function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   const files = listFilesRecursive(buildDir)
     .map((absolutePath) => {
       const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
@@ -710,7 +868,7 @@ ${componentRefs}
   <Fragment>
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Dacx">
-${renderWixV4FileAssociationComponent()}
+${renderWixV4FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "        ").join("\n")}
       </Directory>
     </StandardDirectory>
@@ -721,7 +879,7 @@ ${renderDirectoryContents(rootNode, "        ").join("\n")}
   fs.writeFileSync(wxsPath, wixSource);
 }
 
-function writeWindowsWixSource(buildDir, wxsPath) {
+function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
   const files = listFilesRecursive(buildDir)
     .map((absolutePath) => {
       const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
@@ -852,7 +1010,7 @@ ${componentRefs}
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="Dacx">
-${renderWixV3FileAssociationComponent()}
+${renderWixV3FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "          ").join("\n")}
         </Directory>
       </Directory>
@@ -875,6 +1033,8 @@ function packageMac() {
     console.error("Run 'npm run build:mac' first.");
     process.exit(1);
   }
+
+  ensureMacAudioFileIconInBundle(appBundle);
 
   // 1. Zip (may already exist from mac-codesign.sh)
   const codesignZipPattern = new RegExp(`^dacx-.*-macos\\.zip$`, "i");
