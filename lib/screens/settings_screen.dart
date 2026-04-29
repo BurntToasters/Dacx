@@ -28,6 +28,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   SettingsService get _s => widget.settings;
+  static final Uri _helpFaqUri = Uri.parse('https://help.rosie.run/dacx/en-us/faq');
+  static final Uri _supportProjectUri = Uri.parse('https://rosie.run/support');
   late final UpdateService _updateService;
   bool _contentVisible = false;
 
@@ -109,6 +111,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       children: [
+                        _helpFaqTile(),
+                        _supportProjectTile(),
+                        const Divider(),
                         _sectionHeader('Playback'),
                         _speedTile(),
                         _loopModeTile(),
@@ -863,6 +868,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _helpFaqTile() {
+    return ListTile(
+      title: const Text('Help'),
+      leading: const Icon(Icons.help_outline),
+      trailing: const Icon(Icons.open_in_new),
+      onTap: () => _openExternalLink(
+        uri: _helpFaqUri,
+        requestedEvent: 'open_faq_requested',
+        launchedEvent: 'open_faq_launched',
+        failedEvent: 'open_faq_failed',
+      ),
+    );
+  }
+
+  Widget _supportProjectTile() {
+    return ListTile(
+      title: const Text('Support this project'),
+      leading: const Icon(Icons.favorite_border),
+      trailing: const Icon(Icons.open_in_new),
+      onTap: () => _openExternalLink(
+        uri: _supportProjectUri,
+        requestedEvent: 'open_support_requested',
+        launchedEvent: 'open_support_launched',
+        failedEvent: 'open_support_failed',
+      ),
+    );
+  }
+
+  Future<void> _openExternalLink({
+    required Uri uri,
+    required String requestedEvent,
+    required String launchedEvent,
+    required String failedEvent,
+  }) async {
+    _log(
+      requestedEvent,
+      category: DebugLogCategory.ui,
+      detailsBuilder: () => {'url': uri.toString()},
+    );
+
+    try {
+      final canLaunch = await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          _log(
+            launchedEvent,
+            category: DebugLogCategory.ui,
+            detailsBuilder: () => {'url': uri.toString()},
+          );
+        } else {
+          _log(
+            failedEvent,
+            category: DebugLogCategory.ui,
+            severity: DebugSeverity.warn,
+            detailsBuilder: () => {'url': uri.toString()},
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      _log(
+        failedEvent,
+        category: DebugLogCategory.ui,
+        severity: DebugSeverity.warn,
+        message: e.toString(),
+        detailsBuilder: () => {'url': uri.toString()},
+      );
+      return;
+    }
+
+    _log(
+      failedEvent,
+      category: DebugLogCategory.ui,
+      severity: DebugSeverity.warn,
+      detailsBuilder: () => {'url': uri.toString()},
+    );
+  }
+
   Widget _resetTile() {
     return ListTile(
       title: const Text('Reset to defaults'),
@@ -937,7 +1024,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           data: licenseTheme,
           child: const LicensePage(
             applicationName: 'Dacx',
-            applicationLegalese: '© 2026 run.rosie\nLicensed under GPLv3',
+            applicationLegalese: 'Made With ❤️ By: BurntToasters/Rosie.run',
           ),
         ),
       ),
