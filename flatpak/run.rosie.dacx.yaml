@@ -1,3 +1,4 @@
+# x-version: 0.6.0
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "24.08"
@@ -8,9 +9,17 @@ finish-args:
   - --share=ipc
   - --socket=wayland
   - --socket=fallback-x11
+  - --socket=pulseaudio
   - --device=dri
-  - --filesystem=host
+  - --filesystem=xdg-music:ro
+  - --filesystem=xdg-videos:ro
+  - --filesystem=xdg-download:ro
+  - --filesystem=xdg-documents:ro
+  - --filesystem=xdg-desktop:ro
+  - --filesystem=host:ro
   - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.mpris.MediaPlayer2.dacx
+  - --own-name=org.mpris.MediaPlayer2.dacx
 
 modules:
   - name: dacx

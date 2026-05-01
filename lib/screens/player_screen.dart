@@ -288,7 +288,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
-    _playerService.dispose();
+    try {
+      _videoController.player.dispose();
+    } catch (_) {}
+    unawaited(_playerService.dispose());
     super.dispose();
   }
 
@@ -733,16 +736,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onDragDone(DropDoneDetails details) {
-    if (details.files.isNotEmpty) {
-      _log(
-        'drop_file_received',
-        detailsBuilder: () => {
-          'path': details.files.first.path,
-          'count': details.files.length,
-        },
-      );
-      unawaited(_loadFile(details.files.first.path));
+    if (details.files.isEmpty) return;
+    final firstPath = details.files.first.path;
+    if (firstPath.trim().isEmpty) {
+      _log('drop_file_invalid_path', severity: DebugSeverity.warn);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read dropped file path.')),
+        );
+      }
+      return;
     }
+    _log(
+      'drop_file_received',
+      detailsBuilder: () => {'path': firstPath, 'count': details.files.length},
+    );
+    unawaited(_loadFile(firstPath));
   }
 
   void _onDragEntered() {
@@ -999,14 +1008,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  bool _fullscreenToggleInFlight = false;
+
   Future<void> _toggleFullscreen() async {
+    if (_fullscreenToggleInFlight) return;
+    _fullscreenToggleInFlight = true;
     try {
       final enabled = await windowManager.isFullScreen();
       await windowManager.setFullScreen(!enabled);
+      // Verify state actually changed (Wayland / tiling WMs may reject).
+      final actual = await windowManager.isFullScreen();
+      if (actual == enabled && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fullscreen change rejected by window manager.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       _log(
         'fullscreen_toggled',
         category: DebugLogCategory.ui,
-        detailsBuilder: () => {'enabled': !enabled},
+        detailsBuilder: () => {'requested': !enabled, 'actual': actual},
       );
     } catch (e) {
       _log(
@@ -1015,6 +1038,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         message: e.toString(),
         severity: DebugSeverity.warn,
       );
+    } finally {
+      _fullscreenToggleInFlight = false;
     }
   }
 

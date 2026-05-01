@@ -99,7 +99,10 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     final isMac = Platform.isMacOS;
 
     return GestureDetector(
-      onPanStart: (_) => windowManager.startDragging(),
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) {
+        unawaited(windowManager.startDragging());
+      },
       onDoubleTap: () async {
         if (await windowManager.isMaximized()) {
           await windowManager.unmaximize();
@@ -135,6 +138,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
               if (!isMac) ...[
                 _WindowButton(
                   icon: Icons.minimize,
+                  semanticLabel: 'Minimize window',
                   onPressed: windowManager.minimize,
                   hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
                   iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
@@ -142,6 +146,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                 _WindowButton(
                   icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
                   iconSize: _isMaximized ? 14 : 16,
+                  semanticLabel: _isMaximized
+                      ? 'Restore window'
+                      : 'Maximize window',
                   onPressed: () async {
                     if (_isMaximized) {
                       await windowManager.unmaximize();
@@ -154,6 +161,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                 ),
                 _WindowButton(
                   icon: Icons.close,
+                  semanticLabel: 'Close window',
                   onPressed: windowManager.close,
                   hoverColor: Colors.red,
                   hoverIconColor: Colors.white,
@@ -175,6 +183,7 @@ class _WindowButton extends StatefulWidget {
   final Color hoverColor;
   final Color iconColor;
   final Color? hoverIconColor;
+  final String semanticLabel;
 
   const _WindowButton({
     required this.icon,
@@ -182,6 +191,7 @@ class _WindowButton extends StatefulWidget {
     required this.onPressed,
     required this.hoverColor,
     required this.iconColor,
+    required this.semanticLabel,
     this.hoverIconColor,
   });
 
@@ -194,28 +204,32 @@ class _WindowButtonState extends State<_WindowButton> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          width: 46,
-          height: 32,
-          color: _hovering ? widget.hoverColor : Colors.transparent,
-          child: Center(
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOutCubic,
-              scale: _hovering ? 1.05 : 1.0,
-              child: Icon(
-                widget.icon,
-                size: widget.iconSize,
-                color: _hovering && widget.hoverIconColor != null
-                    ? widget.hoverIconColor
-                    : widget.iconColor,
+    return Semantics(
+      button: true,
+      label: widget.semanticLabel,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            width: 46,
+            height: 32,
+            color: _hovering ? widget.hoverColor : Colors.transparent,
+            child: Center(
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOutCubic,
+                scale: _hovering ? 1.05 : 1.0,
+                child: Icon(
+                  widget.icon,
+                  size: widget.iconSize,
+                  color: _hovering && widget.hoverIconColor != null
+                      ? widget.hoverIconColor
+                      : widget.iconColor,
+                ),
               ),
             ),
           ),

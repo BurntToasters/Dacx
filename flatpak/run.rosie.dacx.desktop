@@ -10,3 +10,5 @@ Categories=AudioVideo;Audio;Video;Player;
 MimeType=audio/mpeg;audio/flac;audio/wav;audio/x-wav;audio/ogg;audio/aac;audio/x-m4a;audio/x-ms-wma;audio/opus;audio/x-ape;audio/alac;video/mp4;video/x-matroska;video/x-msvideo;video/webm;video/quicktime;video/x-ms-wmv;video/x-flv;video/x-m4v;
 Keywords=music;audio;video;media;player;
 StartupWMClass=dacx
+StartupNotify=true
+SingleMainWindow=true

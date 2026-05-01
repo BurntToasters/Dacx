@@ -143,15 +143,26 @@ class TransportControls extends StatelessWidget {
                 : const SizedBox(key: ValueKey('speed-empty')),
           ),
           const Spacer(),
-          // Volume
-          Icon(volume == 0 ? Icons.volume_off : Icons.volume_up, size: 20),
-          SizedBox(
-            width: 120,
-            child: Slider(
-              value: volume,
-              min: 0,
-              max: 100,
-              onChanged: onVolumeChanged,
+          Semantics(
+            label: volume == 0 ? 'Muted' : 'Volume ${volume.round()} percent',
+            child: Icon(
+              volume == 0 ? Icons.volume_off : Icons.volume_up,
+              size: 20,
+            ),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160, minWidth: 60),
+            child: Semantics(
+              slider: true,
+              label: 'Volume',
+              value: '${volume.round()}%',
+              child: Slider(
+                value: volume.clamp(0, 100),
+                min: 0,
+                max: 100,
+                divisions: 100,
+                onChanged: onVolumeChanged,
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -189,7 +200,8 @@ class TransportControls extends StatelessWidget {
             onSelected: onRecentFileSelected,
             itemBuilder: (context) => recents.map((path) {
               final name = p.basename(path).trim();
-              return PopupMenuItem(
+              return PopupMenuItem<String>(
+                key: ValueKey<String>(path),
                 value: path,
                 child: Text(
                   name.isEmpty ? path : name,

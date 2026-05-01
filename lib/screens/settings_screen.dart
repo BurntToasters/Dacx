@@ -34,6 +34,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static final Uri _supportProjectUri = Uri.parse('https://rosie.run/support');
   late final UpdateService _updateService;
   bool _contentVisible = false;
+  bool _isDisposed = false;
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
 
   void _log(
     String event, {
@@ -65,9 +72,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _log('settings_screen_init', category: DebugLogCategory.ui);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() => _contentVisible = true);
-      }
+      if (!mounted || _isDisposed) return;
+      setState(() => _contentVisible = true);
     });
   }
 

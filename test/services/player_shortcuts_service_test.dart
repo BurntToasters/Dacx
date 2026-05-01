@@ -20,7 +20,7 @@ void main() {
 
   group('PlayerShortcutsService', () {
     test('maps Ctrl/Cmd + O to open file', () {
-      final keyEvent = KeyDownEvent(
+      const keyEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.keyO,
         logicalKey: LogicalKeyboardKey.keyO,
         timeStamp: Duration.zero,
@@ -31,7 +31,7 @@ void main() {
     });
 
     test('maps Ctrl/Cmd + R to reopen last', () {
-      final keyEvent = KeyDownEvent(
+      const keyEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.keyR,
         logicalKey: LogicalKeyboardKey.keyR,
         timeStamp: Duration.zero,
@@ -42,12 +42,12 @@ void main() {
     });
 
     test('maps F and Escape for fullscreen actions', () {
-      final fullscreenEvent = KeyDownEvent(
+      const fullscreenEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.keyF,
         logicalKey: LogicalKeyboardKey.keyF,
         timeStamp: Duration.zero,
       );
-      final escapeEvent = KeyDownEvent(
+      const escapeEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.escape,
         logicalKey: LogicalKeyboardKey.escape,
         timeStamp: Duration.zero,
@@ -58,7 +58,7 @@ void main() {
     });
 
     test('space requires media for play/pause', () {
-      final spaceEvent = KeyDownEvent(
+      const spaceEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.space,
         logicalKey: LogicalKeyboardKey.space,
         timeStamp: Duration.zero,
@@ -72,17 +72,17 @@ void main() {
     });
 
     test('supports repeat key events for seek/volume shortcuts only', () {
-      final seekEvent = KeyRepeatEvent(
+      const seekEvent = KeyRepeatEvent(
         physicalKey: PhysicalKeyboardKey.arrowRight,
         logicalKey: LogicalKeyboardKey.arrowRight,
         timeStamp: Duration.zero,
       );
-      final volumeEvent = KeyRepeatEvent(
+      const volumeEvent = KeyRepeatEvent(
         physicalKey: PhysicalKeyboardKey.arrowDown,
         logicalKey: LogicalKeyboardKey.arrowDown,
         timeStamp: Duration.zero,
       );
-      final muteEvent = KeyRepeatEvent(
+      const muteEvent = KeyRepeatEvent(
         physicalKey: PhysicalKeyboardKey.keyM,
         logicalKey: LogicalKeyboardKey.keyM,
         timeStamp: Duration.zero,
@@ -94,12 +94,12 @@ void main() {
     });
 
     test('ignores play/pause and mute when primary modifier is held', () {
-      final spaceEvent = KeyDownEvent(
+      const spaceEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.space,
         logicalKey: LogicalKeyboardKey.space,
         timeStamp: Duration.zero,
       );
-      final muteEvent = KeyDownEvent(
+      const muteEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.keyM,
         logicalKey: LogicalKeyboardKey.keyM,
         timeStamp: Duration.zero,
@@ -110,7 +110,7 @@ void main() {
     });
 
     test('ignores key up events', () {
-      final keyEvent = KeyUpEvent(
+      const keyEvent = KeyUpEvent(
         physicalKey: PhysicalKeyboardKey.keyO,
         logicalKey: LogicalKeyboardKey.keyO,
         timeStamp: Duration.zero,

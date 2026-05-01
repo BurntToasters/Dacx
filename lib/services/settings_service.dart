@@ -65,7 +65,11 @@ class SettingsService extends ChangeNotifier {
 
   double get volume => _prefs.getDouble(_kVolume) ?? 100.0;
   set volume(double v) {
-    _prefs.setDouble(_kVolume, v);
+    final clamped = v.clamp(0.0, 100.0);
+    final current = _prefs.getDouble(_kVolume);
+    if (current == clamped) return;
+    _prefs.setDouble(_kVolume, clamped);
+    notifyListeners();
   }
 
   double get speed => _prefs.getDouble(_kSpeed) ?? 1.0;
@@ -171,22 +175,34 @@ class SettingsService extends ChangeNotifier {
 
   set lastOpenDirectory(String? value) {
     final normalized = value?.trim() ?? '';
-    if (normalized.isEmpty) {
+    if (normalized.isEmpty || !_isSafeDirectoryPath(normalized)) {
       _prefs.remove(_kLastOpenDirectory);
       return;
     }
     _prefs.setString(_kLastOpenDirectory, normalized);
   }
 
+  bool _isSafeDirectoryPath(String value) {
+    if (value.contains('\u0000')) return false;
+    final segments = value.replaceAll('\\', '/').split('/');
+    if (segments.any((s) => s == '..')) return false;
+    try {
+      return Directory(value).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
   void addRecentFile(String path) {
     final normalizedPath = path.trim();
-    if (normalizedPath.isEmpty) return;
+    if (normalizedPath.isEmpty || normalizedPath.contains('\u0000')) return;
     final files = List<String>.from(recentFiles)..remove(normalizedPath);
     files.insert(0, normalizedPath);
     if (files.length > maxRecentFiles) {
       files.removeRange(maxRecentFiles, files.length);
     }
     _prefs.setString(_kRecentFiles, jsonEncode(files));
+    notifyListeners();
   }
 
   bool pruneRecentFiles({bool notifyListeners = true}) {

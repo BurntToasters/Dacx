@@ -39,6 +39,18 @@ void _installKeyboardStateRecovery() {
   };
 }
 
+void _installAsyncErrorHandler(DebugLogService debugLog) {
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugLog.log(
+      category: DebugLogCategory.error,
+      event: 'uncaught_async_error',
+      message: error.toString(),
+      severity: DebugSeverity.error,
+    );
+    return true;
+  };
+}
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   _installKeyboardStateRecovery();
@@ -48,6 +60,7 @@ void main(List<String> args) async {
   final prefs = await SharedPreferences.getInstance();
   final settings = SettingsService(prefs);
   final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
+  _installAsyncErrorHandler(debugLog);
 
   await windowManager.ensureInitialized();
 
@@ -102,24 +115,24 @@ void main(List<String> args) async {
     unawaited(ensureHiddenTitleBarApplied());
   }
 
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
-    try {
-      if (savedPos != null) {
-        await windowManager.setPosition(savedPos);
+  unawaited(
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      try {
+        if (savedPos != null) {
+          await windowManager.setPosition(savedPos);
+        }
+        await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
+        await ensureHiddenTitleBarApplied();
+      } catch (_) {
+        // Continue to show fallback even if startup window operations fail.
+      } finally {
+        if (!windowReady.isCompleted) {
+          windowReady.complete();
+        }
       }
-      await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
-      await ensureHiddenTitleBarApplied();
-    } catch (_) {
-      // Continue to show fallback even if startup window operations fail.
-    } finally {
-      if (!windowReady.isCompleted) {
-        windowReady.complete();
-      }
-    }
-    await showWindowIfReady();
-  });
-
-  // Collect CLI file argument (first non-flag arg).
+      await showWindowIfReady();
+    }),
+  );
   final cliFile = _parseCliFilePath(args);
 
   runApp(DacxApp(settings: settings, debugLog: debugLog, initialFile: cliFile));
@@ -131,16 +144,18 @@ void main(List<String> args) async {
     await showWindowIfReady();
   });
 
-  Future<void>.delayed(const Duration(seconds: 2), () async {
-    if (windowShown) return;
-    if (!windowReady.isCompleted) {
-      windowReady.complete();
-    }
-    if (!firstFrameReady.isCompleted) {
-      firstFrameReady.complete();
-    }
-    await showWindowIfReady();
-  });
+  unawaited(
+    Future<void>.delayed(const Duration(seconds: 2), () async {
+      if (windowShown) return;
+      if (!windowReady.isCompleted) {
+        windowReady.complete();
+      }
+      if (!firstFrameReady.isCompleted) {
+        firstFrameReady.complete();
+      }
+      await showWindowIfReady();
+    }),
+  );
 }
 
 /// Extracts the first CLI argument that looks like a file path.
