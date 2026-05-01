@@ -16,7 +16,11 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
-  bool _nativeCaptionVisible = false;
+  // Assume the native caption is visible on Windows until the probe proves
+  // otherwise. This prevents a brief moment where both the native caption and
+  // the custom title bar are rendered stacked on top of each other during
+  // startup if `setTitleBarStyle(hidden)` has not yet taken effect.
+  bool _nativeCaptionVisible = Platform.isWindows;
   int _startupProbeAttempts = 0;
   Timer? _startupProbeTimer;
 
@@ -29,6 +33,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     });
     unawaited(_refreshNativeCaptionVisibility());
     if (Platform.isWindows) {
+      // Probe more aggressively at startup so the custom bar can take over as
+      // soon as the native caption is reliably hidden. Keep going for up to
+      // ~6 seconds (50 * 120ms) to survive slow first-frame scenarios.
       _startupProbeTimer = Timer.periodic(const Duration(milliseconds: 120), (
         timer,
       ) {
@@ -38,7 +45,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         }
         _startupProbeAttempts += 1;
         unawaited(_refreshNativeCaptionVisibility());
-        if (_startupProbeAttempts >= 16) {
+        if (_startupProbeAttempts >= 50) {
           timer.cancel();
         }
       });
@@ -76,10 +83,16 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
       var titleBarHeight = await windowManager.getTitleBarHeight();
       var nativeCaptionVisible = titleBarHeight > 8;
       if (nativeCaptionVisible) {
-        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-        await Future<void>.delayed(const Duration(milliseconds: 42));
-        titleBarHeight = await windowManager.getTitleBarHeight();
-        nativeCaptionVisible = titleBarHeight > 8;
+        // Re-apply the hidden style and re-measure. Some Windows builds need a
+        // couple of attempts before the caption is actually removed.
+        for (var attempt = 0; attempt < 4 && nativeCaptionVisible; attempt++) {
+          await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+          await Future<void>.delayed(
+            Duration(milliseconds: 60 + attempt * 40),
+          );
+          titleBarHeight = await windowManager.getTitleBarHeight();
+          nativeCaptionVisible = titleBarHeight > 8;
+        }
       }
       if (mounted && nativeCaptionVisible != _nativeCaptionVisible) {
         setState(() => _nativeCaptionVisible = nativeCaptionVisible);

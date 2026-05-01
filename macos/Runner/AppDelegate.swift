@@ -11,6 +11,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
   private var openFileEventSink: FlutterEventSink?
   private var pendingOpenFiles: [String] = []
   private var channelsConfigured = false
+  private let mediaSessionBridge = MediaSessionBridge()
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
@@ -52,6 +53,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
 
     openFileMethodChannel = methodChannel
     openFileEventChannel = eventChannel
+    mediaSessionBridge.attach(messenger: messenger)
     channelsConfigured = true
   }
 

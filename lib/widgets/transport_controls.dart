@@ -18,6 +18,7 @@ class TransportControls extends StatelessWidget {
   final ValueChanged<LoopMode> onLoopModeChanged;
   final ValueChanged<String> onRecentFileSelected;
   final VoidCallback onSettingsPressed;
+  final VoidCallback? onMoreActions;
 
   const TransportControls({
     super.key,
@@ -35,6 +36,7 @@ class TransportControls extends StatelessWidget {
     required this.onLoopModeChanged,
     required this.onRecentFileSelected,
     required this.onSettingsPressed,
+    this.onMoreActions,
   });
 
   void _cycleLoopMode() {
@@ -166,6 +168,13 @@ class TransportControls extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
+          if (onMoreActions != null)
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'More',
+              iconSize: 20,
+              onPressed: hasMedia ? onMoreActions : null,
+            ),
           // Settings gear
           IconButton(
             icon: const Icon(Icons.settings),

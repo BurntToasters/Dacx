@@ -60,8 +60,31 @@ class SettingsService extends ChangeNotifier {
   static const _kLinuxCompositorBlurExperimental =
       'linux_compositor_blur_experimental';
   static const _kDebugModeEnabled = 'debug_mode_enabled';
+  static const _kEqEnabled = 'eq_enabled';
+  static const _kEqPreset = 'eq_preset';
+  static const _kEqBands = 'eq_bands';
+  static const _kScreenshotDir = 'screenshot_dir';
+  static const _kScreenshotFormat = 'screenshot_format';
+  static const _kOsdEnabled = 'osd_enabled';
+  static const _kMultiAudioMix = 'multi_audio_mix';
+  static const _kMediaSession = 'media_session_enabled';
+  static const _kKeybinds = 'keybinds_v1';
+  static const _kResumeEnabled = 'resume_playback_enabled';
+  static const _kResumePositions = 'resume_positions_v1';
+  static const _kPlaylistShuffle = 'playlist_shuffle';
+
+  /// Maximum playback-resume entries kept (per file). LRU pruned.
+  static const int maxResumeEntries = 100;
+  /// Minimum elapsed seconds before a resume position is recorded.
+  static const int resumeMinElapsedSeconds = 30;
+  /// Tail offset from end-of-track that suppresses resume save (treat as fully watched).
+  static const int resumeTailIgnoreSeconds = 15;
 
   static const int maxRecentFiles = 20;
+  static const int eqBandCount = 10;
+  static const List<int> eqBandFrequencies = [
+    31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
+  ];
 
   double get volume => _prefs.getDouble(_kVolume) ?? 100.0;
   set volume(double v) {
@@ -307,6 +330,192 @@ class SettingsService extends ChangeNotifier {
 
   set debugModeEnabled(bool value) {
     _prefs.setBool(_kDebugModeEnabled, value);
+    notifyListeners();
+  }
+
+  bool get eqEnabled => _prefs.getBool(_kEqEnabled) ?? false;
+  set eqEnabled(bool v) {
+    _prefs.setBool(_kEqEnabled, v);
+    notifyListeners();
+  }
+
+  String get eqPreset => _prefs.getString(_kEqPreset) ?? 'flat';
+  set eqPreset(String v) {
+    _prefs.setString(_kEqPreset, v);
+    notifyListeners();
+  }
+
+  /// 10 gain values in dB (-12..+12), one per band.
+  List<double> get eqBands {
+    final raw = _prefs.getString(_kEqBands);
+    if (raw == null) return List<double>.filled(eqBandCount, 0);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return List<double>.filled(eqBandCount, 0);
+      final out = decoded
+          .whereType<num>()
+          .map((n) => n.toDouble().clamp(-12.0, 12.0))
+          .toList();
+      while (out.length < eqBandCount) {
+        out.add(0);
+      }
+      return out.sublist(0, eqBandCount);
+    } catch (_) {
+      return List<double>.filled(eqBandCount, 0);
+    }
+  }
+
+  set eqBands(List<double> values) {
+    final clamped = List<double>.generate(
+      eqBandCount,
+      (i) => i < values.length
+          ? values[i].clamp(-12.0, 12.0).toDouble()
+          : 0.0,
+    );
+    _prefs.setString(_kEqBands, jsonEncode(clamped));
+    notifyListeners();
+  }
+
+  String? get screenshotDir {
+    final v = _prefs.getString(_kScreenshotDir)?.trim();
+    if (v == null || v.isEmpty) return null;
+    if (!_isSafeDirectoryPath(v)) return null;
+    return v;
+  }
+
+  set screenshotDir(String? value) {
+    final n = value?.trim() ?? '';
+    if (n.isEmpty || !_isSafeDirectoryPath(n)) {
+      _prefs.remove(_kScreenshotDir);
+    } else {
+      _prefs.setString(_kScreenshotDir, n);
+    }
+    notifyListeners();
+  }
+
+  String get screenshotFormat {
+    final v = _prefs.getString(_kScreenshotFormat);
+    if (v == 'png' || v == 'jpg') return v!;
+    return 'png';
+  }
+
+  set screenshotFormat(String v) {
+    if (v != 'png' && v != 'jpg') return;
+    _prefs.setString(_kScreenshotFormat, v);
+    notifyListeners();
+  }
+
+  bool get osdEnabled => _prefs.getBool(_kOsdEnabled) ?? true;
+  set osdEnabled(bool v) {
+    _prefs.setBool(_kOsdEnabled, v);
+    notifyListeners();
+  }
+
+  bool get multiAudioMix => _prefs.getBool(_kMultiAudioMix) ?? false;
+  set multiAudioMix(bool v) {
+    _prefs.setBool(_kMultiAudioMix, v);
+    notifyListeners();
+  }
+
+  bool get mediaSessionEnabled => _prefs.getBool(_kMediaSession) ?? true;
+  set mediaSessionEnabled(bool v) {
+    _prefs.setBool(_kMediaSession, v);
+    notifyListeners();
+  }
+
+  /// User-defined keybinds: action name -> list of accelerator strings.
+  /// Accelerator format: `modifiers+key`, e.g. `Ctrl+S`, `Shift+Arrow Right`.
+  Map<String, List<String>> get keybinds {
+    final raw = _prefs.getString(_kKeybinds);
+    if (raw == null) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      final result = <String, List<String>>{};
+      decoded.forEach((k, v) {
+        if (k is String && v is List) {
+          result[k] = v.whereType<String>().toList(growable: false);
+        }
+      });
+      return result;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  set keybinds(Map<String, List<String>> value) {
+    _prefs.setString(_kKeybinds, jsonEncode(value));
+    notifyListeners();
+  }
+
+  void resetKeybinds() {
+    _prefs.remove(_kKeybinds);
+    notifyListeners();
+  }
+
+  bool get resumePlaybackEnabled => _prefs.getBool(_kResumeEnabled) ?? true;
+  set resumePlaybackEnabled(bool v) {
+    _prefs.setBool(_kResumeEnabled, v);
+    notifyListeners();
+  }
+
+  bool get playlistShuffle => _prefs.getBool(_kPlaylistShuffle) ?? false;
+  set playlistShuffle(bool v) {
+    _prefs.setBool(_kPlaylistShuffle, v);
+    notifyListeners();
+  }
+
+  Map<String, int> _readResumePositions() {
+    final raw = _prefs.getString(_kResumePositions);
+    if (raw == null) return <String, int>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return <String, int>{};
+      final result = <String, int>{};
+      decoded.forEach((key, value) {
+        if (key is String && value is int && value > 0) {
+          result[key] = value;
+        }
+      });
+      return result;
+    } catch (_) {
+      return <String, int>{};
+    }
+  }
+
+  /// Returns saved resume position in milliseconds, or null if none.
+  int? resumePositionFor(String path) {
+    if (!resumePlaybackEnabled) return null;
+    final normalized = path.trim();
+    if (normalized.isEmpty) return null;
+    return _readResumePositions()[normalized];
+  }
+
+  /// Stores [positionMs] for [path]. Pass null/0 to clear.
+  void saveResumePosition(String path, int? positionMs) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) return;
+    final positions = _readResumePositions();
+    if (positionMs == null || positionMs <= 0) {
+      if (positions.remove(normalized) == null) return;
+    } else {
+      positions[normalized] = positionMs;
+    }
+    if (positions.length > maxResumeEntries) {
+      final keys = positions.keys.toList();
+      for (var i = 0; i < keys.length - maxResumeEntries; i++) {
+        positions.remove(keys[i]);
+      }
+    }
+    if (positions.isEmpty) {
+      _prefs.remove(_kResumePositions);
+    } else {
+      _prefs.setString(_kResumePositions, jsonEncode(positions));
+    }
+  }
+
+  void clearAllResumePositions() {
+    _prefs.remove(_kResumePositions);
     notifyListeners();
   }
 

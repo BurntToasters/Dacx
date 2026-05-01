@@ -110,8 +110,14 @@ void main(List<String> args) async {
       return;
     }
     windowShown = true;
+    // Apply the hidden title bar style BEFORE showing the window so the user
+    // never sees a frame with the native Windows caption visible alongside
+    // the custom title bar.
+    await ensureHiddenTitleBarApplied();
     await windowManager.show();
     await windowManager.focus();
+    // Re-apply once after show in case Windows re-introduced the caption when
+    // the window was made visible.
     unawaited(ensureHiddenTitleBarApplied());
   }
 

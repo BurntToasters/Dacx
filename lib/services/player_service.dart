@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:media_kit/media_kit.dart';
 
@@ -18,6 +19,8 @@ class PlayerService {
   Stream<bool> get playingStream => player.stream.playing;
   Stream<double> get volumeStream => player.stream.volume;
   Stream<bool> get completedStream => player.stream.completed;
+  Stream<Tracks> get tracksStream => player.stream.tracks;
+  Stream<Track> get trackStream => player.stream.track;
   Stream<PlayerErrorEvent> get errorStream => _errorController.stream;
 
   Future<void> _guard(String op, Future<void> Function() body) async {
@@ -29,6 +32,18 @@ class PlayerService {
         _errorController.add(PlayerErrorEvent(op, e, st));
       }
       rethrow;
+    }
+  }
+
+  Future<T?> _guardValue<T>(String op, Future<T?> Function() body) async {
+    if (_disposed) return null;
+    try {
+      return await body();
+    } catch (e, st) {
+      if (!_errorController.isClosed) {
+        _errorController.add(PlayerErrorEvent(op, e, st));
+      }
+      return null;
     }
   }
 
@@ -53,6 +68,67 @@ class PlayerService {
 
   Future<void> setVideoTrack(VideoTrack track) =>
       _guard('setVideoTrack', () => player.setVideoTrack(track));
+
+  Future<void> setAudioTrack(AudioTrack track) =>
+      _guard('setAudioTrack', () => player.setAudioTrack(track));
+
+  Future<void> setSubtitleTrack(SubtitleTrack track) =>
+      _guard('setSubtitleTrack', () => player.setSubtitleTrack(track));
+
+  Future<Uint8List?> screenshot({String format = 'image/jpeg'}) =>
+      _guardValue<Uint8List>(
+        'screenshot',
+        () => player.screenshot(format: format),
+      );
+
+  /// Sets a libmpv property by name. Returns true on success.
+  Future<bool> setProperty(String name, String value) async {
+    return await _guardValue<bool>('setProperty:$name', () async {
+          final platform = player.platform;
+          if (platform is NativePlayer) {
+            await platform.setProperty(name, value);
+            return true;
+          }
+          return false;
+        }) ??
+        false;
+  }
+
+  Future<String?> getProperty(String name) async {
+    return _guardValue<String>('getProperty:$name', () async {
+      final platform = player.platform;
+      if (platform is NativePlayer) {
+        return platform.getProperty(name);
+      }
+      return null;
+    });
+  }
+
+  /// Applies an audio filter chain (mpv `--af`).
+  /// Pass empty string or null to clear filters.
+  Future<bool> setAudioFilter(String? chain) =>
+      setProperty('af', chain ?? '');
+
+  /// Jumps to absolute chapter index. (mpv `chapter` property)
+  Future<bool> setChapter(int index) =>
+      setProperty('chapter', index.toString());
+
+  /// Steps relative chapters: positive forward, negative backward.
+  Future<bool> stepChapter(int delta) async {
+    final current = await getProperty('chapter');
+    final idx = int.tryParse(current ?? '');
+    if (idx == null) return false;
+    return setChapter(idx + delta);
+  }
+
+  /// Adds an external audio file as a parallel audio source (mpv `audio-add`).
+  /// Use `select` to make it active.
+  Future<bool> addExternalAudio(String path, {bool auto = true}) =>
+      setProperty('audio-files-add', path);
+
+  /// Loads an external subtitle file (mpv `sub-add`).
+  Future<bool> addExternalSubtitle(String path) =>
+      setProperty('sub-files-add', path);
 
   Future<void> dispose() async {
     if (_disposed) return;
