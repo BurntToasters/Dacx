@@ -269,6 +269,7 @@ class _DacxAppState extends State<DacxApp>
     WidgetsBinding.instance.removeObserver(this);
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
+    widget.settings.dispose();
     super.dispose();
   }
 

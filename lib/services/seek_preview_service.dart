@@ -11,10 +11,12 @@ import 'package:media_kit_video/media_kit_video.dart';
 class SeekPreviewService {
   SeekPreviewService();
 
-  static const int _quantumMs = 2000;
-  static const int _cacheLimit = 24;
-  static const Duration _debounce = Duration(milliseconds: 90);
-  static const Duration _frameSettleDelay = Duration(milliseconds: 80);
+  static const int _quantumMs = 1000;
+  static const int _cacheLimit = 192;
+  static const Duration _debounce = Duration(milliseconds: 25);
+  static const Duration _frameSettleDelay = Duration(milliseconds: 25);
+  static const int _prefetchRadius = 1;
+  static const int _thumbWidth = 320;
 
   Player? _player;
   // ignore: unused_field
@@ -22,6 +24,7 @@ class SeekPreviewService {
   String? _loadedPath;
   bool _enabled = false;
   bool _disposed = false;
+  bool _tuned = false;
 
   final _LruCache<int, Uint8List> _cache = _LruCache(_cacheLimit);
 
@@ -29,6 +32,9 @@ class SeekPreviewService {
   Completer<Uint8List?>? _pendingCompleter;
   int? _pendingKey;
   bool _busy = false;
+
+  final Queue<int> _prefetchQueue = Queue<int>();
+  bool _prefetching = false;
 
   bool get enabled => _enabled;
   bool get isReady => _player != null && _loadedPath != null;
@@ -55,6 +61,7 @@ class SeekPreviewService {
     }
     if (_loadedPath == normalized && _player != null) return;
     _cache.clear();
+    _prefetchQueue.clear();
     await _ensurePlayer();
     final p = _player;
     if (p == null) return;
@@ -78,28 +85,60 @@ class SeekPreviewService {
     try {
       await player.setVolume(0);
     } catch (_) {}
+    await _applyTuning(player);
   }
 
-  /// Schedules a screenshot request for [target]. Returns the JPEG bytes
+  Future<void> _applyTuning(Player player) async {
+    if (_tuned) return;
+    final platform = player.platform;
+    if (platform is! NativePlayer) return;
+    Future<void> trySet(String name, String value) async {
+      try {
+        await platform.setProperty(name, value);
+      } catch (_) {}
+    }
+
+    await trySet('audio', 'no');
+    await trySet('ao', 'null');
+    await trySet('sid', 'no');
+    await trySet('hr-seek', 'yes');
+    await trySet('hr-seek-framedrop', 'yes');
+    await trySet('vd-lavc-skiploopfilter', 'all');
+    await trySet('vd-lavc-fast', 'yes');
+    await trySet('vf', 'scale=$_thumbWidth:-2');
+    await trySet('cache', 'no');
+    await trySet('hwdec', 'auto-safe');
+    _tuned = true;
+  }
+
+  /// Schedules a screenshot request for [target]. Returns the JPEG bytes.
   Future<Uint8List?> requestPreview(Duration target) {
     if (_disposed || !_enabled || _player == null || _loadedPath == null) {
       return Future.value(null);
     }
-    final key = (target.inMilliseconds ~/ _quantumMs) * _quantumMs;
+    final key = _quantize(target.inMilliseconds);
     final cached = _cache.get(key);
-    if (cached != null) return Future.value(cached);
-
-    _debounceTimer?.cancel();
-    if (_pendingCompleter != null && !_pendingCompleter!.isCompleted) {
-      _pendingCompleter!.complete(null);
+    if (cached != null) {
+      _scheduleNeighborPrefetch(key);
+      return Future.value(cached);
     }
+
+    if (_pendingCompleter != null && !_pendingCompleter!.isCompleted) {
+      _pendingKey = key;
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(_debounce, _runPending);
+      return _pendingCompleter!.future;
+    }
+
     final completer = Completer<Uint8List?>();
     _pendingCompleter = completer;
     _pendingKey = key;
-
+    _debounceTimer?.cancel();
     _debounceTimer = Timer(_debounce, _runPending);
     return completer.future;
   }
+
+  int _quantize(int ms) => (ms ~/ _quantumMs) * _quantumMs;
 
   Future<void> _runPending() async {
     if (_busy) return;
@@ -113,35 +152,77 @@ class SeekPreviewService {
         if (!completer.isCompleted) completer.complete(cached);
         _pendingCompleter = null;
         _pendingKey = null;
+        _scheduleNeighborPrefetch(key);
         return;
       }
-      final p = _player;
-      if (p == null || _loadedPath == null) {
-        if (!completer.isCompleted) completer.complete(null);
-        _pendingCompleter = null;
-        _pendingKey = null;
-        return;
-      }
-      try {
-        await p.seek(Duration(milliseconds: key));
-      } catch (_) {}
-      await Future<void>.delayed(_frameSettleDelay);
-      Uint8List? bytes;
-      try {
-        bytes = await p.screenshot(format: 'image/jpeg');
-      } catch (_) {
-        bytes = null;
-      }
-      if (bytes != null) _cache.put(key, bytes);
+      final bytes = await _captureAt(key);
       if (!completer.isCompleted) completer.complete(bytes);
       _pendingCompleter = null;
       _pendingKey = null;
+      if (bytes != null) _scheduleNeighborPrefetch(key);
     } finally {
       _busy = false;
-      // Drain a request that arrived while we were working.
       if (_pendingCompleter != null && !(_debounceTimer?.isActive ?? false)) {
         unawaited(Future.microtask(_runPending));
+      } else {
+        unawaited(_drainPrefetch());
       }
+    }
+  }
+
+  Future<Uint8List?> _captureAt(int key) async {
+    final p = _player;
+    if (p == null || _loadedPath == null) return null;
+    try {
+      await p.seek(Duration(milliseconds: key));
+    } catch (_) {}
+    await Future<void>.delayed(_frameSettleDelay);
+    Uint8List? bytes;
+    try {
+      bytes = await p.screenshot(format: 'image/jpeg');
+    } catch (_) {
+      bytes = null;
+    }
+    if (bytes != null) _cache.put(key, bytes);
+    return bytes;
+  }
+
+  void _scheduleNeighborPrefetch(int aroundKey) {
+    if (_disposed || !_enabled) return;
+    for (int i = 1; i <= _prefetchRadius; i++) {
+      final ahead = aroundKey + i * _quantumMs;
+      final behind = aroundKey - i * _quantumMs;
+      if (ahead >= 0 &&
+          _cache.get(ahead) == null &&
+          !_prefetchQueue.contains(ahead)) {
+        _prefetchQueue.add(ahead);
+      }
+      if (behind >= 0 &&
+          _cache.get(behind) == null &&
+          !_prefetchQueue.contains(behind)) {
+        _prefetchQueue.add(behind);
+      }
+    }
+    unawaited(_drainPrefetch());
+  }
+
+  Future<void> _drainPrefetch() async {
+    if (_prefetching || _busy) return;
+    if (_prefetchQueue.isEmpty) return;
+    _prefetching = true;
+    try {
+      while (!_disposed &&
+          _enabled &&
+          !_busy &&
+          _prefetchQueue.isNotEmpty &&
+          _pendingCompleter == null) {
+        final key = _prefetchQueue.removeFirst();
+        if (_cache.get(key) != null) continue;
+        await _captureAt(key);
+        await Future<void>.delayed(Duration.zero);
+      }
+    } finally {
+      _prefetching = false;
     }
   }
 
@@ -153,11 +234,13 @@ class SeekPreviewService {
     }
     _pendingCompleter = null;
     _pendingKey = null;
+    _prefetchQueue.clear();
     _cache.clear();
     final p = _player;
     _controller = null;
     _player = null;
     _loadedPath = null;
+    _tuned = false;
     if (p != null) {
       try {
         await p.dispose();

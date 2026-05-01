@@ -16,11 +16,16 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
-  // Assume the native caption is visible on Windows until the probe proves
-  // otherwise. This prevents a brief moment where both the native caption and
-  // the custom title bar are rendered stacked on top of each other during
-  // startup if `setTitleBarStyle(hidden)` has not yet taken effect.
-  bool _nativeCaptionVisible = Platform.isWindows;
+  // Default to assuming the native caption is hidden. main.dart explicitly
+  // sets TitleBarStyle.hidden and re-applies it before the window is shown,
+  // so in the overwhelming majority of launches no native caption exists.
+  // The probe below will flip this to true only if it positively detects a
+  // native caption (titleBarHeight > 8) AND failed re-applies of the hidden
+  // style cannot dismiss it. Defaulting to false avoids a known race where
+  // `getTitleBarHeight()` returns a stale large value during startup on some
+  // Windows DPI/compositor configurations, which previously caused the
+  // custom title bar to never render at all.
+  bool _nativeCaptionVisible = false;
   int _startupProbeAttempts = 0;
   Timer? _startupProbeTimer;
 

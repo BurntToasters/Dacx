@@ -24,6 +24,7 @@ import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/osd_overlay.dart';
+import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
 
@@ -77,6 +78,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasVideoOutput = false;
   bool _hasAlbumArtTrack = false;
   String? _albumArtTrackId;
+  bool _mixActive = false;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -204,7 +206,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subscriptions.addAll([
       _playerService.positionStream.listen((pos) {
         if (!mounted || _isDisposed || _isSeeking) return;
-        setState(() => _position = pos);
+        final dMs = (pos.inMilliseconds - _position.inMilliseconds).abs();
+        final shouldRender =
+            dMs >= 200 || (pos.inSeconds != _position.inSeconds);
+        if (shouldRender) {
+          setState(() => _position = pos);
+        } else {
+          _position = pos;
+        }
         if (_settings.mediaSessionEnabled) {
           unawaited(
             _mediaSession.updatePosition(pos, playing: _isPlaying),
@@ -772,6 +781,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     try {
+      // Clear any previously-engaged lavfi-complex graph so it can't
+      // leak into this file's load. tracksStream will re-install it
+      // after open() returns and tracks are enumerated.
+      await _playerService.setProperty('lavfi-complex', '');
+      _mixActive = false;
       await _playerService.open(normalizedPath, play: _settings.autoPlay);
     } catch (e) {
       final permissionDenied = _isPermissionDeniedError(e);
@@ -1001,6 +1015,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final hk = HardwareKeyboard.instance;
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.f1 ||
+            (event.logicalKey == LogicalKeyboardKey.question) ||
+            (event.logicalKey == LogicalKeyboardKey.slash &&
+                hk.isShiftPressed))) {
+      unawaited(_showKeybindsDialog());
+      return KeyEventResult.handled;
+    }
     final custom = _settings.keybinds;
     final shortcut = PlayerShortcutsService.resolve(
       event: event,
@@ -1339,6 +1361,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             ),
                                           ),
                                         ),
+                                      if (_compactMode)
+                                        Positioned(
+                                          top: 8,
+                                          left: 8,
+                                          child: _CompactExitButton(
+                                            onPressed: () => unawaited(
+                                              _toggleCompactMode(),
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -1402,7 +1434,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         Expanded(
-                          child: _SeekSliderWithHover(
+                          child: SeekSliderWithHover(
                             position: _position,
                             duration: _duration,
                             previewService: _seekPreviewService,
@@ -1779,6 +1811,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final current = _currentTrackSelection?.audio.id;
     final idx = list.indexWhere((t) => t.id == current);
     final next = list[(idx + 1) % list.length];
+    await _disableMixForManualTrackSelection();
     await _playerService.setAudioTrack(next);
     _showOsdMessage('Audio: ${_trackLabel(next.title, next.language, next.id)}');
   }
@@ -1931,31 +1964,86 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Multi-audio mix ───────────────────────────────────────
 
-  Future<void> _applyMultiAudioMix() async {
+  Future<void> _applyMultiAudioMix({bool announce = false}) async {
     final tracks = _currentTracks;
     if (tracks == null) return;
     final ids = tracks.audio
         .where((t) => t.id != 'auto' && t.id != 'no')
         .map((t) => t.id)
         .toList(growable: false);
-    if (!_settings.multiAudioMix || ids.length < 2) {
+    final shouldMix = _settings.multiAudioMix && ids.length >= 2;
+    if (!shouldMix) {
+      // Always clear the property in case a previous file left a graph.
       await _playerService.setProperty('lavfi-complex', '');
+      if (_mixActive) {
+        _mixActive = false;
+        if (announce) _showOsdMessage('Audio mix off');
+      }
       return;
     }
-    // mpv expects a space-separated graph for `lavfi-complex` and the
-    // referenced [aid<n>] / [ao] labels. Tracks named in the graph are
-    // auto-selected, but we re-seek to current position afterwards because
-    // mpv only initialises the new audio pipeline on the next decode flush.
+    // Validate IDs are numeric — mpv's lavfi-complex labels are [aid<N>]
+    // where <N> must be the integer track-id reported in track-list.
+    final invalid = ids.where((id) => int.tryParse(id) == null).toList();
+    if (invalid.isNotEmpty) {
+      _log(
+        'multi_audio_mix_invalid_ids',
+        message: 'non-numeric audio track ids: ${invalid.join(',')}',
+        severity: DebugSeverity.warn,
+      );
+      if (announce) _showOsdMessage('Cannot mix: unsupported track ids');
+      return;
+    }
     final inputs = ids.map((id) => '[aid$id]').join(' ');
-    final chain = '$inputs amix=inputs=${ids.length}:normalize=1 [ao]';
+    final audioChain = '$inputs amix=inputs=${ids.length}:normalize=0 [ao]';
+    String chain = audioChain;
+    final videoIds = tracks.video
+        .where((t) => t.id != 'auto' && t.id != 'no')
+        .map((t) => t.id)
+        .where((id) => int.tryParse(id) != null)
+        .toList(growable: false);
+    if (videoIds.isNotEmpty) {
+
+      chain = '[vid${videoIds.first}] null [vo] ; $audioChain';
+    }
+    _log(
+      'multi_audio_mix_apply',
+      detailsBuilder: () => {
+        'track_count': ids.length,
+        'track_ids': ids.join(','),
+        'chain': chain,
+      },
+    );
     final ok = await _playerService.setProperty('lavfi-complex', chain);
     if (ok) {
-      // Force mpv to rebuild the audio graph so mixing actually starts.
-      final pos = _position;
-      unawaited(_playerService.seek(pos));
-      _showOsdMessage('Mixing ${ids.length} audio tracks');
+      final wasActive = _mixActive;
+      _mixActive = true;
+      if (!wasActive) {
+        await _playerService.command(['playlist-play-index', 'current']);
+      }
+      if (announce || !wasActive) {
+        _showOsdMessage('Mixing ${ids.length} audio tracks');
+      }
     } else {
-      _showOsdMessage('Could not enable audio mix');
+      _mixActive = false;
+      _log(
+        'multi_audio_mix_setproperty_failed',
+        severity: DebugSeverity.warn,
+      );
+      if (announce) _showOsdMessage('Could not enable audio mix');
+    }
+  }
+
+  Future<void> _disableMixForManualTrackSelection() async {
+    if (!_settings.multiAudioMix && !_mixActive) return;
+    final wasActive = _mixActive;
+    if (_settings.multiAudioMix) {
+      _settings.multiAudioMix = false;
+    }
+    await _playerService.setProperty('lavfi-complex', '');
+    _mixActive = false;
+
+    if (wasActive) {
+      await _playerService.command(['playlist-play-index', 'current']);
     }
   }
 
@@ -2233,13 +2321,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               onChanged: (v) {
                                 _settings.multiAudioMix = v;
                                 setSheetState(() {});
-                                unawaited(_applyMultiAudioMix());
+                                unawaited(
+                                  _applyMultiAudioMix(announce: true),
+                                );
                               },
                             ),
                           if (!_isAudioFile)
                             switchItem(
                               icon: Icons.image_search,
-                              label: 'Seek thumbnails (beta)',
+                              label: 'Seek thumbnails (beta: uses more resources)',
                               value: _settings.seekPreviewEnabled,
                               onChanged: (v) {
                                 _settings.seekPreviewEnabled = v;
@@ -2391,7 +2481,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             .toList(),
       ),
     );
-    if (selected != null) await _playerService.setAudioTrack(selected);
+    if (selected != null) {
+      await _disableMixForManualTrackSelection();
+      await _playerService.setAudioTrack(selected);
+    }
   }
 
   Future<void> _showSubtitleTracksDialog() async {
@@ -2707,7 +2800,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
               height: 480,
               child: Scrollbar(
                 child: ListView(
-                  children: PlayerShortcutAction.values.map((a) {
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      child: Text(
+                        'Tip: press F1 or ? at any time to reopen this dialog.',
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                    ),
+                    ...PlayerShortcutAction.values.map((a) {
                     final accels = current[a.name] ??
                         defaultKeybinds[a]?.toList(growable: true) ??
                         const <String>[];
@@ -2744,7 +2845,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
+                  ],
                 ),
               ),
             ),
@@ -2836,159 +2938,57 @@ class _ChapterInfo {
   final Duration time;
 }
 
-class _SeekSliderWithHover extends StatefulWidget {
-  const _SeekSliderWithHover({
-    required this.position,
-    required this.duration,
-    required this.onSeekStart,
-    required this.onSeekChange,
-    required this.onSeekEnd,
-    this.previewService,
-    this.previewEnabled = false,
-  });
+class _CompactExitButton extends StatefulWidget {
+  const _CompactExitButton({required this.onPressed});
 
-  final Duration position;
-  final Duration duration;
-  final VoidCallback onSeekStart;
-  final ValueChanged<double> onSeekChange;
-  final ValueChanged<double> onSeekEnd;
-  final SeekPreviewService? previewService;
-  final bool previewEnabled;
+  final VoidCallback onPressed;
 
   @override
-  State<_SeekSliderWithHover> createState() => _SeekSliderWithHoverState();
+  State<_CompactExitButton> createState() => _CompactExitButtonState();
 }
 
-class _SeekSliderWithHoverState extends State<_SeekSliderWithHover> {
-  double? _hoverFraction;
-  Uint8List? _previewBytes;
-  int _previewRequestId = 0;
-
-  static const double _previewWidth = 200;
-  static const double _previewHeight = 112;
-
-  String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
-  void _maybeRequestPreview(double fraction, double maxMs) {
-    final svc = widget.previewService;
-    if (!widget.previewEnabled || svc == null || maxMs <= 0) return;
-    final target = Duration(milliseconds: (maxMs * fraction).toInt());
-    final id = ++_previewRequestId;
-    svc.requestPreview(target).then((bytes) {
-      if (!mounted || id != _previewRequestId) return;
-      if (bytes == null) return;
-      setState(() => _previewBytes = bytes);
-    });
-  }
+class _CompactExitButtonState extends State<_CompactExitButton> {
+  bool _hovering = false;
 
   @override
   Widget build(BuildContext context) {
-    final maxMs = widget.duration.inMilliseconds.toDouble();
-    final showPreview = widget.previewEnabled && _previewBytes != null;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            MouseRegion(
-              onHover: (e) {
-                final width = constraints.maxWidth;
-                if (width <= 0) return;
-                final fraction =
-                    (e.localPosition.dx / width).clamp(0.0, 1.0);
-                setState(() {
-                  _hoverFraction = fraction;
-                });
-                _maybeRequestPreview(fraction, maxMs);
-              },
-              onExit: (_) {
-                _previewRequestId++;
-                setState(() {
-                  _hoverFraction = null;
-                  _previewBytes = null;
-                });
-              },
-              child: Slider(
-                value: widget.position.inMilliseconds
-                    .toDouble()
-                    .clamp(0.0, maxMs),
-                max: maxMs,
-                onChangeStart: (_) => widget.onSeekStart(),
-                onChanged: widget.onSeekChange,
-                onChangeEnd: widget.onSeekEnd,
-              ),
-            ),
-            if (_hoverFraction != null && maxMs > 0)
-              Positioned(
-                left: showPreview
-                    ? (constraints.maxWidth * _hoverFraction!) -
-                        (_previewWidth / 2)
-                    : (constraints.maxWidth * _hoverFraction!) - 28,
-                top: showPreview ? -(_previewHeight + 34) : -28,
-                child: IgnorePointer(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (showPreview)
-                        Container(
-                          width: _previewWidth,
-                          height: _previewHeight,
-                          margin: const EdgeInsets.only(bottom: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.18),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.45),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Image.memory(
-                            _previewBytes!,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            width: _previewWidth,
-                            height: _previewHeight,
-                          ),
-                        ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.74),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _fmt(Duration(
-                              milliseconds:
-                                  (maxMs * _hoverFraction!).toInt())),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ],
+    return Tooltip(
+      message: 'Exit mini-player',
+      child: Semantics(
+        button: true,
+        label: 'Exit mini-player',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovering = true),
+          onExit: (_) => setState(() => _hovering = false),
+          child: GestureDetector(
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(
+                  alpha: _hovering ? 0.72 : 0.48,
+                ),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(
+                    alpha: _hovering ? 0.85 : 0.55,
                   ),
+                  width: 1,
                 ),
               ),
-          ],
-        );
-      },
+              child: const Icon(
+                Icons.close_fullscreen,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

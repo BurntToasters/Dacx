@@ -36,6 +36,10 @@ class SettingsService extends ChangeNotifier {
 
   SettingsService(this._prefs);
 
+  List<double>? _eqBandsCache;
+  Map<String, List<String>>? _keybindsCache;
+  Map<String, int>? _resumePositionsCache;
+
   static const _kVolume = 'playback_volume';
   static const _kSpeed = 'playback_speed';
   static const _kLoopMode = 'playback_loop_mode';
@@ -348,22 +352,33 @@ class SettingsService extends ChangeNotifier {
 
   /// 10 gain values in dB (-12..+12), one per band.
   List<double> get eqBands {
+    final cached = _eqBandsCache;
+    if (cached != null) return List<double>.unmodifiable(cached);
     final raw = _prefs.getString(_kEqBands);
-    if (raw == null) return List<double>.filled(eqBandCount, 0);
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return List<double>.filled(eqBandCount, 0);
-      final out = decoded
-          .whereType<num>()
-          .map((n) => n.toDouble().clamp(-12.0, 12.0))
-          .toList();
-      while (out.length < eqBandCount) {
-        out.add(0);
+    List<double> result;
+    if (raw == null) {
+      result = List<double>.filled(eqBandCount, 0);
+    } else {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! List) {
+          result = List<double>.filled(eqBandCount, 0);
+        } else {
+          final out = decoded
+              .whereType<num>()
+              .map((n) => n.toDouble().clamp(-12.0, 12.0))
+              .toList();
+          while (out.length < eqBandCount) {
+            out.add(0);
+          }
+          result = out.sublist(0, eqBandCount);
+        }
+      } catch (_) {
+        result = List<double>.filled(eqBandCount, 0);
       }
-      return out.sublist(0, eqBandCount);
-    } catch (_) {
-      return List<double>.filled(eqBandCount, 0);
     }
+    _eqBandsCache = result;
+    return List<double>.unmodifiable(result);
   }
 
   set eqBands(List<double> values) {
@@ -373,6 +388,7 @@ class SettingsService extends ChangeNotifier {
           ? values[i].clamp(-12.0, 12.0).toDouble()
           : 0.0,
     );
+    _eqBandsCache = clamped;
     _prefs.setString(_kEqBands, jsonEncode(clamped));
     notifyListeners();
   }
@@ -435,29 +451,44 @@ class SettingsService extends ChangeNotifier {
   /// User-defined keybinds: action name -> list of accelerator strings.
   /// Accelerator format: `modifiers+key`, e.g. `Ctrl+S`, `Shift+Arrow Right`.
   Map<String, List<String>> get keybinds {
+    final cached = _keybindsCache;
+    if (cached != null) return cached;
     final raw = _prefs.getString(_kKeybinds);
-    if (raw == null) return const {};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return const {};
-      final result = <String, List<String>>{};
-      decoded.forEach((k, v) {
-        if (k is String && v is List) {
-          result[k] = v.whereType<String>().toList(growable: false);
+    Map<String, List<String>> result;
+    if (raw == null) {
+      result = const {};
+    } else {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) {
+          result = const {};
+        } else {
+          final out = <String, List<String>>{};
+          decoded.forEach((k, v) {
+            if (k is String && v is List) {
+              out[k] = v.whereType<String>().toList(growable: false);
+            }
+          });
+          result = Map<String, List<String>>.unmodifiable(out);
         }
-      });
-      return result;
-    } catch (_) {
-      return const {};
+      } catch (_) {
+        result = const {};
+      }
     }
+    _keybindsCache = result;
+    return result;
   }
 
   set keybinds(Map<String, List<String>> value) {
+    _keybindsCache = Map<String, List<String>>.unmodifiable(
+      value.map((k, v) => MapEntry(k, List<String>.unmodifiable(v))),
+    );
     _prefs.setString(_kKeybinds, jsonEncode(value));
     notifyListeners();
   }
 
   void resetKeybinds() {
+    _keybindsCache = const {};
     _prefs.remove(_kKeybinds);
     notifyListeners();
   }
@@ -475,21 +506,31 @@ class SettingsService extends ChangeNotifier {
   }
 
   Map<String, int> _readResumePositions() {
+    final cached = _resumePositionsCache;
+    if (cached != null) return Map<String, int>.of(cached);
     final raw = _prefs.getString(_kResumePositions);
-    if (raw == null) return <String, int>{};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return <String, int>{};
-      final result = <String, int>{};
-      decoded.forEach((key, value) {
-        if (key is String && value is int && value > 0) {
-          result[key] = value;
+    Map<String, int> result;
+    if (raw == null) {
+      result = <String, int>{};
+    } else {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) {
+          result = <String, int>{};
+        } else {
+          result = <String, int>{};
+          decoded.forEach((key, value) {
+            if (key is String && value is int && value > 0) {
+              result[key] = value;
+            }
+          });
         }
-      });
-      return result;
-    } catch (_) {
-      return <String, int>{};
+      } catch (_) {
+        result = <String, int>{};
+      }
     }
+    _resumePositionsCache = Map<String, int>.of(result);
+    return result;
   }
 
   /// Returns saved resume position in milliseconds, or null if none.
@@ -516,6 +557,7 @@ class SettingsService extends ChangeNotifier {
         positions.remove(keys[i]);
       }
     }
+    _resumePositionsCache = Map<String, int>.of(positions);
     if (positions.isEmpty) {
       _prefs.remove(_kResumePositions);
     } else {
@@ -524,12 +566,16 @@ class SettingsService extends ChangeNotifier {
   }
 
   void clearAllResumePositions() {
+    _resumePositionsCache = <String, int>{};
     _prefs.remove(_kResumePositions);
     notifyListeners();
   }
 
   /// Clears all stored preferences and reverts to defaults.
   Future<void> resetAll() async {
+    _eqBandsCache = null;
+    _keybindsCache = null;
+    _resumePositionsCache = null;
     await _prefs.clear();
     notifyListeners();
   }
