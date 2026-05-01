@@ -19,6 +19,7 @@ import '../services/debug_log_service.dart';
 import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
+import '../services/seek_preview_service.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
@@ -66,6 +67,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final PlayerService _playerService;
   late final VideoController _videoController;
   late final UpdateService _updateService;
+  late final SeekPreviewService _seekPreviewService;
 
   SettingsService get _settings => widget.settings;
 
@@ -150,6 +152,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       debugSource: 'player_screen',
     );
     _playerService = PlayerService();
+    _seekPreviewService = SeekPreviewService();
+    unawaited(
+      _seekPreviewService.setEnabled(_settings.seekPreviewEnabled),
+    );
     _settings.pruneRecentFiles(notifyListeners: false);
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
@@ -377,6 +383,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       _videoController.player.dispose();
     } catch (_) {}
+    unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
   }
@@ -782,6 +789,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _albumArtTrackId = null;
         });
         _resumePathInProgress = null;
+        unawaited(_seekPreviewService.setSource(null));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -796,6 +804,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     if (gen != _loadGen || _isDisposed) return;
+
+    // Load the same source into the seek preview service (no-op when the
+    // feature is disabled or for audio-only files).
+    if (!_isAudioFile) {
+      unawaited(_seekPreviewService.setSource(normalizedPath));
+    } else {
+      unawaited(_seekPreviewService.setSource(null));
+    }
 
     _log(
       'file_load_succeeded',
@@ -1389,6 +1405,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           child: _SeekSliderWithHover(
                             position: _position,
                             duration: _duration,
+                            previewService: _seekPreviewService,
+                            previewEnabled: _settings.seekPreviewEnabled &&
+                                !_isAudioFile,
                             onSeekStart: () => _isSeeking = true,
                             onSeekChange: (value) {
                               setState(() {
@@ -1440,6 +1459,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onStop: () async {
               _log('control_stop_pressed', category: DebugLogCategory.ui);
               await _playerService.stop();
+              unawaited(_seekPreviewService.setSource(null));
               setState(() {
                 _currentFile = null;
                 _isAudioFile = false;
@@ -2216,6 +2236,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 unawaited(_applyMultiAudioMix());
                               },
                             ),
+                          if (!_isAudioFile)
+                            switchItem(
+                              icon: Icons.image_search,
+                              label: 'Seek thumbnails (beta)',
+                              value: _settings.seekPreviewEnabled,
+                              onChanged: (v) {
+                                _settings.seekPreviewEnabled = v;
+                                setSheetState(() {});
+                                unawaited(
+                                  _seekPreviewService.setEnabled(v).then((_) {
+                                    if (v && _currentFile != null) {
+                                      return _seekPreviewService
+                                          .setSource(_currentFile);
+                                    }
+                                    return null;
+                                  }),
+                                );
+                                if (mounted) setState(() {});
+                              },
+                            ),
                           item(
                             icon: Icons.keyboard,
                             label: 'Keyboard shortcuts',
@@ -2803,6 +2843,8 @@ class _SeekSliderWithHover extends StatefulWidget {
     required this.onSeekStart,
     required this.onSeekChange,
     required this.onSeekEnd,
+    this.previewService,
+    this.previewEnabled = false,
   });
 
   final Duration position;
@@ -2810,6 +2852,8 @@ class _SeekSliderWithHover extends StatefulWidget {
   final VoidCallback onSeekStart;
   final ValueChanged<double> onSeekChange;
   final ValueChanged<double> onSeekEnd;
+  final SeekPreviewService? previewService;
+  final bool previewEnabled;
 
   @override
   State<_SeekSliderWithHover> createState() => _SeekSliderWithHoverState();
@@ -2817,6 +2861,11 @@ class _SeekSliderWithHover extends StatefulWidget {
 
 class _SeekSliderWithHoverState extends State<_SeekSliderWithHover> {
   double? _hoverFraction;
+  Uint8List? _previewBytes;
+  int _previewRequestId = 0;
+
+  static const double _previewWidth = 200;
+  static const double _previewHeight = 112;
 
   String _fmt(Duration d) {
     final h = d.inHours;
@@ -2825,9 +2874,22 @@ class _SeekSliderWithHoverState extends State<_SeekSliderWithHover> {
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
+  void _maybeRequestPreview(double fraction, double maxMs) {
+    final svc = widget.previewService;
+    if (!widget.previewEnabled || svc == null || maxMs <= 0) return;
+    final target = Duration(milliseconds: (maxMs * fraction).toInt());
+    final id = ++_previewRequestId;
+    svc.requestPreview(target).then((bytes) {
+      if (!mounted || id != _previewRequestId) return;
+      if (bytes == null) return;
+      setState(() => _previewBytes = bytes);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final maxMs = widget.duration.inMilliseconds.toDouble();
+    final showPreview = widget.previewEnabled && _previewBytes != null;
     return LayoutBuilder(
       builder: (context, constraints) {
         return Stack(
@@ -2837,11 +2899,20 @@ class _SeekSliderWithHoverState extends State<_SeekSliderWithHover> {
               onHover: (e) {
                 final width = constraints.maxWidth;
                 if (width <= 0) return;
+                final fraction =
+                    (e.localPosition.dx / width).clamp(0.0, 1.0);
                 setState(() {
-                  _hoverFraction = (e.localPosition.dx / width).clamp(0.0, 1.0);
+                  _hoverFraction = fraction;
+                });
+                _maybeRequestPreview(fraction, maxMs);
+              },
+              onExit: (_) {
+                _previewRequestId++;
+                setState(() {
+                  _hoverFraction = null;
+                  _previewBytes = null;
                 });
               },
-              onExit: (_) => setState(() => _hoverFraction = null),
               child: Slider(
                 value: widget.position.inMilliseconds
                     .toDouble()
@@ -2854,25 +2925,64 @@ class _SeekSliderWithHoverState extends State<_SeekSliderWithHover> {
             ),
             if (_hoverFraction != null && maxMs > 0)
               Positioned(
-                left: (constraints.maxWidth * _hoverFraction!) - 28,
-                top: -28,
+                left: showPreview
+                    ? (constraints.maxWidth * _hoverFraction!) -
+                        (_previewWidth / 2)
+                    : (constraints.maxWidth * _hoverFraction!) - 28,
+                top: showPreview ? -(_previewHeight + 34) : -28,
                 child: IgnorePointer(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.74),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      _fmt(Duration(
-                          milliseconds: (maxMs * _hoverFraction!).toInt())),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (showPreview)
+                        Container(
+                          width: _previewWidth,
+                          height: _previewHeight,
+                          margin: const EdgeInsets.only(bottom: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.memory(
+                            _previewBytes!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            width: _previewWidth,
+                            height: _previewHeight,
+                          ),
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.74),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _fmt(Duration(
+                              milliseconds:
+                                  (maxMs * _hoverFraction!).toInt())),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),

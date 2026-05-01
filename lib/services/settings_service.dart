@@ -66,6 +66,7 @@ class SettingsService extends ChangeNotifier {
   static const _kScreenshotDir = 'screenshot_dir';
   static const _kScreenshotFormat = 'screenshot_format';
   static const _kOsdEnabled = 'osd_enabled';
+  static const _kSeekPreviewEnabled = 'seek_preview_enabled';
   static const _kMultiAudioMix = 'multi_audio_mix';
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
@@ -408,6 +409,14 @@ class SettingsService extends ChangeNotifier {
   bool get osdEnabled => _prefs.getBool(_kOsdEnabled) ?? true;
   set osdEnabled(bool v) {
     _prefs.setBool(_kOsdEnabled, v);
+    notifyListeners();
+  }
+
+  bool get seekPreviewEnabled =>
+      _prefs.getBool(_kSeekPreviewEnabled) ?? false;
+  set seekPreviewEnabled(bool v) {
+    if (seekPreviewEnabled == v) return;
+    _prefs.setBool(_kSeekPreviewEnabled, v);
     notifyListeners();
   }
 
