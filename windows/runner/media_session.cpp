@@ -232,12 +232,12 @@ class MediaSession {
     int64_t durMs = -1;
     int64_t posMs = -1;
     if (durIt != m.end()) {
-      if (auto p = std::get_if<int>(&durIt->second)) durMs = *p;
-      else if (auto p = std::get_if<int64_t>(&durIt->second)) durMs = *p;
+      if (auto pi32 = std::get_if<int>(&durIt->second)) durMs = *pi32;
+      else if (auto pi64 = std::get_if<int64_t>(&durIt->second)) durMs = *pi64;
     }
     if (posIt != m.end()) {
-      if (auto p = std::get_if<int>(&posIt->second)) posMs = *p;
-      else if (auto p = std::get_if<int64_t>(&posIt->second)) posMs = *p;
+      if (auto pi32 = std::get_if<int>(&posIt->second)) posMs = *pi32;
+      else if (auto pi64 = std::get_if<int64_t>(&posIt->second)) posMs = *pi64;
     }
     if (durMs >= 0 || posMs >= 0) {
       if (durMs >= 0) last_duration_ms_ = durMs;
