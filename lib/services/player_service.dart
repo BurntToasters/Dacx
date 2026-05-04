@@ -105,8 +105,7 @@ class PlayerService {
   }
 
   /// Applies an audio filter chain (mpv `--af`).
-  Future<bool> setAudioFilter(String? chain) =>
-      setProperty('af', chain ?? '');
+  Future<bool> setAudioFilter(String? chain) => setProperty('af', chain ?? '');
 
   /// Jumps to absolute chapter index. (mpv `chapter` property)
   Future<bool> setChapter(int index) =>

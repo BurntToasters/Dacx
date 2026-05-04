@@ -126,8 +126,10 @@ class _OsdOverlayState extends State<OsdOverlay> {
                 opacity: _showTransient ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 180),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.62),
                     borderRadius: BorderRadius.circular(20),

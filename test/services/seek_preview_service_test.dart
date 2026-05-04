@@ -43,5 +43,24 @@ void main() {
       await svc.dispose();
       await svc.dispose();
     });
+
+    test('setEnabled(true) does not eagerly create a player', () async {
+      final svc = SeekPreviewService();
+      await svc.setEnabled(true);
+      addTearDown(svc.dispose);
+      expect(svc.enabled, isTrue);
+      // No source loaded yet, so still not ready.
+      expect(svc.isReady, isFalse);
+      expect(svc.loadedPath, isNull);
+    });
+
+    test('setSource("") clears state when enabled', () async {
+      final svc = SeekPreviewService();
+      await svc.setEnabled(true);
+      addTearDown(svc.dispose);
+      await svc.setSource('   ');
+      expect(svc.loadedPath, isNull);
+      expect(svc.isReady, isFalse);
+    });
   });
 }

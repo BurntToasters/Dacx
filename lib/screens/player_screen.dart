@@ -158,9 +158,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _playerService = PlayerService();
     _seekPreviewService = SeekPreviewService();
-    unawaited(
-      _seekPreviewService.setEnabled(_settings.seekPreviewEnabled),
-    );
+    unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     _settings.pruneRecentFiles(notifyListeners: false);
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
@@ -218,9 +216,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _position = pos;
         }
         if (_settings.mediaSessionEnabled) {
-          unawaited(
-            _mediaSession.updatePosition(pos, playing: _isPlaying),
-          );
+          unawaited(_mediaSession.updatePosition(pos, playing: _isPlaying));
         }
       }),
       _playerService.durationStream.listen((dur) {
@@ -363,9 +359,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Media session
     _mediaSession = MediaSessionService(debugLog: widget.debugLog);
-    unawaited(
-      _mediaSession.init(enabled: _settings.mediaSessionEnabled),
-    );
+    unawaited(_mediaSession.init(enabled: _settings.mediaSessionEnabled));
     _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
 
     // Playlist (in-memory; reflects shuffle from settings).
@@ -1386,8 +1380,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             visible: _osdVisible,
                                             transientMessage:
                                                 _stripOsdTimestamp(
-                                              _osdTransientMessage,
-                                            ),
+                                                  _osdTransientMessage,
+                                                ),
                                           ),
                                         ),
                                       if (_compactMode)
@@ -1395,9 +1389,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           top: 8,
                                           left: 8,
                                           child: _CompactExitButton(
-                                            onPressed: () => unawaited(
-                                              _toggleCompactMode(),
-                                            ),
+                                            onPressed: () =>
+                                                unawaited(_toggleCompactMode()),
                                           ),
                                         ),
                                     ],
@@ -1467,13 +1460,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             position: _position,
                             duration: _duration,
                             previewService: _seekPreviewService,
-                            previewEnabled: _settings.seekPreviewEnabled &&
-                                !_isAudioFile,
+                            previewEnabled:
+                                _settings.seekPreviewEnabled && !_isAudioFile,
                             onSeekStart: () => _isSeeking = true,
                             onSeekChange: (value) {
                               setState(() {
-                                _position =
-                                    Duration(milliseconds: value.toInt());
+                                _position = Duration(
+                                  milliseconds: value.toInt(),
+                                );
                               });
                             },
                             onSeekEnd: (value) {
@@ -1812,7 +1806,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showOsdMessage(String msg) {
     if (!_settings.osdEnabled || !mounted) return;
-    setState(() => _osdTransientMessage = '$msg\u2009·\u2009${DateTime.now().millisecondsSinceEpoch}');
+    setState(
+      () => _osdTransientMessage =
+          '$msg\u2009·\u2009${DateTime.now().millisecondsSinceEpoch}',
+    );
     // include timestamp suffix to force OSD to register a fresh message even
     // when the underlying text is identical to the previous transient
   }
@@ -1842,7 +1839,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final next = list[(idx + 1) % list.length];
     await _disableMixForManualTrackSelection();
     await _playerService.setAudioTrack(next);
-    _showOsdMessage('Audio: ${_trackLabel(next.title, next.language, next.id)}');
+    _showOsdMessage(
+      'Audio: ${_trackLabel(next.title, next.language, next.id)}',
+    );
   }
 
   Future<void> _cycleSubtitleTrack() async {
@@ -1888,7 +1887,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _trackLabel(String? title, String? language, String fallbackId) {
     final parts = <String>[];
     if (title != null && title.trim().isNotEmpty) parts.add(title.trim());
-    if (language != null && language.trim().isNotEmpty) parts.add(language.trim());
+    if (language != null && language.trim().isNotEmpty) {
+      parts.add(language.trim());
+    }
     if (parts.isEmpty) return 'Track $fallbackId';
     return parts.join(' · ');
   }
@@ -1907,11 +1908,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final title = await _playerService.getProperty('chapter-list/$i/title');
       final timeStr = await _playerService.getProperty('chapter-list/$i/time');
       final time = double.tryParse(timeStr ?? '') ?? 0;
-      list.add(_ChapterInfo(
-        index: i,
-        title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
-        time: Duration(milliseconds: (time * 1000).round()),
-      ));
+      list.add(
+        _ChapterInfo(
+          index: i,
+          title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
+          time: Duration(milliseconds: (time * 1000).round()),
+        ),
+      );
     }
     if (mounted) setState(() => _chapters = list);
   }
@@ -1968,7 +1971,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   String _defaultScreenshotDir() {
-    final home = Platform.environment['HOME'] ??
+    final home =
+        Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         '.';
     return p.join(home, 'Pictures', 'DACX');
@@ -2047,7 +2051,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .where((id) => int.tryParse(id) != null)
         .toList(growable: false);
     if (videoIds.isNotEmpty) {
-
       chain = '[vid${videoIds.first}] null [vo] ; $audioChain';
     }
     _log(
@@ -2067,10 +2070,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } else {
       _mixActive = false;
-      _log(
-        'multi_audio_mix_setproperty_failed',
-        severity: DebugSeverity.warn,
-      );
+      _log('multi_audio_mix_setproperty_failed', severity: DebugSeverity.warn);
       if (announce) _showOsdMessage('Could not enable audio mix');
     }
   }
@@ -2127,7 +2127,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         break;
       case 'seek':
         if (cmd.positionMs != null) {
-          unawaited(_playerService.seek(Duration(milliseconds: cmd.positionMs!)));
+          unawaited(
+            _playerService.seek(Duration(milliseconds: cmd.positionMs!)),
+          );
         }
         break;
     }
@@ -2160,8 +2162,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (_isDisposed || _currentFile != path) return;
     }
     if (_duration.inMilliseconds > 0 &&
-        ms >= _duration.inMilliseconds -
-            SettingsService.resumeTailIgnoreSeconds * 1000) {
+        ms >=
+            _duration.inMilliseconds -
+                SettingsService.resumeTailIgnoreSeconds * 1000) {
       _settings.saveResumePosition(path, null);
       return;
     }
@@ -2182,7 +2185,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Playlist ────────────────────────────────────────
 
-  Future<void> _advancePlaylist(int delta, {bool fromCompletion = false}) async {
+  Future<void> _advancePlaylist(
+    int delta, {
+    bool fromCompletion = false,
+  }) async {
     if (_playlist.isEmpty) return;
     final next = _playlist.advance(delta);
     if (next == null) return;
@@ -2261,8 +2267,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           experimentalAmber.withValues(alpha: isDark ? 0.16 : 0.11),
           cs.surface,
         );
-        final experimentalBorder =
-            experimentalAmber.withValues(alpha: isDark ? 0.45 : 0.36);
+        final experimentalBorder = experimentalAmber.withValues(
+          alpha: isDark ? 0.45 : 0.36,
+        );
         final experimentalIcon = Color.lerp(
           experimentalAmber,
           isDark ? Colors.amber.shade200 : Colors.amber.shade700,
@@ -2278,19 +2285,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
           return InkWell(
             onTap: () => Navigator.pop(ctx, action),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
                   Icon(icon, size: 18, color: cs.onSurface),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                    child: Text(label, style: const TextStyle(fontSize: 13)),
                   ),
                   ?trailing,
                 ],
@@ -2309,10 +2310,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           final child = InkWell(
             onTap: () => onChanged(!value),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               child: Row(
                 children: [
                   Icon(
@@ -2322,17 +2320,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                    child: Text(label, style: const TextStyle(fontSize: 13)),
                   ),
                   Transform.scale(
                     scale: 0.75,
-                    child: Switch(
-                      value: value,
-                      onChanged: onChanged,
-                    ),
+                    child: Switch(value: value, onChanged: onChanged),
                   ),
                 ],
               ),
@@ -2424,7 +2416,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           if (!_isAudioFile)
                             switchItem(
                               icon: Icons.image_search,
-                              label: 'Seek thumbnails (beta: uses more resources)',
+                              label:
+                                  'Seek thumbnails (beta: uses more resources)',
                               value: _settings.seekPreviewEnabled,
                               onChanged: (v) {
                                 _settings.seekPreviewEnabled = v;
@@ -2432,8 +2425,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 unawaited(
                                   _seekPreviewService.setEnabled(v).then((_) {
                                     if (v && _currentFile != null) {
-                                      return _seekPreviewService
-                                          .setSource(_currentFile);
+                                      return _seekPreviewService.setSource(
+                                        _currentFile,
+                                      );
                                     }
                                     return null;
                                   }),
@@ -2473,8 +2467,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             icon: Icons.picture_in_picture_alt,
                             label: 'Mini-player (always on top)',
                             value: _compactMode,
-                            onChanged: (_) =>
-                                Navigator.pop(ctx, 'compact'),
+                            onChanged: (_) => Navigator.pop(ctx, 'compact'),
                           ),
                         ],
                       ),
@@ -2703,10 +2696,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         setLocal(() {});
                       },
                       items: kEqPresets
-                          .map((p) => DropdownMenuItem(
-                                value: p.id,
-                                child: Text(p.label),
-                              ))
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.id,
+                              child: Text(p.label),
+                            ),
+                          )
                           .toList(),
                     ),
                     const SizedBox(height: 12),
@@ -2714,7 +2709,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       height: 220,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
-                        children: List.generate(SettingsService.eqBandCount, (i) {
+                        children: List.generate(SettingsService.eqBandCount, (
+                          i,
+                        ) {
                           final freq = SettingsService.eqBandFrequencies[i];
                           final label = freq < 1000
                               ? '$freq'
@@ -2740,8 +2737,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     ),
                                   ),
                                 ),
-                                Text(label,
-                                    style: Theme.of(ctx).textTheme.bodySmall),
+                                Text(
+                                  label,
+                                  style: Theme.of(ctx).textTheme.bodySmall,
+                                ),
                                 Text(
                                   '${bands[i].toStringAsFixed(0)}dB',
                                   style: Theme.of(ctx).textTheme.bodySmall,
@@ -2759,7 +2758,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 TextButton(
                   onPressed: () {
                     _settings.eqBands = List<double>.filled(
-                        SettingsService.eqBandCount, 0);
+                      SettingsService.eqBandCount,
+                      0,
+                    );
                     _settings.eqPreset = 'flat';
                     unawaited(_applyEqualizer());
                     setLocal(() {});
@@ -2887,80 +2888,83 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await showDialog<void>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setLocal) {
-          return AlertDialog(
-            title: const Text('Keyboard shortcuts'),
-            content: SizedBox(
-              width: 460,
-              height: 480,
-              child: Scrollbar(
-                child: ListView(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                      child: Text(
-                        'Tip: press F1 or ? at any time to reopen this dialog.',
-                        style: Theme.of(ctx).textTheme.bodySmall,
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: const Text('Keyboard shortcuts'),
+              content: SizedBox(
+                width: 460,
+                height: 480,
+                child: Scrollbar(
+                  child: ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        child: Text(
+                          'Tip: press F1 or ? at any time to reopen this dialog.',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
                       ),
-                    ),
-                    ...PlayerShortcutAction.values.map((a) {
-                    final accels = current[a.name] ??
-                        defaultKeybinds[a]?.toList(growable: true) ??
-                        const <String>[];
-                    return ListTile(
-                      dense: true,
-                      title: Text(shortcutActionLabel(a)),
-                      subtitle: Text(
-                        accels.isEmpty ? '(none)' : accels.join(', '),
-                        style: Theme.of(ctx).textTheme.bodySmall,
-                      ),
-                      trailing: Wrap(
-                        spacing: 4,
-                        children: [
-                          IconButton(
-                            tooltip: 'Set new binding',
-                            icon: const Icon(Icons.edit, size: 18),
-                            onPressed: () async {
-                              final accel = await _captureKeybind(ctx);
-                              if (accel == null) return;
-                              current[a.name] = [accel];
-                              _settings.keybinds = current;
-                              setLocal(() {});
-                            },
+                      ...PlayerShortcutAction.values.map((a) {
+                        final accels =
+                            current[a.name] ??
+                            defaultKeybinds[a]?.toList(growable: true) ??
+                            const <String>[];
+                        return ListTile(
+                          dense: true,
+                          title: Text(shortcutActionLabel(a)),
+                          subtitle: Text(
+                            accels.isEmpty ? '(none)' : accels.join(', '),
+                            style: Theme.of(ctx).textTheme.bodySmall,
                           ),
-                          IconButton(
-                            tooltip: 'Reset to default',
-                            icon: const Icon(Icons.refresh, size: 18),
-                            onPressed: () {
-                              current.remove(a.name);
-                              _settings.keybinds = current;
-                              setLocal(() {});
-                            },
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Set new binding',
+                                icon: const Icon(Icons.edit, size: 18),
+                                onPressed: () async {
+                                  final accel = await _captureKeybind(ctx);
+                                  if (accel == null) return;
+                                  current[a.name] = [accel];
+                                  _settings.keybinds = current;
+                                  setLocal(() {});
+                                },
+                              ),
+                              IconButton(
+                                tooltip: 'Reset to default',
+                                icon: const Icon(Icons.refresh, size: 18),
+                                onPressed: () {
+                                  current.remove(a.name);
+                                  _settings.keybinds = current;
+                                  setLocal(() {});
+                                },
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    );
-                  }),
-                  ],
+                        );
+                      }),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  _settings.resetKeybinds();
-                  current.clear();
-                  setLocal(() {});
-                },
-                child: const Text('Reset all'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Close'),
-              ),
-            ],
-          );
-        });
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _settings.resetKeybinds();
+                    current.clear();
+                    setLocal(() {});
+                  },
+                  child: const Text('Reset all'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   }
@@ -2970,52 +2974,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String? captured;
     await showDialog<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setLocal) {
-        return AlertDialog(
-          title: const Text('Press a key combination'),
-          content: SizedBox(
-            width: 320,
-            child: Focus(
-              autofocus: true,
-              focusNode: node,
-              onKeyEvent: (n, e) {
-                if (e is KeyDownEvent &&
-                    e.logicalKey != LogicalKeyboardKey.controlLeft &&
-                    e.logicalKey != LogicalKeyboardKey.controlRight &&
-                    e.logicalKey != LogicalKeyboardKey.shiftLeft &&
-                    e.logicalKey != LogicalKeyboardKey.shiftRight &&
-                    e.logicalKey != LogicalKeyboardKey.altLeft &&
-                    e.logicalKey != LogicalKeyboardKey.altRight &&
-                    e.logicalKey != LogicalKeyboardKey.metaLeft &&
-                    e.logicalKey != LogicalKeyboardKey.metaRight) {
-                  captured = PlayerShortcutsService.acceleratorFromEvent(e);
-                  setLocal(() {});
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                alignment: Alignment.center,
-                child: Text(
-                  captured ?? 'Waiting…',
-                  style: Theme.of(ctx).textTheme.titleMedium,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            title: const Text('Press a key combination'),
+            content: SizedBox(
+              width: 320,
+              child: Focus(
+                autofocus: true,
+                focusNode: node,
+                onKeyEvent: (n, e) {
+                  if (e is KeyDownEvent &&
+                      e.logicalKey != LogicalKeyboardKey.controlLeft &&
+                      e.logicalKey != LogicalKeyboardKey.controlRight &&
+                      e.logicalKey != LogicalKeyboardKey.shiftLeft &&
+                      e.logicalKey != LogicalKeyboardKey.shiftRight &&
+                      e.logicalKey != LogicalKeyboardKey.altLeft &&
+                      e.logicalKey != LogicalKeyboardKey.altRight &&
+                      e.logicalKey != LogicalKeyboardKey.metaLeft &&
+                      e.logicalKey != LogicalKeyboardKey.metaRight) {
+                    captured = PlayerShortcutsService.acceleratorFromEvent(e);
+                    setLocal(() {});
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  alignment: Alignment.center,
+                  child: Text(
+                    captured ?? 'Waiting…',
+                    style: Theme.of(ctx).textTheme.titleMedium,
+                  ),
                 ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: captured == null ? null : () => Navigator.pop(ctx),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      }),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: captured == null ? null : () => Navigator.pop(ctx),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
     );
     node.dispose();
     return captured;
@@ -3064,9 +3070,7 @@ class _CompactExitButtonState extends State<_CompactExitButton> {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: Colors.black.withValues(
-                  alpha: _hovering ? 0.72 : 0.48,
-                ),
+                color: Colors.black.withValues(alpha: _hovering ? 0.72 : 0.48),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: Colors.white.withValues(

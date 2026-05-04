@@ -113,5 +113,74 @@ void main() {
 
       expect(called, isFalse);
     });
+
+    test('does not launch when canLaunch returns false', () async {
+      var called = false;
+      final service = UpdateService(
+        canLaunch: (uri) async => false,
+        launch: (uri, {mode = LaunchMode.platformDefault}) async {
+          called = true;
+          return true;
+        },
+      );
+      await service.openReleasePage(
+        'https://github.com/BurntToasters/Dacx/releases/latest',
+      );
+      expect(called, isFalse);
+    });
+  });
+
+  group('UpdateService version comparison', () {
+    PackageInfo info(String v) => PackageInfo(
+      appName: 'Dacx',
+      packageName: 'run.rosie.dacx',
+      version: v,
+      buildNumber: '1',
+      buildSignature: '',
+      installerStore: null,
+    );
+
+    test('treats stable as newer than equivalent prerelease', () async {
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('1.0.0-beta.1'),
+        httpGet: (uri, {headers}) async => http.Response(
+          '{"tag_name":"v1.0.0","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v1.0.0","body":""}',
+          200,
+        ),
+      );
+      final update = await svc.checkForUpdate();
+      expect(update?.version, '1.0.0');
+    });
+
+    test('treats prerelease as older than equivalent stable', () async {
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('1.0.0'),
+        httpGet: (uri, {headers}) async => http.Response(
+          '{"tag_name":"v1.0.0-beta.1","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v1.0.0-beta.1","body":""}',
+          200,
+        ),
+      );
+      expect(await svc.checkForUpdate(), isNull);
+    });
+
+    test('rejects non-semver tag names', () async {
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('0.5.0'),
+        httpGet: (uri, {headers}) async => http.Response(
+          '{"tag_name":"vNEXT","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/vNEXT","body":""}',
+          200,
+        ),
+      );
+      expect(await svc.checkForUpdate(), isNull);
+    });
+
+    test('returns null on network exception', () async {
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('0.5.0'),
+        httpGet: (uri, {headers}) async => throw Exception('boom'),
+      );
+      expect(await svc.checkForUpdate(), isNull);
+      expect(svc.lastCheckSucceeded, isFalse);
+    });
   });
 }

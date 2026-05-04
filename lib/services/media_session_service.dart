@@ -226,9 +226,7 @@ class _MprisAdapter extends MPRISService {
 
   void applyPosition(Duration position, {required bool playing}) {
     if (!_enabled) return;
-    playbackStatus = playing
-        ? PlaybackStatus.playing
-        : PlaybackStatus.paused;
+    playbackStatus = playing ? PlaybackStatus.playing : PlaybackStatus.paused;
     updatePosition(position);
   }
 

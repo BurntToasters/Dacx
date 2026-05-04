@@ -75,16 +75,15 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     }
   }
 
-  override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-    handleOpenFile(filename)
-    return true
-  }
-
-  override func application(_ application: NSApplication, openFiles filenames: [String]) {
-    for filename in filenames {
-      handleOpenFile(filename)
+  override func application(_ application: NSApplication, open urls: [URL]) {
+    super.application(application, open: urls)
+    for url in urls {
+      if url.isFileURL {
+        handleOpenFile(url.path)
+      } else {
+        handleOpenFile(url.absoluteString)
+      }
     }
-    NSApp.reply(toOpenOrPrint: .success)
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

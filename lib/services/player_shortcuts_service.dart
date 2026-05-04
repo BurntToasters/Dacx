@@ -247,7 +247,9 @@ class PlayerShortcutsService {
 
   static String _keyLabel(LogicalKeyboardKey key) {
     final label = key.keyLabel;
-    if (label.isNotEmpty) return label.length == 1 ? label.toUpperCase() : label;
+    if (label.isNotEmpty) {
+      return label.length == 1 ? label.toUpperCase() : label;
+    }
     return key.debugName ?? 'Key(${key.keyId})';
   }
 }

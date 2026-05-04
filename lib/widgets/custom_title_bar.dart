@@ -92,9 +92,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         // couple of attempts before the caption is actually removed.
         for (var attempt = 0; attempt < 4 && nativeCaptionVisible; attempt++) {
           await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-          await Future<void>.delayed(
-            Duration(milliseconds: 60 + attempt * 40),
-          );
+          await Future<void>.delayed(Duration(milliseconds: 60 + attempt * 40));
           titleBarHeight = await windowManager.getTitleBarHeight();
           nativeCaptionVisible = titleBarHeight > 8;
         }

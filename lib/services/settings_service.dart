@@ -80,15 +80,26 @@ class SettingsService extends ChangeNotifier {
 
   /// Maximum playback-resume entries kept (per file). LRU pruned.
   static const int maxResumeEntries = 100;
+
   /// Minimum elapsed seconds before a resume position is recorded.
   static const int resumeMinElapsedSeconds = 30;
+
   /// Tail offset from end-of-track that suppresses resume save (treat as fully watched).
   static const int resumeTailIgnoreSeconds = 15;
 
   static const int maxRecentFiles = 20;
   static const int eqBandCount = 10;
   static const List<int> eqBandFrequencies = [
-    31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
+    31,
+    62,
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000,
+    16000,
   ];
 
   double get volume => _prefs.getDouble(_kVolume) ?? 100.0;
@@ -384,9 +395,7 @@ class SettingsService extends ChangeNotifier {
   set eqBands(List<double> values) {
     final clamped = List<double>.generate(
       eqBandCount,
-      (i) => i < values.length
-          ? values[i].clamp(-12.0, 12.0).toDouble()
-          : 0.0,
+      (i) => i < values.length ? values[i].clamp(-12.0, 12.0).toDouble() : 0.0,
     );
     _eqBandsCache = clamped;
     _prefs.setString(_kEqBands, jsonEncode(clamped));
@@ -428,8 +437,7 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get seekPreviewEnabled =>
-      _prefs.getBool(_kSeekPreviewEnabled) ?? false;
+  bool get seekPreviewEnabled => _prefs.getBool(_kSeekPreviewEnabled) ?? false;
   set seekPreviewEnabled(bool v) {
     if (seekPreviewEnabled == v) return;
     _prefs.setBool(_kSeekPreviewEnabled, v);
@@ -445,6 +453,7 @@ class SettingsService extends ChangeNotifier {
     if (!experimentalFeaturesEnabled) return false;
     return _prefs.getBool(_kMultiAudioMix) ?? false;
   }
+
   set multiAudioMix(bool v) {
     _prefs.setBool(_kMultiAudioMix, v);
     notifyListeners();

@@ -74,8 +74,7 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                 onHover: (e) {
                   final width = constraints.maxWidth;
                   if (width <= 0) return;
-                  final fraction =
-                      (e.localPosition.dx / width).clamp(0.0, 1.0);
+                  final fraction = (e.localPosition.dx / width).clamp(0.0, 1.0);
                   setState(() {
                     _hoverFraction = fraction;
                   });
@@ -89,9 +88,10 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                   });
                 },
                 child: Slider(
-                  value: widget.position.inMilliseconds
-                      .toDouble()
-                      .clamp(0.0, maxMs),
+                  value: widget.position.inMilliseconds.toDouble().clamp(
+                    0.0,
+                    maxMs,
+                  ),
                   max: maxMs,
                   onChangeStart: (_) => widget.onSeekStart(),
                   onChanged: widget.onSeekChange,
@@ -102,7 +102,7 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                 Positioned(
                   left: showPreview
                       ? (constraints.maxWidth * _hoverFraction!) -
-                          (_previewWidth / 2)
+                            (_previewWidth / 2)
                       : (constraints.maxWidth * _hoverFraction!) - 28,
                   top: showPreview ? -(_previewHeight + 34) : -28,
                   child: IgnorePointer(
@@ -141,15 +141,19 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                           ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.74),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            _fmt(Duration(
-                                milliseconds:
-                                    (maxMs * _hoverFraction!).toInt())),
+                            _fmt(
+                              Duration(
+                                milliseconds: (maxMs * _hoverFraction!).toInt(),
+                              ),
+                            ),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,

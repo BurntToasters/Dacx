@@ -16,9 +16,8 @@ class PlaylistService extends ChangeNotifier {
   int get length => _items.length;
   bool get isEmpty => _items.isEmpty;
   bool get isNotEmpty => _items.isNotEmpty;
-  String? get current => (_index >= 0 && _index < _items.length)
-      ? _items[_index]
-      : null;
+  String? get current =>
+      (_index >= 0 && _index < _items.length) ? _items[_index] : null;
   bool get shuffle => _shuffle;
   bool get hasNext => _peekRelative(1) != null;
   bool get hasPrevious => _peekRelative(-1) != null;

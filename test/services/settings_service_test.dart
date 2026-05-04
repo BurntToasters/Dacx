@@ -294,7 +294,9 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
-      service.keybinds = {'a': ['X']};
+      service.keybinds = {
+        'a': ['X'],
+      };
       service.resetKeybinds();
       expect(service.keybinds, isEmpty);
       expect(prefs.getString('keybinds_v1'), isNull);
