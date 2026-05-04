@@ -805,9 +805,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _cachedAudioIds != null &&
           _cachedAudioIds!.length >= 2) {
         final aIds = _cachedAudioIds!;
-        final inputs = aIds.map((id) => '[aid$id]').join(' ');
-        final audioBranch =
-            '$inputs amix=inputs=${aIds.length}:normalize=0 [ao]';
+        final audioBranch = _buildMultiAudioMixBranch(aIds);
         if (_cachedVideoIds != null && _cachedVideoIds!.isNotEmpty) {
           preOpenLavfi =
               '[vid${_cachedVideoIds!.first}] null [vo] ; $audioBranch';
@@ -1995,6 +1993,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Multi-audio mix ───────────────────────────────────────
 
+  /// Build the audio branch of a lavfi-complex chain
+  String _buildMultiAudioMixBranch(List<String> audioIds) {
+    final buf = StringBuffer();
+    for (var i = 0; i < audioIds.length; i++) {
+      buf.write(
+        '[aid${audioIds[i]}] '
+        'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo '
+        '[a${i + 1}] ; ',
+      );
+    }
+    for (var i = 0; i < audioIds.length; i++) {
+      buf.write('[a${i + 1}]');
+    }
+    buf.write(' amix=inputs=${audioIds.length}:normalize=0 [ao]');
+    return buf.toString();
+  }
+
   Future<void> _applyMultiAudioMix({bool announce = false}) async {
     final tracks = _currentTracks;
     if (tracks == null) return;
@@ -2024,8 +2039,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (announce) _showOsdMessage('Cannot mix: unsupported track ids');
       return;
     }
-    final inputs = ids.map((id) => '[aid$id]').join(' ');
-    final audioChain = '$inputs amix=inputs=${ids.length}:normalize=0 [ao]';
+    final audioChain = _buildMultiAudioMixBranch(ids);
     String chain = audioChain;
     final videoIds = tracks.video
         .where((t) => t.id != 'auto' && t.id != 'no')
