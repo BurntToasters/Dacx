@@ -79,6 +79,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasAlbumArtTrack = false;
   String? _albumArtTrackId;
   bool _mixActive = false;
+  List<String>? _cachedAudioIds;
+  List<String>? _cachedVideoIds;
+  bool _mixReloadInFlight = false;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -314,11 +317,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
         }
       }),
-      _playerService.tracksStream.listen((_) {
+      _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
         unawaited(_refreshChapters());
-        if (_settings.multiAudioMix) {
-          unawaited(_applyMultiAudioMix());
+        // Cache numeric ids so the next open() can pre-set lavfi-complex.
+        final aIds = tracks.audio
+            .where((t) => t.id != 'auto' && t.id != 'no')
+            .map((t) => t.id)
+            .where((id) => int.tryParse(id) != null)
+            .toList(growable: false);
+        final vIds = tracks.video
+            .where((t) => t.id != 'auto' && t.id != 'no')
+            .map((t) => t.id)
+            .where((id) => int.tryParse(id) != null)
+            .toList(growable: false);
+        if (aIds.isNotEmpty) _cachedAudioIds = aIds;
+        if (vIds.isNotEmpty) _cachedVideoIds = vIds;
+        if (_settings.multiAudioMix &&
+            aIds.length >= 2 &&
+            !_mixActive &&
+            !_mixReloadInFlight) {
+          unawaited(_reloadCurrentForMixChange());
         }
       }),
       _playerService.completedStream.listen((completed) {
@@ -781,11 +800,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     try {
-      // Clear any previously-engaged lavfi-complex graph so it can't
-      // leak into this file's load. tracksStream will re-install it
-      // after open() returns and tracks are enumerated.
-      await _playerService.setProperty('lavfi-complex', '');
-      _mixActive = false;
+      String preOpenLavfi = '';
+      if (_settings.multiAudioMix &&
+          _cachedAudioIds != null &&
+          _cachedAudioIds!.length >= 2) {
+        final aIds = _cachedAudioIds!;
+        final inputs = aIds.map((id) => '[aid$id]').join(' ');
+        final audioBranch =
+            '$inputs amix=inputs=${aIds.length}:normalize=0 [ao]';
+        if (_cachedVideoIds != null && _cachedVideoIds!.isNotEmpty) {
+          preOpenLavfi =
+              '[vid${_cachedVideoIds!.first}] null [vo] ; $audioBranch';
+        } else {
+          preOpenLavfi = audioBranch;
+        }
+      }
+      await _playerService.setProperty('lavfi-complex', preOpenLavfi);
+      _mixActive = preOpenLavfi.isNotEmpty;
       await _playerService.open(normalizedPath, play: _settings.autoPlay);
     } catch (e) {
       final permissionDenied = _isPermissionDeniedError(e);
@@ -2017,9 +2048,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (ok) {
       final wasActive = _mixActive;
       _mixActive = true;
-      if (!wasActive) {
-        await _playerService.command(['playlist-play-index', 'current']);
-      }
       if (announce || !wasActive) {
         _showOsdMessage('Mixing ${ids.length} audio tracks');
       }
@@ -2033,6 +2061,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<void> _reloadCurrentForMixChange() async {
+    final path = _currentFile;
+    if (path == null) return;
+    if (_mixReloadInFlight) return;
+    _mixReloadInFlight = true;
+    try {
+      final savedPos = _position;
+      await _loadFile(path);
+      if (savedPos > Duration.zero) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (mounted && _position < const Duration(seconds: 1)) {
+          unawaited(_playerService.seek(savedPos));
+        }
+      }
+    } finally {
+      _mixReloadInFlight = false;
+    }
+  }
+
   Future<void> _disableMixForManualTrackSelection() async {
     if (!_settings.multiAudioMix && !_mixActive) return;
     final wasActive = _mixActive;
@@ -2041,9 +2088,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     await _playerService.setProperty('lavfi-complex', '');
     _mixActive = false;
-
     if (wasActive) {
-      await _playerService.command(['playlist-play-index', 'current']);
+      await _reloadCurrentForMixChange();
     }
   }
 
@@ -2195,6 +2241,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (ctx, _, _) {
         final cs = Theme.of(ctx).colorScheme;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final experimentalAmber = Color.lerp(cs.tertiary, Colors.amber, 0.72)!;
+        final experimentalBackground = Color.alphaBlend(
+          experimentalAmber.withValues(alpha: isDark ? 0.16 : 0.11),
+          cs.surface,
+        );
+        final experimentalBorder =
+            experimentalAmber.withValues(alpha: isDark ? 0.45 : 0.36);
+        final experimentalIcon = Color.lerp(
+          experimentalAmber,
+          isDark ? Colors.amber.shade200 : Colors.amber.shade700,
+          0.22,
+        )!;
         // Build the menu items as a compact, right-aligned vertical panel.
         Widget item({
           required IconData icon,
@@ -2231,8 +2290,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           required String label,
           required bool value,
           required ValueChanged<bool> onChanged,
+          bool experimental = false,
         }) {
-          return InkWell(
+          final child = InkWell(
             onTap: () => onChanged(!value),
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -2241,7 +2301,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(icon, size: 18, color: cs.onSurface),
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: experimental ? experimentalIcon : cs.onSurface,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -2258,6 +2322,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ],
               ),
+            ),
+          );
+          if (!experimental) return child;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: experimentalBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: experimentalBorder),
+              ),
+              child: child,
             ),
           );
         }
@@ -2313,17 +2389,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               label: 'Take screenshot',
                               action: 'screenshot',
                             ),
-                          if (hasAudioOptions)
+                          if (hasAudioOptions &&
+                              _settings.experimentalFeaturesEnabled)
                             switchItem(
                               icon: Icons.multitrack_audio,
                               label: 'Mix all audio tracks',
                               value: _settings.multiAudioMix,
+                              experimental: true,
                               onChanged: (v) {
                                 _settings.multiAudioMix = v;
                                 setSheetState(() {});
-                                unawaited(
-                                  _applyMultiAudioMix(announce: true),
-                                );
+                                unawaited(() async {
+                                  await _applyMultiAudioMix(announce: true);
+                                  if (_currentFile != null) {
+                                    await _reloadCurrentForMixChange();
+                                  }
+                                }());
                               },
                             ),
                           if (!_isAudioFile)

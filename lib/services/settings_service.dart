@@ -436,7 +436,15 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get multiAudioMix => _prefs.getBool(_kMultiAudioMix) ?? false;
+  /// Mix all audio tracks into one output via mpv `lavfi-complex`.
+  /// Marked experimental; the stored preference is preserved but
+  /// reported as `false` whenever Experimental Features is disabled,
+  /// so all consumers automatically get the safe default without
+  /// needing to re-check the experimental flag themselves.
+  bool get multiAudioMix {
+    if (!experimentalFeaturesEnabled) return false;
+    return _prefs.getBool(_kMultiAudioMix) ?? false;
+  }
   set multiAudioMix(bool v) {
     _prefs.setBool(_kMultiAudioMix, v);
     notifyListeners();

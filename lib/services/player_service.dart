@@ -104,23 +104,7 @@ class PlayerService {
     });
   }
 
-  /// Sends a raw mpv input command. Returns true on success.
-  /// Used for commands without dedicated property accessors, e.g.
-  /// `['playlist-play-index', 'current']` to reload the current entry.
-  Future<bool> command(List<String> args) async {
-    return await _guardValue<bool>('command:${args.first}', () async {
-          final platform = player.platform;
-          if (platform is NativePlayer) {
-            await platform.command(args);
-            return true;
-          }
-          return false;
-        }) ??
-        false;
-  }
-
   /// Applies an audio filter chain (mpv `--af`).
-  /// Pass empty string or null to clear filters.
   Future<bool> setAudioFilter(String? chain) =>
       setProperty('af', chain ?? '');
 
