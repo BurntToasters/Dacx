@@ -96,7 +96,7 @@ fi
 # Pkg
 echo "Creating zip for notarization..."
 mkdir -p "$ROOT/release"
-ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
 # Notarize
 echo "Submitting for notarization..."
@@ -112,7 +112,7 @@ xcrun stapler staple "$APP_BUNDLE"
 
 # Re-zip with stapled ticket
 rm -f "$ZIP_PATH"
-ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
 # DMG
 DMG_NAME="Dacx-macOS.dmg"
@@ -132,6 +132,29 @@ rm -rf "$DMG_STAGE"
 
 # Sign DMG
 codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+
+# Notarize DMG so Gatekeeper can verify it offline (the inner .app is already
+# stapled, but stapling the DMG too lets users mount it without a network
+# round-trip and avoids the "Apple could not verify" warning when the .dmg
+# itself is downloaded directly).
+echo "Submitting DMG for notarization..."
+xcrun notarytool submit "$DMG_PATH" \
+  --apple-id "$APPLE_ID" \
+  --password "$APPLE_PASSWORD" \
+  --team-id "$APPLE_TEAM_ID" \
+  --wait
+
+echo "Stapling DMG..."
+xcrun stapler staple "$DMG_PATH"
+
+echo "Verifying Gatekeeper acceptance of stapled .app..."
+spctl --assess --type execute --verbose=4 "$APP_BUNDLE" || {
+  echo "WARN: spctl assessment failed for $APP_BUNDLE"
+}
+echo "Verifying Gatekeeper acceptance of DMG..."
+spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH" || {
+  echo "WARN: spctl assessment failed for $DMG_PATH"
+}
 
 echo ""
 echo "Done:"

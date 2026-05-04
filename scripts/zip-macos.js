@@ -41,7 +41,7 @@ if (apps.length === 0) {
 for (const appPath of apps) {
   const baseName = path.basename(appPath, ".app");
   const zipPath = path.join(path.dirname(appPath), `${baseName}.zip`);
-  execFileSync("ditto", ["-c", "-k", "--keepParent", appPath, zipPath], {
+  execFileSync("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath], {
     stdio: "inherit",
   });
 }
