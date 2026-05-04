@@ -256,6 +256,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playerService.volumeStream.listen((vol) {
         if (!mounted || _isDisposed) return;
         setState(() => _volume = vol);
+        unawaited(_mediaSession.updateVolume((vol / 100.0).clamp(0.0, 1.0)));
         if (widget.debugLog.isEnabled) {
           _log(
             'volume_stream_updated',
@@ -384,7 +385,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         detailsBuilder: () => {'path': widget.initialFile},
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_openRequestedFile(widget.initialFile!));
+        unawaited(_openRequestedFile(widget.initialFile!, forcePlay: true));
       });
     }
   }
@@ -427,6 +428,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     unawaited(_applyMultiAudioMix());
     unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
     unawaited(
+      _mediaSession.updateLoop(switch (_settings.loopMode) {
+        LoopMode.none => 'none',
+        LoopMode.single => 'single',
+        LoopMode.loop => 'loop',
+      }),
+    );
+    unawaited(_mediaSession.updateShuffle(_settings.playlistShuffle));
+    unawaited(_mediaSession.updateRate(_settings.speed));
+    unawaited(
       windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
         Object e,
       ) {
@@ -466,7 +476,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (_isDisposed || !mounted) return;
           final path = _coerceOpenPath(entry);
           if (path == null) continue;
-          await _openRequestedFile(path);
+          await _openRequestedFile(path, forcePlay: true);
         }
       }
     } on MissingPluginException {
@@ -505,7 +515,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               category: DebugLogCategory.system,
               detailsBuilder: () => {'path': path},
             );
-            unawaited(_openRequestedFile(path));
+            unawaited(_openRequestedFile(path, forcePlay: true));
           }
         },
         onError: (error) {
@@ -527,7 +537,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return trimmed;
   }
 
-  Future<void> _openRequestedFile(String filePath) async {
+  Future<void> _openRequestedFile(
+    String filePath, {
+    bool forcePlay = false,
+  }) async {
     final trimmed = filePath.trim();
     if (trimmed.isEmpty) return;
     if (_currentFile == trimmed) {
@@ -535,10 +548,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'open_requested_same_file_ignored',
         detailsBuilder: () => {'path': trimmed},
       );
+      if (forcePlay && !_isPlaying) {
+        unawaited(_playerService.playPause().catchError((_) {}));
+      }
       return;
     }
-    _log('open_requested', detailsBuilder: () => {'path': trimmed});
-    await _loadFile(trimmed);
+    _log(
+      'open_requested',
+      detailsBuilder: () => {'path': trimmed, 'force_play': forcePlay},
+    );
+    await _loadFile(trimmed, forcePlay: forcePlay);
   }
 
   void _applySpeed(double speed) {
@@ -710,14 +729,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _loadFile(String filePath) {
+  Future<void> _loadFile(String filePath, {bool forcePlay = false}) {
     _loadQueue = _loadQueue
         .catchError((_) {})
-        .then((_) => _loadFileInternal(filePath));
+        .then((_) => _loadFileInternal(filePath, forcePlay: forcePlay));
     return _loadQueue;
   }
 
-  Future<void> _loadFileInternal(String filePath) async {
+  Future<void> _loadFileInternal(
+    String filePath, {
+    bool forcePlay = false,
+  }) async {
     if (_isDisposed) return;
     final normalizedPath = filePath.trim();
     if (normalizedPath.isEmpty) {
@@ -809,7 +831,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       await _playerService.setProperty('lavfi-complex', preOpenLavfi);
       _mixActive = preOpenLavfi.isNotEmpty;
-      await _playerService.open(normalizedPath, play: _settings.autoPlay);
+      await _playerService.open(
+        normalizedPath,
+        play: forcePlay || _settings.autoPlay,
+      );
     } catch (e) {
       final permissionDenied = _isPermissionDeniedError(e);
       _log(
@@ -2131,6 +2156,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _playerService.seek(Duration(milliseconds: cmd.positionMs!)),
           );
         }
+        break;
+      case 'loop':
+        final v = cmd.value ?? 0.0;
+        final mode = v >= 1.5
+            ? LoopMode.loop
+            : (v >= 0.5 ? LoopMode.single : LoopMode.none);
+        _settings.loopMode = mode;
+        break;
+      case 'shuffle':
+        final on = (cmd.value ?? 0.0) > 0.5;
+        _settings.playlistShuffle = on;
+        _playlist.setShuffle(on);
+        break;
+      case 'volume':
+        final v = (cmd.value ?? 0.0).clamp(0.0, 1.0);
+        final pct = v * 100.0;
+        setState(() {
+          _volume = pct;
+        });
+        unawaited(_playerService.setVolume(pct).catchError((_) {}));
+        break;
+      case 'rate':
+        final r = (cmd.value ?? 1.0).clamp(0.25, 4.0);
+        _settings.speed = r;
         break;
     }
   }

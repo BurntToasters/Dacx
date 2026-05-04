@@ -189,6 +189,114 @@ void main() {
       },
       skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
     );
+
+    test(
+      'updateLoop forwards loop mode',
+      () async {
+        installMockHandler((_) async => null);
+        final svc = await initService(enabled: true);
+        addTearDown(svc.dispose);
+        calls.clear();
+
+        await svc.updateLoop('single');
+
+        final args =
+            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
+                .cast<String, dynamic>();
+        expect(args['loop'], 'single');
+      },
+      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
+    );
+
+    test(
+      'updateShuffle forwards the boolean',
+      () async {
+        installMockHandler((_) async => null);
+        final svc = await initService(enabled: true);
+        addTearDown(svc.dispose);
+        calls.clear();
+
+        await svc.updateShuffle(true);
+
+        final args =
+            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
+                .cast<String, dynamic>();
+        expect(args['shuffle'], true);
+      },
+      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
+    );
+
+    test(
+      'updateVolume forwards the value',
+      () async {
+        installMockHandler((_) async => null);
+        final svc = await initService(enabled: true);
+        addTearDown(svc.dispose);
+        calls.clear();
+
+        await svc.updateVolume(0.42);
+
+        final args =
+            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
+                .cast<String, dynamic>();
+        expect(args['volume'], closeTo(0.42, 1e-9));
+      },
+      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
+    );
+
+    test(
+      'updateRate forwards the playback rate',
+      () async {
+        installMockHandler((_) async => null);
+        final svc = await initService(enabled: true);
+        addTearDown(svc.dispose);
+        calls.clear();
+
+        await svc.updateRate(1.5);
+
+        final args =
+            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
+                .cast<String, dynamic>();
+        expect(args['rate'], closeTo(1.5, 1e-9));
+      },
+      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
+    );
+
+    test(
+      'native command callbacks forward `value` to the commands stream',
+      () async {
+        installMockHandler((_) async => null);
+        final svc = await initService(enabled: true);
+        addTearDown(svc.dispose);
+
+        final received = <MediaSessionCommand>[];
+        final sub = svc.commands.listen(received.add);
+        addTearDown(sub.cancel);
+
+        Future<ByteData?> deliver(String action, double value) async {
+          final encoded = const StandardMethodCodec().encodeMethodCall(
+            MethodCall('command', <String, dynamic>{
+              'action': action,
+              'value': value,
+            }),
+          );
+          return TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .handlePlatformMessage(channel.name, encoded, (_) {});
+        }
+
+        await deliver('volume', 0.75);
+        await deliver('rate', 2.0);
+        await Future<void>.delayed(Duration.zero);
+
+        final volume = received.firstWhere((c) => c.action == 'volume');
+        final rate = received.firstWhere((c) => c.action == 'rate');
+        expect(volume.value, closeTo(0.75, 1e-9));
+        expect(rate.value, closeTo(2.0, 1e-9));
+      },
+      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
+    );
   });
 
   group('MediaSessionCommand', () {
@@ -196,6 +304,12 @@ void main() {
       const cmd = MediaSessionCommand('next', 99);
       expect(cmd.action, 'next');
       expect(cmd.positionMs, 99);
+    });
+
+    test('carries an optional value', () {
+      const cmd = MediaSessionCommand('volume', null, value: 0.5);
+      expect(cmd.action, 'volume');
+      expect(cmd.value, 0.5);
     });
   });
 }

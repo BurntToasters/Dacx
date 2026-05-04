@@ -17,12 +17,13 @@ import 'debug_log_service.dart';
 /// Channel: `run.rosie.dacx/media_session`
 /// Methods (Dart -> platform):
 ///   - `update`  args: { title, artist?, album?, durationMs?, positionMs?,
-///                       playing?, artUri? }
+///                       playing?, artUri?, loop?, shuffle?, volume?, rate? }
 ///   - `clear`   args: {}
 ///   - `setEnabled` args: { enabled }
 /// Methods (platform -> Dart) via `setMethodCallHandler`:
-///   - `command` args: { action: play|pause|toggle|next|previous|stop|seek,
-///                       positionMs? }
+///   - `command` args: { action: play|pause|toggle|next|previous|stop|seek|
+///                               loop|shuffle|volume|rate,
+///                       positionMs?, value? }
 class MediaSessionService {
   MediaSessionService({required this.debugLog});
 
@@ -125,6 +126,42 @@ class MediaSessionService {
     });
   }
 
+  Future<void> updateLoop(String mode) async {
+    if (!_platformAvailable) return;
+    if (Platform.isLinux) {
+      _mpris?.pushLoop(mode);
+      return;
+    }
+    await _safeInvoke('update', {'loop': mode});
+  }
+
+  Future<void> updateShuffle(bool shuffle) async {
+    if (!_platformAvailable) return;
+    if (Platform.isLinux) {
+      _mpris?.pushShuffle(shuffle);
+      return;
+    }
+    await _safeInvoke('update', {'shuffle': shuffle});
+  }
+
+  Future<void> updateVolume(double volume) async {
+    if (!_platformAvailable) return;
+    if (Platform.isLinux) {
+      _mpris?.pushVolume(volume);
+      return;
+    }
+    await _safeInvoke('update', {'volume': volume});
+  }
+
+  Future<void> updateRate(double rate) async {
+    if (!_platformAvailable) return;
+    if (Platform.isLinux) {
+      _mpris?.pushRate(rate);
+      return;
+    }
+    await _safeInvoke('update', {'rate': rate});
+  }
+
   Future<void> clear() async {
     if (!_platformAvailable) return;
     _lastTitle = null;
@@ -171,15 +208,17 @@ class MediaSessionService {
     final args = (call.arguments as Map?)?.cast<String, dynamic>() ?? {};
     final action = args['action']?.toString() ?? '';
     final positionMs = (args['positionMs'] as num?)?.toInt();
-    _commandsCtrl.add(MediaSessionCommand(action, positionMs));
+    final value = (args['value'] as num?)?.toDouble();
+    _commandsCtrl.add(MediaSessionCommand(action, positionMs, value: value));
     return null;
   }
 }
 
 class MediaSessionCommand {
-  const MediaSessionCommand(this.action, this.positionMs);
+  const MediaSessionCommand(this.action, this.positionMs, {this.value});
   final String action;
   final int? positionMs;
+  final double? value;
 }
 
 /// Linux MPRIS adapter built atop `anni_mpris_service`.
@@ -195,6 +234,8 @@ class _MprisAdapter extends MPRISService {
         canGoNext: true,
         canGoPrevious: true,
         canSeek: true,
+        supportLoopStatus: true,
+        supportShuffle: true,
       );
 
   final void Function(MediaSessionCommand) _dispatch;
@@ -263,12 +304,18 @@ class _MprisAdapter extends MPRISService {
 
   @override
   Future<void> onLoopStatus(LoopStatus loopStatus) async {
+    final mode = switch (loopStatus) {
+      LoopStatus.none => 'none',
+      LoopStatus.track => 'single',
+      LoopStatus.playlist => 'loop',
+    };
     _log.log(
       category: DebugLogCategory.system,
       event: 'mpris_loop_status_request',
-      message: loopStatus.toString(),
+      message: mode,
       severity: DebugSeverity.info,
     );
+    _dispatch(MediaSessionCommand('loop', null, value: _loopModeValue(mode)));
   }
 
   @override
@@ -279,5 +326,46 @@ class _MprisAdapter extends MPRISService {
       message: shuffle.toString(),
       severity: DebugSeverity.info,
     );
+    _dispatch(MediaSessionCommand('shuffle', null, value: shuffle ? 1.0 : 0.0));
+  }
+
+  @override
+  Future<void> onVolume(double volume) async {
+    _dispatch(MediaSessionCommand('volume', null, value: volume));
+  }
+
+  @override
+  Future<void> onPlaybackRate(double rate) async {
+    _dispatch(MediaSessionCommand('rate', null, value: rate));
+  }
+
+  static double _loopModeValue(String mode) => switch (mode) {
+    'single' => 1.0,
+    'loop' => 2.0,
+    _ => 0.0,
+  };
+
+  void pushLoop(String mode) {
+    if (!_enabled) return;
+    loopStatus = switch (mode) {
+      'single' => LoopStatus.track,
+      'loop' => LoopStatus.playlist,
+      _ => LoopStatus.none,
+    };
+  }
+
+  void pushShuffle(bool v) {
+    if (!_enabled) return;
+    shuffle = v;
+  }
+
+  void pushVolume(double v) {
+    if (!_enabled) return;
+    volume = v.clamp(0.0, 1.0);
+  }
+
+  void pushRate(double r) {
+    if (!_enabled) return;
+    playbackRate = r;
   }
 }
