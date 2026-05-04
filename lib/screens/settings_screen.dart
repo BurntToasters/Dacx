@@ -34,6 +34,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static final Uri _supportProjectUri = Uri.parse('https://rosie.run/support');
   late final UpdateService _updateService;
   bool _contentVisible = false;
+  bool _isDisposed = false;
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
 
   void _log(
     String event, {
@@ -65,9 +72,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _log('settings_screen_init', category: DebugLogCategory.ui);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() => _contentVisible = true);
-      }
+      if (!mounted || _isDisposed) return;
+      setState(() => _contentVisible = true);
     });
   }
 
@@ -129,6 +135,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               detailsBuilder: () => {'value': v},
                             );
                           }),
+                        ),
+                        SwitchListTile(
+                          title: const Text('Resume from last position'),
+                          subtitle: const Text(
+                            'Remember playback position for each file',
+                          ),
+                          value: _s.resumePlaybackEnabled,
+                          onChanged: (v) =>
+                              setState(() => _s.resumePlaybackEnabled = v),
+                        ),
+                        SwitchListTile(
+                          title: const Text('On-screen display'),
+                          subtitle: const Text(
+                            'Show title and time overlay during playback',
+                          ),
+                          value: _s.osdEnabled,
+                          onChanged: (v) => setState(() => _s.osdEnabled = v),
+                        ),
+                        SwitchListTile(
+                          title: const Text('System media keys / Now Playing'),
+                          subtitle: const Text(
+                            'Publish playback to MPRIS / SMTC / Now Playing',
+                          ),
+                          value: _s.mediaSessionEnabled,
+                          onChanged: (v) =>
+                              setState(() => _s.mediaSessionEnabled = v),
                         ),
                         _hwDecTile(),
                         const Divider(),

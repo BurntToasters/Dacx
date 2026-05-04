@@ -1,33 +1,38 @@
 name: dacx
 description: "Quick, lightweight cross-platform media player."
 publish_to: 'none'
-version: 0.5.0+1
+version: 0.6.0+1
 
 environment:
   sdk: ^3.10.7
 
 dependencies:
+  anni_mpris_service: ^0.1.0
+  desktop_drop: ^0.5.0
+  file_picker: ^9.2.1
   flutter:
     sdk: flutter
+  flutter_acrylic: ^1.1.4
+  http: ^1.3.0
   media_kit: ^1.1.11
-  media_kit_video: ^1.2.5
-  media_kit_libs_windows_video: ^1.0.10
-  media_kit_libs_macos_video: ^1.1.4
   media_kit_libs_linux: ^1.1.4
-  file_picker: ^9.2.1
+  media_kit_libs_macos_video: ^1.1.4
+  media_kit_libs_windows_video: ^1.0.10
+  media_kit_video: ^1.2.5
+  package_info_plus: ^8.0.0
+  path: ^1.9.1
   shared_preferences: ^2.5.3
   url_launcher: ^6.3.1
-  http: ^1.3.0
-  desktop_drop: ^0.5.0
   window_manager: ^0.4.3
-  flutter_acrylic: ^1.1.4
-  path: ^1.9.1
-  package_info_plus: ^8.0.0
 
 dev_dependencies:
+  flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  integration_test:
+    sdk: flutter
+  mocktail: ^1.0.4
+  url_launcher_platform_interface: ^2.3.2
 
 flutter:
   uses-material-design: true

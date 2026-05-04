@@ -10,23 +10,17 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  GtkWindow* window;
+  FlView* view;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-// Implements GApplication::activate.
-static void my_application_activate(GApplication* application) {
-  MyApplication* self = MY_APPLICATION(application);
+static GtkWindow* my_application_create_window(MyApplication* self,
+                                               GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
   gboolean use_header_bar = TRUE;
 #ifdef GDK_WINDOWING_X11
   GdkScreen* screen = gtk_window_get_screen(window);
@@ -55,7 +49,6 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
-  // Keep the view transparent so compositor blur (where available) can work.
   gdk_rgba_parse(&background_color, "#00000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
@@ -66,14 +59,55 @@ static void my_application_activate(GApplication* application) {
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
+
+  self->window = window;
+  self->view = view;
+  return window;
 }
 
-// Implements GApplication::local_command_line.
+static void my_application_activate(GApplication* application) {
+  MyApplication* self = MY_APPLICATION(application);
+  if (self->window != nullptr) {
+    gtk_window_present(self->window);
+    return;
+  }
+  GtkWindow* window = my_application_create_window(self, application);
+  gtk_window_present(window);
+}
+
+static void my_application_open(GApplication* application, GFile** files,
+                                gint n_files, const gchar* /*hint*/) {
+  MyApplication* self = MY_APPLICATION(application);
+
+  if (n_files > 0 && files != nullptr) {
+    g_autofree gchar* path = g_file_get_path(files[0]);
+    if (path != nullptr) {
+      g_strfreev(self->dart_entrypoint_arguments);
+      self->dart_entrypoint_arguments = g_new0(char*, 2);
+      self->dart_entrypoint_arguments[0] = g_strdup(path);
+      self->dart_entrypoint_arguments[1] = nullptr;
+    }
+  }
+
+  if (self->window == nullptr) {
+    GtkWindow* window = my_application_create_window(self, application);
+    gtk_window_present(window);
+  } else {
+    gtk_window_present(self->window);
+  }
+}
+
 static gboolean my_application_local_command_line(GApplication* application,
                                                   gchar*** arguments,
                                                   int* exit_status) {
   MyApplication* self = MY_APPLICATION(application);
-  // Strip out the first argument as it is the binary name.
+
+  gint argc = g_strv_length(*arguments);
+  if (argc > 1024) {
+    g_warning("dacx: refusing to forward %d CLI arguments (cap is 1024)", argc);
+    *exit_status = 1;
+    return TRUE;
+  }
   self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
 
   g_autoptr(GError) error = nullptr;
@@ -89,25 +123,14 @@ static gboolean my_application_local_command_line(GApplication* application,
   return TRUE;
 }
 
-// Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application startup.
-
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 
-// Implements GApplication::shutdown.
 static void my_application_shutdown(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application shutdown.
-
   G_APPLICATION_CLASS(my_application_parent_class)->shutdown(application);
 }
 
-// Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
@@ -116,6 +139,7 @@ static void my_application_dispose(GObject* object) {
 
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
+  G_APPLICATION_CLASS(klass)->open = my_application_open;
   G_APPLICATION_CLASS(klass)->local_command_line =
       my_application_local_command_line;
   G_APPLICATION_CLASS(klass)->startup = my_application_startup;
@@ -126,13 +150,9 @@ static void my_application_class_init(MyApplicationClass* klass) {
 static void my_application_init(MyApplication* self) {}
 
 MyApplication* my_application_new() {
-  // Set the program name to the application ID, which helps various systems
-  // like GTK and desktop environments map this running application to its
-  // corresponding .desktop file. This ensures better integration by allowing
-  // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
-  return MY_APPLICATION(g_object_new(my_application_get_type(),
-                                     "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+  return MY_APPLICATION(g_object_new(
+      my_application_get_type(), "application-id", APPLICATION_ID, "flags",
+      G_APPLICATION_HANDLES_OPEN, nullptr));
 }

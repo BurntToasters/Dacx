@@ -11,6 +11,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
   private var openFileEventSink: FlutterEventSink?
   private var pendingOpenFiles: [String] = []
   private var channelsConfigured = false
+  private let mediaSessionBridge = MediaSessionBridge()
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
@@ -52,6 +53,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
 
     openFileMethodChannel = methodChannel
     openFileEventChannel = eventChannel
+    mediaSessionBridge.attach(messenger: messenger)
     channelsConfigured = true
   }
 
@@ -73,16 +75,15 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     }
   }
 
-  override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-    handleOpenFile(filename)
-    return true
-  }
-
-  override func application(_ application: NSApplication, openFiles filenames: [String]) {
-    for filename in filenames {
-      handleOpenFile(filename)
+  override func application(_ application: NSApplication, open urls: [URL]) {
+    super.application(application, open: urls)
+    for url in urls {
+      if url.isFileURL {
+        handleOpenFile(url.path)
+      } else {
+        handleOpenFile(url.absoluteString)
+      }
     }
-    NSApp.reply(toOpenOrPrint: .success)
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

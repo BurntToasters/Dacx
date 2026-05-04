@@ -143,6 +143,7 @@ class DebugLogService extends ChangeNotifier {
   String? _sanitizeDetailValue(String key, Object? value) {
     final text = value?.toString();
     if (text == null) return null;
+    if (_isSensitiveKey(key)) return '<redacted>';
     final normalized = text.replaceAll('\n', r'\n');
     if (_isPathLikeKey(key)) {
       return _redactPath(normalized);
@@ -168,10 +169,30 @@ class DebugLogService extends ChangeNotifier {
 
   bool _isPathLikeKey(String key) {
     final normalized = key.toLowerCase();
+    if (normalized == 'url' ||
+        normalized.endsWith('_url') ||
+        normalized.endsWith('uri')) {
+      return false;
+    }
     return normalized.contains('path') ||
         normalized.contains('file') ||
         normalized.contains('dir') ||
         normalized.contains('cwd');
+  }
+
+  bool _isSensitiveKey(String key) {
+    final normalized = key.toLowerCase();
+    return normalized.contains('token') ||
+        normalized.contains('secret') ||
+        normalized.contains('password') ||
+        normalized.contains('passwd') ||
+        normalized.contains('apikey') ||
+        normalized.contains('api_key') ||
+        normalized.contains('auth') ||
+        normalized.contains('email') ||
+        normalized.contains('user') ||
+        normalized.contains('cookie') ||
+        normalized.contains('session');
   }
 
   bool _looksLikePath(String value) {

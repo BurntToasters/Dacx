@@ -14,6 +14,7 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
@@ -117,6 +118,54 @@ function generateLinux() {
   }
 }
 
+// ── macOS — document type icns ───────────────────────────────
+
+function generateMacOSDocumentIcons() {
+  console.log("\n── macOS document icons ──");
+  if (process.platform !== "darwin") {
+    console.log("  (skipped: requires macOS iconutil)");
+    return;
+  }
+
+  const docs = [
+    {
+      source: path.join(root, "assets", "dacx_music_icon.png"),
+      out: path.join(root, "macos", "Runner", "dacx_music_icon.icns"),
+      label: "dacx_music_icon",
+    },
+  ];
+
+  const sizes = [
+    [16, "icon_16x16.png"],
+    [32, "icon_16x16@2x.png"],
+    [32, "icon_32x32.png"],
+    [64, "icon_32x32@2x.png"],
+    [128, "icon_128x128.png"],
+    [256, "icon_128x128@2x.png"],
+    [256, "icon_256x256.png"],
+    [512, "icon_256x256@2x.png"],
+    [512, "icon_512x512.png"],
+    [1024, "icon_512x512@2x.png"],
+  ];
+
+  for (const doc of docs) {
+    if (!fs.existsSync(doc.source)) {
+      console.warn(`  ! missing source: ${path.relative(root, doc.source)}`);
+      continue;
+    }
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `${doc.label}-`),
+    ) + ".iconset";
+    fs.mkdirSync(tmpDir, { recursive: true });
+    for (const [sz, name] of sizes) {
+      run(`sips -z ${sz} ${sz} "${doc.source}" --out "${path.join(tmpDir, name)}" >/dev/null`);
+    }
+    run(`iconutil -c icns "${tmpDir}" -o "${doc.out}"`);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    console.log(`  ✓ ${path.relative(root, doc.out)}`);
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────
 
 function main() {
@@ -139,6 +188,7 @@ function main() {
 
   generateWindows();
   generateMacOS();
+  generateMacOSDocumentIcons();
   generateLinux();
 
   console.log("\n✔ All platform icons generated.");

@@ -172,29 +172,48 @@ class UpdateService {
   bool _isLaunchableUrl(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null) return false;
-    return uri.hasScheme &&
-        uri.scheme == 'https' &&
-        uri.host.isNotEmpty &&
-        !uri.hasPort;
+    if (!uri.hasScheme || uri.scheme != 'https') return false;
+    if (uri.host.isEmpty) return false;
+    const allowedHosts = {
+      'github.com',
+      'www.github.com',
+      'objects.githubusercontent.com',
+    };
+    return allowedHosts.contains(uri.host.toLowerCase());
   }
 
-  static String _stripPreRelease(String v) => v.split('-').first;
+  static List<int> _numericParts(String version) {
+    return _stripPreRelease(
+      version,
+    ).split('.').map((p) => int.tryParse(p) ?? 0).toList(growable: false);
+  }
+
+  static String _stripPreRelease(String v) =>
+      v.split('-').first.split('+').first;
 
   bool _isNewer(String latest, String current) {
-    final latestParts = _stripPreRelease(
-      latest,
-    ).split('.').map(int.tryParse).toList();
-    final currentParts = _stripPreRelease(
-      current,
-    ).split('.').map(int.tryParse).toList();
+    final latestParts = _numericParts(latest);
+    final currentParts = _numericParts(current);
 
     for (var i = 0; i < 3; i++) {
-      final l = (i < latestParts.length ? latestParts[i] : 0) ?? 0;
-      final c = (i < currentParts.length ? currentParts[i] : 0) ?? 0;
+      final l = i < latestParts.length ? latestParts[i] : 0;
+      final c = i < currentParts.length ? currentParts[i] : 0;
       if (l > c) return true;
       if (l < c) return false;
     }
-    return false;
+    // Numeric components equal — compare pre-release tags. Per semver, a
+    // version without pre-release is considered greater than one with.
+    final latestPre = _preReleaseTag(latest);
+    final currentPre = _preReleaseTag(current);
+    if (latestPre.isEmpty && currentPre.isNotEmpty) return true;
+    if (latestPre.isNotEmpty && currentPre.isEmpty) return false;
+    return latestPre.compareTo(currentPre) > 0;
+  }
+
+  static String _preReleaseTag(String v) {
+    final dashIdx = v.indexOf('-');
+    if (dashIdx < 0) return '';
+    return v.substring(dashIdx + 1).split('+').first;
   }
 }
 

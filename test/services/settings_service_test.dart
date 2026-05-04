@@ -226,4 +226,148 @@ void main() {
       expect(prefs.getKeys(), isEmpty);
     });
   });
+
+  group('SettingsService.eqBands', () {
+    test('returns zeroed bands when unset', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.eqBands, List<double>.filled(10, 0));
+    });
+
+    test('clamps gains to +/-12 dB on write', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.eqBands = List<double>.filled(10, 99.0);
+      expect(service.eqBands, List<double>.filled(10, 12.0));
+      service.eqBands = List<double>.filled(10, -99.0);
+      expect(service.eqBands, List<double>.filled(10, -12.0));
+    });
+
+    test('falls back to zeros on corrupt JSON', () async {
+      SharedPreferences.setMockInitialValues({'eq_bands': 'not-json'});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.eqBands, List<double>.filled(10, 0));
+    });
+
+    test('cached read does not hit prefs after first call', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.eqBands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      // Mutating the underlying pref directly should NOT change the cached value.
+      await prefs.setString('eq_bands', jsonEncode(List<double>.filled(10, 0)));
+      expect(service.eqBands, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    });
+  });
+
+  group('SettingsService.keybinds', () {
+    test('empty when unset', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.keybinds, isEmpty);
+    });
+
+    test('round-trips action -> accelerators map', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.keybinds = {
+        'play_pause': ['Space', 'K'],
+        'seek_forward': ['Arrow Right'],
+      };
+      expect(service.keybinds['play_pause'], ['Space', 'K']);
+      expect(service.keybinds['seek_forward'], ['Arrow Right']);
+    });
+
+    test('returns empty map on corrupt JSON', () async {
+      SharedPreferences.setMockInitialValues({'keybinds_v1': 'broken'});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.keybinds, isEmpty);
+    });
+
+    test('resetKeybinds clears stored value and cache', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.keybinds = {
+        'a': ['X'],
+      };
+      service.resetKeybinds();
+      expect(service.keybinds, isEmpty);
+      expect(prefs.getString('keybinds_v1'), isNull);
+    });
+  });
+
+  group('SettingsService.resumePositions', () {
+    test('returns null when resume disabled', () async {
+      SharedPreferences.setMockInitialValues({
+        'resume_playback_enabled': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.saveResumePosition('/a.mp3', 5000);
+      expect(service.resumePositionFor('/a.mp3'), isNull);
+    });
+
+    test('save and read round-trip', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.saveResumePosition('/a.mp3', 12345);
+      expect(service.resumePositionFor('/a.mp3'), 12345);
+    });
+
+    test('null/zero clears the entry', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.saveResumePosition('/a.mp3', 12345);
+      service.saveResumePosition('/a.mp3', null);
+      expect(service.resumePositionFor('/a.mp3'), isNull);
+      service.saveResumePosition('/a.mp3', 99);
+      service.saveResumePosition('/a.mp3', 0);
+      expect(service.resumePositionFor('/a.mp3'), isNull);
+    });
+
+    test('LRU prunes oldest beyond maxResumeEntries', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      for (var i = 0; i < SettingsService.maxResumeEntries + 5; i++) {
+        service.saveResumePosition('/track$i.mp3', i + 1);
+      }
+      expect(service.resumePositionFor('/track0.mp3'), isNull);
+      expect(
+        service.resumePositionFor(
+          '/track${SettingsService.maxResumeEntries + 4}.mp3',
+        ),
+        isNotNull,
+      );
+    });
+
+    test('corrupt stored JSON is treated as empty', () async {
+      SharedPreferences.setMockInitialValues({
+        'resume_positions_v1': 'definitely-not-json',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.resumePositionFor('/a.mp3'), isNull);
+    });
+
+    test('clearAllResumePositions removes everything', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.saveResumePosition('/a.mp3', 100);
+      service.saveResumePosition('/b.mp3', 200);
+      service.clearAllResumePositions();
+      expect(service.resumePositionFor('/a.mp3'), isNull);
+      expect(service.resumePositionFor('/b.mp3'), isNull);
+    });
+  });
 }

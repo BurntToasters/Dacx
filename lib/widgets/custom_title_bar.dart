@@ -16,6 +16,15 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
+  // Default to assuming the native caption is hidden. main.dart explicitly
+  // sets TitleBarStyle.hidden and re-applies it before the window is shown,
+  // so in the overwhelming majority of launches no native caption exists.
+  // The probe below will flip this to true only if it positively detects a
+  // native caption (titleBarHeight > 8) AND failed re-applies of the hidden
+  // style cannot dismiss it. Defaulting to false avoids a known race where
+  // `getTitleBarHeight()` returns a stale large value during startup on some
+  // Windows DPI/compositor configurations, which previously caused the
+  // custom title bar to never render at all.
   bool _nativeCaptionVisible = false;
   int _startupProbeAttempts = 0;
   Timer? _startupProbeTimer;
@@ -29,6 +38,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     });
     unawaited(_refreshNativeCaptionVisibility());
     if (Platform.isWindows) {
+      // Probe more aggressively at startup so the custom bar can take over as
+      // soon as the native caption is reliably hidden. Keep going for up to
+      // ~6 seconds (50 * 120ms) to survive slow first-frame scenarios.
       _startupProbeTimer = Timer.periodic(const Duration(milliseconds: 120), (
         timer,
       ) {
@@ -38,7 +50,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         }
         _startupProbeAttempts += 1;
         unawaited(_refreshNativeCaptionVisibility());
-        if (_startupProbeAttempts >= 16) {
+        if (_startupProbeAttempts >= 50) {
           timer.cancel();
         }
       });
@@ -76,10 +88,14 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
       var titleBarHeight = await windowManager.getTitleBarHeight();
       var nativeCaptionVisible = titleBarHeight > 8;
       if (nativeCaptionVisible) {
-        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-        await Future<void>.delayed(const Duration(milliseconds: 42));
-        titleBarHeight = await windowManager.getTitleBarHeight();
-        nativeCaptionVisible = titleBarHeight > 8;
+        // Re-apply the hidden style and re-measure. Some Windows builds need a
+        // couple of attempts before the caption is actually removed.
+        for (var attempt = 0; attempt < 4 && nativeCaptionVisible; attempt++) {
+          await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+          await Future<void>.delayed(Duration(milliseconds: 60 + attempt * 40));
+          titleBarHeight = await windowManager.getTitleBarHeight();
+          nativeCaptionVisible = titleBarHeight > 8;
+        }
       }
       if (mounted && nativeCaptionVisible != _nativeCaptionVisible) {
         setState(() => _nativeCaptionVisible = nativeCaptionVisible);
@@ -99,7 +115,10 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     final isMac = Platform.isMacOS;
 
     return GestureDetector(
-      onPanStart: (_) => windowManager.startDragging(),
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) {
+        unawaited(windowManager.startDragging());
+      },
       onDoubleTap: () async {
         if (await windowManager.isMaximized()) {
           await windowManager.unmaximize();
@@ -135,6 +154,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
               if (!isMac) ...[
                 _WindowButton(
                   icon: Icons.minimize,
+                  semanticLabel: 'Minimize window',
                   onPressed: windowManager.minimize,
                   hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
                   iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
@@ -142,6 +162,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                 _WindowButton(
                   icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
                   iconSize: _isMaximized ? 14 : 16,
+                  semanticLabel: _isMaximized
+                      ? 'Restore window'
+                      : 'Maximize window',
                   onPressed: () async {
                     if (_isMaximized) {
                       await windowManager.unmaximize();
@@ -154,6 +177,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                 ),
                 _WindowButton(
                   icon: Icons.close,
+                  semanticLabel: 'Close window',
                   onPressed: windowManager.close,
                   hoverColor: Colors.red,
                   hoverIconColor: Colors.white,
@@ -175,6 +199,7 @@ class _WindowButton extends StatefulWidget {
   final Color hoverColor;
   final Color iconColor;
   final Color? hoverIconColor;
+  final String semanticLabel;
 
   const _WindowButton({
     required this.icon,
@@ -182,6 +207,7 @@ class _WindowButton extends StatefulWidget {
     required this.onPressed,
     required this.hoverColor,
     required this.iconColor,
+    required this.semanticLabel,
     this.hoverIconColor,
   });
 
@@ -194,28 +220,32 @@ class _WindowButtonState extends State<_WindowButton> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          width: 46,
-          height: 32,
-          color: _hovering ? widget.hoverColor : Colors.transparent,
-          child: Center(
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOutCubic,
-              scale: _hovering ? 1.05 : 1.0,
-              child: Icon(
-                widget.icon,
-                size: widget.iconSize,
-                color: _hovering && widget.hoverIconColor != null
-                    ? widget.hoverIconColor
-                    : widget.iconColor,
+    return Semantics(
+      button: true,
+      label: widget.semanticLabel,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            width: 46,
+            height: 32,
+            color: _hovering ? widget.hoverColor : Colors.transparent,
+            child: Center(
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOutCubic,
+                scale: _hovering ? 1.05 : 1.0,
+                child: Icon(
+                  widget.icon,
+                  size: widget.iconSize,
+                  color: _hovering && widget.hoverIconColor != null
+                      ? widget.hoverIconColor
+                      : widget.iconColor,
+                ),
               ),
             ),
           ),

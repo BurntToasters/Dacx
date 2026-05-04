@@ -24,11 +24,54 @@
   <url type="homepage">https://github.com/BurntToasters/Dacx</url>
   <url type="bugtracker">https://github.com/BurntToasters/Dacx/issues</url>
   <url type="vcs-browser">https://github.com/BurntToasters/Dacx</url>
+  <url type="help">https://help.rosie.run/dacx/en-us/faq</url>
+  <url type="donation">https://rosie.run/support</url>
   <content_rating type="oars-1.1" />
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>audio</keyword>
+    <keyword>video</keyword>
+    <keyword>media</keyword>
+    <keyword>player</keyword>
+    <keyword>mpv</keyword>
+    <keyword>flutter</keyword>
+  </keywords>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Dacx playing media with a clean dark interface</caption>
+      <image>https://raw.githubusercontent.com/BurntToasters/Dacx/main/assets/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">480</display_length>
+  </requires>
   <provides>
     <binary>dacx</binary>
+    <mediatype>audio/mpeg</mediatype>
+    <mediatype>audio/flac</mediatype>
+    <mediatype>audio/wav</mediatype>
+    <mediatype>audio/ogg</mediatype>
+    <mediatype>audio/aac</mediatype>
+    <mediatype>audio/x-m4a</mediatype>
+    <mediatype>audio/opus</mediatype>
+    <mediatype>video/mp4</mediatype>
+    <mediatype>video/x-matroska</mediatype>
+    <mediatype>video/webm</mediatype>
+    <mediatype>video/quicktime</mediatype>
   </provides>
   <releases>
+    <release version="0.6.0" date="2026-05-01"/>
     <release version="0.5.0" date="2026-04-29"/>
     <release version="0.4.1" date="2026-04-29"/>
     <release version="0.4.0" date="2026-04-25"/>

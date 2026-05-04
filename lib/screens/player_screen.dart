@@ -16,9 +16,15 @@ import '../services/player_shortcuts_service.dart';
 import '../services/settings_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/debug_log_service.dart';
+import '../services/equalizer_service.dart';
+import '../services/media_session_service.dart';
+import '../services/playlist_service.dart';
+import '../services/seek_preview_service.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/osd_overlay.dart';
+import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
 
@@ -62,6 +68,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final PlayerService _playerService;
   late final VideoController _videoController;
   late final UpdateService _updateService;
+  late final SeekPreviewService _seekPreviewService;
 
   SettingsService get _settings => widget.settings;
 
@@ -71,6 +78,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasVideoOutput = false;
   bool _hasAlbumArtTrack = false;
   String? _albumArtTrackId;
+  bool _mixActive = false;
+  List<String>? _cachedAudioIds;
+  List<String>? _cachedVideoIds;
+  bool _mixReloadInFlight = false;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -94,6 +105,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final List<StreamSubscription> _subscriptions = [];
   Future<void> _loadQueue = Future<void>.value();
   bool _isDisposed = false;
+
+  // Tracks / chapters / OSD state
+  Tracks? _currentTracks;
+  Track? _currentTrackSelection;
+  List<_ChapterInfo> _chapters = const [];
+  bool _subtitlesVisible = true;
+  bool _osdVisible = false;
+  String? _osdTransientMessage;
+  Timer? _osdHideTimer;
+  late final MediaSessionService _mediaSession;
+  late final PlaylistService _playlist;
+
+  // Compact mini-player mode (PiP-style on desktop).
+  bool _compactMode = false;
+  Size? _preCompactSize;
+  Offset? _preCompactPos;
+  bool _preCompactAlwaysOnTop = false;
+  static const Size _compactWindowSize = Size(480, 320);
+
+  // Resume-position bookkeeping.
+  Timer? _resumeSaveTimer;
+  String? _resumePathInProgress;
 
   void _log(
     String event, {
@@ -124,6 +157,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       debugSource: 'player_screen',
     );
     _playerService = PlayerService();
+    _seekPreviewService = SeekPreviewService();
+    unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     _settings.pruneRecentFiles(notifyListeners: false);
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
@@ -172,11 +207,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subscriptions.addAll([
       _playerService.positionStream.listen((pos) {
         if (!mounted || _isDisposed || _isSeeking) return;
-        setState(() => _position = pos);
+        final dMs = (pos.inMilliseconds - _position.inMilliseconds).abs();
+        final shouldRender =
+            dMs >= 200 || (pos.inSeconds != _position.inSeconds);
+        if (shouldRender) {
+          setState(() => _position = pos);
+        } else {
+          _position = pos;
+        }
+        if (_settings.mediaSessionEnabled) {
+          unawaited(_mediaSession.updatePosition(pos, playing: _isPlaying));
+        }
       }),
       _playerService.durationStream.listen((dur) {
         if (!mounted || _isDisposed) return;
         setState(() => _duration = dur);
+        if (dur.inMilliseconds > 0 && _settings.mediaSessionEnabled) {
+          final path = _currentFile;
+          if (path != null) {
+            unawaited(
+              _mediaSession.updateMetadata(
+                title: p.basenameWithoutExtension(path),
+                duration: dur,
+              ),
+            );
+          }
+        }
         if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
           _log(
             'duration_updated',
@@ -187,6 +243,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playerService.playingStream.listen((playing) {
         if (!mounted || _isDisposed) return;
         setState(() => _isPlaying = playing);
+        if (_settings.mediaSessionEnabled) {
+          unawaited(_mediaSession.updatePosition(_position, playing: playing));
+        }
         if (widget.debugLog.isEnabled) {
           _log(
             'playing_state_changed',
@@ -219,6 +278,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }),
       _playerService.player.stream.tracks.listen((tracks) {
         if (!mounted || _isDisposed) return;
+        _currentTracks = tracks;
         final albumArtTrack = _firstEmbeddedAlbumArtTrack(tracks);
         final hasAlbumArt = albumArtTrack != null;
         final nextTrackId = albumArtTrack?.id;
@@ -253,14 +313,63 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
         }
       }),
+      _playerService.tracksStream.listen((tracks) {
+        if (!mounted || _isDisposed) return;
+        unawaited(_refreshChapters());
+        // Cache numeric ids so the next open() can pre-set lavfi-complex.
+        final aIds = tracks.audio
+            .where((t) => t.id != 'auto' && t.id != 'no')
+            .map((t) => t.id)
+            .where((id) => int.tryParse(id) != null)
+            .toList(growable: false);
+        final vIds = tracks.video
+            .where((t) => t.id != 'auto' && t.id != 'no')
+            .map((t) => t.id)
+            .where((id) => int.tryParse(id) != null)
+            .toList(growable: false);
+        if (aIds.isNotEmpty) _cachedAudioIds = aIds;
+        if (vIds.isNotEmpty) _cachedVideoIds = vIds;
+        if (_settings.multiAudioMix &&
+            aIds.length >= 2 &&
+            !_mixActive &&
+            !_mixReloadInFlight) {
+          unawaited(_reloadCurrentForMixChange());
+        }
+      }),
       _playerService.completedStream.listen((completed) {
         if (!mounted || _isDisposed || !completed) return;
         setState(() => _position = Duration.zero);
         if (widget.debugLog.isEnabled) {
           _log('playback_completed');
         }
+        // File ran to end → drop saved resume position.
+        if (_currentFile != null) {
+          _settings.saveResumePosition(_currentFile!, null);
+        }
+        // Try to advance the playlist (loop-mode `none` only).
+        if (_settings.loopMode == LoopMode.none) {
+          unawaited(_advancePlaylist(1, fromCompletion: true));
+        }
+      }),
+      _playerService.trackStream.listen((track) {
+        if (!mounted || _isDisposed) return;
+        _currentTrackSelection = track;
       }),
     ]);
+
+    // Media session
+    _mediaSession = MediaSessionService(debugLog: widget.debugLog);
+    unawaited(_mediaSession.init(enabled: _settings.mediaSessionEnabled));
+    _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
+
+    // Playlist (in-memory; reflects shuffle from settings).
+    _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
+
+    // Periodic resume-position saver (every 5s while playing).
+    _resumeSaveTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _persistResumePosition(),
+    );
 
     // Listen for settings changes (speed, loop, always-on-top).
     _settings.addListener(_onSettingsChanged);
@@ -283,12 +392,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _isDisposed = true;
+    _osdHideTimer?.cancel();
+    _resumeSaveTimer?.cancel();
+    _persistResumePosition();
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
     for (final sub in _subscriptions) {
       sub.cancel();
     }
-    _playerService.dispose();
+    unawaited(_mediaSession.dispose());
+    _playlist.dispose();
+    try {
+      _videoController.player.dispose();
+    } catch (_) {}
+    unawaited(_seekPreviewService.dispose());
+    unawaited(_playerService.dispose());
     super.dispose();
   }
 
@@ -305,6 +423,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
+    unawaited(_applyEqualizer());
+    unawaited(_applyMultiAudioMix());
+    unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
     unawaited(
       windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
         Object e,
@@ -652,6 +773,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     final gen = ++_loadGen;
     if (!mounted || _isDisposed) return;
+    // Persist resume position for the previous file before switching.
+    _persistResumePosition();
+    _resumePathInProgress = null;
     setState(() {
       _currentFile = normalizedPath;
       _isAudioFile = _audioExtensions.contains(ext);
@@ -670,6 +794,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     try {
+      String preOpenLavfi = '';
+      if (_settings.multiAudioMix &&
+          _cachedAudioIds != null &&
+          _cachedAudioIds!.length >= 2) {
+        final aIds = _cachedAudioIds!;
+        final audioBranch = _buildMultiAudioMixBranch(aIds);
+        if (_cachedVideoIds != null && _cachedVideoIds!.isNotEmpty) {
+          preOpenLavfi =
+              '[vid${_cachedVideoIds!.first}] null [vo] ; $audioBranch';
+        } else {
+          preOpenLavfi = audioBranch;
+        }
+      }
+      await _playerService.setProperty('lavfi-complex', preOpenLavfi);
+      _mixActive = preOpenLavfi.isNotEmpty;
       await _playerService.open(normalizedPath, play: _settings.autoPlay);
     } catch (e) {
       final permissionDenied = _isPermissionDeniedError(e);
@@ -686,6 +825,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _isAudioFile = false;
           _albumArtTrackId = null;
         });
+        _resumePathInProgress = null;
+        unawaited(_seekPreviewService.setSource(null));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -700,6 +841,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     if (gen != _loadGen || _isDisposed) return;
+
+    // Load the same source into the seek preview service (no-op when the
+    // feature is disabled or for audio-only files).
+    if (!_isAudioFile) {
+      unawaited(_seekPreviewService.setSource(normalizedPath));
+    } else {
+      unawaited(_seekPreviewService.setSource(null));
+    }
 
     _log(
       'file_load_succeeded',
@@ -730,18 +879,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (mounted && !_isDisposed && gen == _loadGen) {
       setState(() {});
     }
+
+    // Apply post-load settings: equalizer, multi-audio mix, refresh chapters,
+    // and publish to media session.
+    _resumePathInProgress = normalizedPath;
+    unawaited(_applyEqualizer());
+    unawaited(_refreshChapters());
+    unawaited(_applyMultiAudioMix());
+    unawaited(_maybeApplyResume(normalizedPath));
+    unawaited(
+      _mediaSession.updateMetadata(
+        title: p.basenameWithoutExtension(normalizedPath),
+        duration: _duration,
+      ),
+    );
   }
 
   void _onDragDone(DropDoneDetails details) {
-    if (details.files.isNotEmpty) {
-      _log(
-        'drop_file_received',
-        detailsBuilder: () => {
-          'path': details.files.first.path,
-          'count': details.files.length,
-        },
-      );
-      unawaited(_loadFile(details.files.first.path));
+    if (details.files.isEmpty) return;
+    final paths = details.files
+        .map((f) => f.path)
+        .where((s) => s.trim().isNotEmpty)
+        .toList(growable: false);
+    if (paths.isEmpty) {
+      _log('drop_file_invalid_path', severity: DebugSeverity.warn);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read dropped file path.')),
+        );
+      }
+      return;
+    }
+    _log(
+      'drop_file_received',
+      detailsBuilder: () => {'path': paths.first, 'count': paths.length},
+    );
+    if (paths.length == 1) {
+      unawaited(_loadFile(paths.first));
+    } else {
+      _enqueue(paths, playNow: true);
     }
   }
 
@@ -862,11 +1038,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final hk = HardwareKeyboard.instance;
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.f1 ||
+            (event.logicalKey == LogicalKeyboardKey.question) ||
+            (event.logicalKey == LogicalKeyboardKey.slash &&
+                hk.isShiftPressed))) {
+      unawaited(_showKeybindsDialog());
+      return KeyEventResult.handled;
+    }
+    final custom = _settings.keybinds;
     final shortcut = PlayerShortcutsService.resolve(
       event: event,
       hasMedia: _currentFile != null,
       isMetaPressed: hk.isMetaPressed,
       isControlPressed: hk.isControlPressed,
+      isShiftPressed: hk.isShiftPressed,
+      isAltPressed: hk.isAltPressed,
+      customBindings: custom.isEmpty ? null : custom,
     );
 
     switch (shortcut) {
@@ -918,6 +1106,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case PlayerShortcutAction.exitFullscreen:
         _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
         unawaited(_exitFullscreen());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.chapterNext:
+        _log('shortcut_chapter_next', category: DebugLogCategory.ui);
+        unawaited(_stepChapter(1));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.chapterPrev:
+        _log('shortcut_chapter_prev', category: DebugLogCategory.ui);
+        unawaited(_stepChapter(-1));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.screenshot:
+        _log('shortcut_screenshot', category: DebugLogCategory.ui);
+        unawaited(_takeScreenshot());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.cycleAudioTrack:
+        _log('shortcut_cycle_audio', category: DebugLogCategory.ui);
+        unawaited(_cycleAudioTrack());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.cycleSubtitleTrack:
+        _log('shortcut_cycle_sub', category: DebugLogCategory.ui);
+        unawaited(_cycleSubtitleTrack());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.toggleSubtitle:
+        _log('shortcut_toggle_sub', category: DebugLogCategory.ui);
+        unawaited(_toggleSubtitleVisibility());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.toggleEqualizer:
+        _log('shortcut_toggle_eq', category: DebugLogCategory.ui);
+        _toggleEqualizer();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.playlistNext:
+        _log('shortcut_playlist_next', category: DebugLogCategory.ui);
+        unawaited(_advancePlaylist(1));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.playlistPrev:
+        _log('shortcut_playlist_prev', category: DebugLogCategory.ui);
+        unawaited(_advancePlaylist(-1));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.toggleCompactMode:
+        _log('shortcut_toggle_compact', category: DebugLogCategory.ui);
+        unawaited(_toggleCompactMode());
         return KeyEventResult.handled;
       case null:
         return KeyEventResult.ignored;
@@ -999,14 +1227,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  bool _fullscreenToggleInFlight = false;
+
   Future<void> _toggleFullscreen() async {
+    if (_fullscreenToggleInFlight) return;
+    _fullscreenToggleInFlight = true;
     try {
       final enabled = await windowManager.isFullScreen();
       await windowManager.setFullScreen(!enabled);
+      // Verify state actually changed (Wayland / tiling WMs may reject).
+      final actual = await windowManager.isFullScreen();
+      if (actual == enabled && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fullscreen change rejected by window manager.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       _log(
         'fullscreen_toggled',
         category: DebugLogCategory.ui,
-        detailsBuilder: () => {'enabled': !enabled},
+        detailsBuilder: () => {'requested': !enabled, 'actual': actual},
       );
     } catch (e) {
       _log(
@@ -1015,6 +1257,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         message: e.toString(),
         severity: DebugSeverity.warn,
       );
+    } finally {
+      _fullscreenToggleInFlight = false;
     }
   }
 
@@ -1119,7 +1363,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                         );
                                         unawaited(_toggleFullscreen());
                                       },
-                                child: _buildMediaSurface(),
+                                child: MouseRegion(
+                                  onHover: (_) => _pulseOsd(),
+                                  child: Stack(
+                                    children: [
+                                      Positioned.fill(
+                                        child: _buildMediaSurface(),
+                                      ),
+                                      if (_currentFile != null &&
+                                          _settings.osdEnabled)
+                                        Positioned.fill(
+                                          child: OsdOverlay(
+                                            title: _osdTitle,
+                                            position: _position,
+                                            duration: _duration,
+                                            visible: _osdVisible,
+                                            transientMessage:
+                                                _stripOsdTimestamp(
+                                                  _osdTransientMessage,
+                                                ),
+                                          ),
+                                        ),
+                                      if (_compactMode)
+                                        Positioned(
+                                          top: 8,
+                                          left: 8,
+                                          child: _CompactExitButton(
+                                            onPressed: () =>
+                                                unawaited(_toggleCompactMode()),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                             IgnorePointer(
@@ -1180,21 +1456,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         Expanded(
-                          child: Slider(
-                            value: _position.inMilliseconds.toDouble().clamp(
-                              0.0,
-                              _duration.inMilliseconds.toDouble(),
-                            ),
-                            max: _duration.inMilliseconds.toDouble(),
-                            onChangeStart: (_) => _isSeeking = true,
-                            onChanged: (value) {
+                          child: SeekSliderWithHover(
+                            position: _position,
+                            duration: _duration,
+                            previewService: _seekPreviewService,
+                            previewEnabled:
+                                _settings.seekPreviewEnabled && !_isAudioFile,
+                            onSeekStart: () => _isSeeking = true,
+                            onSeekChange: (value) {
                               setState(() {
                                 _position = Duration(
                                   milliseconds: value.toInt(),
                                 );
                               });
                             },
-                            onChangeEnd: (value) {
+                            onSeekEnd: (value) {
                               _isSeeking = false;
                               unawaited(
                                 _playerService
@@ -1238,6 +1514,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onStop: () async {
               _log('control_stop_pressed', category: DebugLogCategory.ui);
               await _playerService.stop();
+              unawaited(_seekPreviewService.setSource(null));
               setState(() {
                 _currentFile = null;
                 _isAudioFile = false;
@@ -1277,6 +1554,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             },
             onRecentFileSelected: _loadRecentFile,
             onSettingsPressed: _openSettings,
+            onMoreActions: _showMoreMenu,
           ),
         ],
       ),
@@ -1512,5 +1790,1304 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     }
     return null;
+  }
+
+  // ── OSD ────────────────────────────────────────────────────
+
+  void _pulseOsd() {
+    if (!_settings.osdEnabled) return;
+    if (!mounted) return;
+    if (!_osdVisible) setState(() => _osdVisible = true);
+    _osdHideTimer?.cancel();
+    _osdHideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _osdVisible = false);
+    });
+  }
+
+  void _showOsdMessage(String msg) {
+    if (!_settings.osdEnabled || !mounted) return;
+    setState(
+      () => _osdTransientMessage =
+          '$msg\u2009·\u2009${DateTime.now().millisecondsSinceEpoch}',
+    );
+    // include timestamp suffix to force OSD to register a fresh message even
+    // when the underlying text is identical to the previous transient
+  }
+
+  String get _osdTitle {
+    if (_currentFile == null) return '';
+    return p.basenameWithoutExtension(_currentFile!);
+  }
+
+  String _stripOsdTimestamp(String? raw) {
+    if (raw == null) return '';
+    final i = raw.indexOf('\u2009·\u2009');
+    return i == -1 ? raw : raw.substring(0, i);
+  }
+
+  // ── Tracks: audio / subtitle cycling ──────────────────────
+
+  Future<void> _cycleAudioTrack() async {
+    final tracks = _currentTracks;
+    if (tracks == null || tracks.audio.length <= 1) return;
+    final list = tracks.audio
+        .where((t) => t.id != 'auto' && t.id != 'no')
+        .toList(growable: false);
+    if (list.isEmpty) return;
+    final current = _currentTrackSelection?.audio.id;
+    final idx = list.indexWhere((t) => t.id == current);
+    final next = list[(idx + 1) % list.length];
+    await _disableMixForManualTrackSelection();
+    await _playerService.setAudioTrack(next);
+    _showOsdMessage(
+      'Audio: ${_trackLabel(next.title, next.language, next.id)}',
+    );
+  }
+
+  Future<void> _cycleSubtitleTrack() async {
+    final tracks = _currentTracks;
+    if (tracks == null) return;
+    final list = [
+      SubtitleTrack.no(),
+      ...tracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no'),
+    ];
+    if (list.length <= 1) return;
+    final current = _currentTrackSelection?.subtitle.id;
+    final idx = list.indexWhere((t) => t.id == current);
+    final next = list[(idx + 1) % list.length];
+    await _playerService.setSubtitleTrack(next);
+    _subtitlesVisible = next.id != 'no';
+    _showOsdMessage(
+      next.id == 'no'
+          ? 'Subtitles: Off'
+          : 'Subtitles: ${_trackLabel(next.title, next.language, next.id)}',
+    );
+  }
+
+  Future<void> _toggleSubtitleVisibility() async {
+    final tracks = _currentTracks;
+    if (tracks == null) return;
+    if (_subtitlesVisible) {
+      await _playerService.setSubtitleTrack(SubtitleTrack.no());
+      _subtitlesVisible = false;
+      _showOsdMessage('Subtitles: Off');
+    } else {
+      final candidate = tracks.subtitle.firstWhere(
+        (t) => t.id != 'no' && t.id != 'auto',
+        orElse: SubtitleTrack.auto,
+      );
+      await _playerService.setSubtitleTrack(candidate);
+      _subtitlesVisible = true;
+      _showOsdMessage(
+        'Subtitles: ${_trackLabel(candidate.title, candidate.language, candidate.id)}',
+      );
+    }
+  }
+
+  String _trackLabel(String? title, String? language, String fallbackId) {
+    final parts = <String>[];
+    if (title != null && title.trim().isNotEmpty) parts.add(title.trim());
+    if (language != null && language.trim().isNotEmpty) {
+      parts.add(language.trim());
+    }
+    if (parts.isEmpty) return 'Track $fallbackId';
+    return parts.join(' · ');
+  }
+
+  // ── Chapters ──────────────────────────────────────────────
+
+  Future<void> _refreshChapters() async {
+    final raw = await _playerService.getProperty('chapter-list/count');
+    final count = int.tryParse(raw ?? '') ?? 0;
+    if (count <= 0) {
+      if (_chapters.isNotEmpty && mounted) setState(() => _chapters = const []);
+      return;
+    }
+    final list = <_ChapterInfo>[];
+    for (var i = 0; i < count; i++) {
+      final title = await _playerService.getProperty('chapter-list/$i/title');
+      final timeStr = await _playerService.getProperty('chapter-list/$i/time');
+      final time = double.tryParse(timeStr ?? '') ?? 0;
+      list.add(
+        _ChapterInfo(
+          index: i,
+          title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
+          time: Duration(milliseconds: (time * 1000).round()),
+        ),
+      );
+    }
+    if (mounted) setState(() => _chapters = list);
+  }
+
+  Future<void> _stepChapter(int delta) async {
+    if (_chapters.isEmpty) {
+      await _refreshChapters();
+    }
+    if (_chapters.isEmpty) return;
+    final current = await _playerService.getProperty('chapter');
+    final idx = int.tryParse(current ?? '') ?? 0;
+    final next = (idx + delta).clamp(0, _chapters.length - 1);
+    await _playerService.setChapter(next);
+    _showOsdMessage('Chapter: ${_chapters[next].title}');
+  }
+
+  // ── Screenshot ────────────────────────────────────────────
+
+  Future<void> _takeScreenshot() async {
+    if (_currentFile == null) return;
+    final fmt = _settings.screenshotFormat;
+    final mime = fmt == 'png' ? 'image/png' : 'image/jpeg';
+    final bytes = await _playerService.screenshot(format: mime);
+    if (bytes == null) {
+      _showOsdMessage('Screenshot failed');
+      return;
+    }
+    final dir = _settings.screenshotDir ?? _defaultScreenshotDir();
+    try {
+      Directory(dir).createSync(recursive: true);
+    } catch (_) {}
+    final base = p.basenameWithoutExtension(_currentFile!);
+    final ts = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .split('.')
+        .first;
+    final outPath = p.join(dir, '${base}_$ts.$fmt');
+    try {
+      await File(outPath).writeAsBytes(bytes, flush: true);
+      _showOsdMessage('Screenshot saved');
+      _log(
+        'screenshot_saved',
+        detailsBuilder: () => {'path': outPath, 'bytes': bytes.length},
+      );
+    } catch (e) {
+      _showOsdMessage('Screenshot save failed');
+      _log(
+        'screenshot_save_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
+  String _defaultScreenshotDir() {
+    final home =
+        Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '.';
+    return p.join(home, 'Pictures', 'DACX');
+  }
+
+  // ── Equalizer ─────────────────────────────────────────────
+
+  Future<void> _applyEqualizer() async {
+    if (!_settings.eqEnabled) {
+      await _playerService.setAudioFilter('');
+      return;
+    }
+    final chain = EqualizerService.buildAfChain(_settings.eqBands);
+    await _playerService.setAudioFilter(chain);
+  }
+
+  void _toggleEqualizer() {
+    _settings.eqEnabled = !_settings.eqEnabled;
+    unawaited(_applyEqualizer());
+    _showOsdMessage('Equalizer: ${_settings.eqEnabled ? 'On' : 'Off'}');
+  }
+
+  // ── Multi-audio mix ───────────────────────────────────────
+
+  /// Build the audio branch of a lavfi-complex chain
+  String _buildMultiAudioMixBranch(List<String> audioIds) {
+    final buf = StringBuffer();
+    for (var i = 0; i < audioIds.length; i++) {
+      buf.write(
+        '[aid${audioIds[i]}] '
+        'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo '
+        '[a${i + 1}] ; ',
+      );
+    }
+    for (var i = 0; i < audioIds.length; i++) {
+      buf.write('[a${i + 1}]');
+    }
+    buf.write(' amix=inputs=${audioIds.length}:normalize=0 [ao]');
+    return buf.toString();
+  }
+
+  Future<void> _applyMultiAudioMix({bool announce = false}) async {
+    final tracks = _currentTracks;
+    if (tracks == null) return;
+    final ids = tracks.audio
+        .where((t) => t.id != 'auto' && t.id != 'no')
+        .map((t) => t.id)
+        .toList(growable: false);
+    final shouldMix = _settings.multiAudioMix && ids.length >= 2;
+    if (!shouldMix) {
+      // Always clear the property in case a previous file left a graph.
+      await _playerService.setProperty('lavfi-complex', '');
+      if (_mixActive) {
+        _mixActive = false;
+        if (announce) _showOsdMessage('Audio mix off');
+      }
+      return;
+    }
+    // Validate IDs are numeric — mpv's lavfi-complex labels are [aid<N>]
+    // where <N> must be the integer track-id reported in track-list.
+    final invalid = ids.where((id) => int.tryParse(id) == null).toList();
+    if (invalid.isNotEmpty) {
+      _log(
+        'multi_audio_mix_invalid_ids',
+        message: 'non-numeric audio track ids: ${invalid.join(',')}',
+        severity: DebugSeverity.warn,
+      );
+      if (announce) _showOsdMessage('Cannot mix: unsupported track ids');
+      return;
+    }
+    final audioChain = _buildMultiAudioMixBranch(ids);
+    String chain = audioChain;
+    final videoIds = tracks.video
+        .where((t) => t.id != 'auto' && t.id != 'no')
+        .map((t) => t.id)
+        .where((id) => int.tryParse(id) != null)
+        .toList(growable: false);
+    if (videoIds.isNotEmpty) {
+      chain = '[vid${videoIds.first}] null [vo] ; $audioChain';
+    }
+    _log(
+      'multi_audio_mix_apply',
+      detailsBuilder: () => {
+        'track_count': ids.length,
+        'track_ids': ids.join(','),
+        'chain': chain,
+      },
+    );
+    final ok = await _playerService.setProperty('lavfi-complex', chain);
+    if (ok) {
+      final wasActive = _mixActive;
+      _mixActive = true;
+      if (announce || !wasActive) {
+        _showOsdMessage('Mixing ${ids.length} audio tracks');
+      }
+    } else {
+      _mixActive = false;
+      _log('multi_audio_mix_setproperty_failed', severity: DebugSeverity.warn);
+      if (announce) _showOsdMessage('Could not enable audio mix');
+    }
+  }
+
+  Future<void> _reloadCurrentForMixChange() async {
+    final path = _currentFile;
+    if (path == null) return;
+    if (_mixReloadInFlight) return;
+    _mixReloadInFlight = true;
+    try {
+      final savedPos = _position;
+      await _loadFile(path);
+      if (savedPos > Duration.zero) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (mounted && _position < const Duration(seconds: 1)) {
+          unawaited(_playerService.seek(savedPos));
+        }
+      }
+    } finally {
+      _mixReloadInFlight = false;
+    }
+  }
+
+  Future<void> _disableMixForManualTrackSelection() async {
+    if (!_settings.multiAudioMix && !_mixActive) return;
+    final wasActive = _mixActive;
+    if (_settings.multiAudioMix) {
+      _settings.multiAudioMix = false;
+    }
+    await _playerService.setProperty('lavfi-complex', '');
+    _mixActive = false;
+    if (wasActive) {
+      await _reloadCurrentForMixChange();
+    }
+  }
+
+  // ── Media session command bridge ──────────────────────────
+
+  void _onMediaSessionCommand(MediaSessionCommand cmd) {
+    switch (cmd.action) {
+      case 'play':
+      case 'pause':
+      case 'toggle':
+        unawaited(_playerService.playPause());
+        break;
+      case 'stop':
+        unawaited(_playerService.stop());
+        break;
+      case 'next':
+        unawaited(_advancePlaylist(1));
+        break;
+      case 'previous':
+        unawaited(_advancePlaylist(-1));
+        break;
+      case 'seek':
+        if (cmd.positionMs != null) {
+          unawaited(
+            _playerService.seek(Duration(milliseconds: cmd.positionMs!)),
+          );
+        }
+        break;
+    }
+  }
+
+  // ── Resume position ─────────────────────────────────
+
+  void _persistResumePosition() {
+    if (!_settings.resumePlaybackEnabled) return;
+    final path = _resumePathInProgress;
+    if (path == null) return;
+    final pos = _position;
+    final dur = _duration;
+    if (pos.inSeconds < SettingsService.resumeMinElapsedSeconds) return;
+    if (dur.inSeconds > 0 &&
+        (dur - pos).inSeconds < SettingsService.resumeTailIgnoreSeconds) {
+      _settings.saveResumePosition(path, null);
+      return;
+    }
+    _settings.saveResumePosition(path, pos.inMilliseconds);
+  }
+
+  Future<void> _maybeApplyResume(String path) async {
+    final ms = _settings.resumePositionFor(path);
+    if (ms == null || ms <= 0) return;
+    // Wait briefly until duration is known so we don't seek beyond end.
+    for (var i = 0; i < 20; i++) {
+      if (_duration.inMilliseconds > 0) break;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (_isDisposed || _currentFile != path) return;
+    }
+    if (_duration.inMilliseconds > 0 &&
+        ms >=
+            _duration.inMilliseconds -
+                SettingsService.resumeTailIgnoreSeconds * 1000) {
+      _settings.saveResumePosition(path, null);
+      return;
+    }
+    try {
+      await _playerService.seek(Duration(milliseconds: ms));
+      if (mounted) {
+        _showOsdMessage('Resumed at ${_formatHms(Duration(milliseconds: ms))}');
+      }
+    } catch (_) {}
+  }
+
+  static String _formatHms(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '${d.inMinutes.remainder(60)}:$s';
+  }
+
+  // ── Playlist ────────────────────────────────────────
+
+  Future<void> _advancePlaylist(
+    int delta, {
+    bool fromCompletion = false,
+  }) async {
+    if (_playlist.isEmpty) return;
+    final next = _playlist.advance(delta);
+    if (next == null) return;
+    _showOsdMessage(delta > 0 ? 'Next in queue' : 'Previous in queue');
+    await _loadFile(next);
+  }
+
+  void _enqueue(List<String> paths, {bool playNow = false}) {
+    if (paths.isEmpty) return;
+    if (playNow || _playlist.isEmpty) {
+      _playlist.replace(paths);
+      final first = _playlist.current;
+      if (first != null) unawaited(_loadFile(first));
+    } else {
+      _playlist.addAll(paths);
+      _showOsdMessage(
+        paths.length == 1 ? 'Added to queue' : 'Added ${paths.length} to queue',
+      );
+    }
+  }
+
+  // ── Compact / mini-player mode ────────────────────────────
+
+  Future<void> _toggleCompactMode() async {
+    if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) return;
+    if (_compactMode) {
+      // Restore window state.
+      try {
+        if (_preCompactSize != null) {
+          await windowManager.setSize(_preCompactSize!);
+        }
+        if (_preCompactPos != null) {
+          await windowManager.setPosition(_preCompactPos!);
+        }
+        await windowManager.setAlwaysOnTop(_preCompactAlwaysOnTop);
+      } catch (_) {}
+      setState(() => _compactMode = false);
+      _showOsdMessage('Mini-player off');
+    } else {
+      try {
+        _preCompactSize = await windowManager.getSize();
+        _preCompactPos = await windowManager.getPosition();
+        _preCompactAlwaysOnTop = _settings.alwaysOnTop;
+        if (await windowManager.isFullScreen()) {
+          await windowManager.setFullScreen(false);
+        }
+        await windowManager.setSize(_compactWindowSize);
+        await windowManager.setAlwaysOnTop(true);
+      } catch (_) {}
+      setState(() => _compactMode = true);
+      _showOsdMessage('Mini-player on');
+    }
+  }
+
+  // ── More menu ─────────────────────────────────────────────
+
+  void _showMoreMenu() async {
+    final tracks = _currentTracks;
+    final hasAudioOptions = tracks != null && tracks.audio.length > 1;
+    final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
+    if (_chapters.isEmpty) await _refreshChapters();
+    if (!mounted) return;
+    final hasChapters = _chapters.isNotEmpty;
+
+    final result = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withValues(alpha: 0.20),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (ctx, _, _) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final experimentalAmber = Color.lerp(cs.tertiary, Colors.amber, 0.72)!;
+        final experimentalBackground = Color.alphaBlend(
+          experimentalAmber.withValues(alpha: isDark ? 0.16 : 0.11),
+          cs.surface,
+        );
+        final experimentalBorder = experimentalAmber.withValues(
+          alpha: isDark ? 0.45 : 0.36,
+        );
+        final experimentalIcon = Color.lerp(
+          experimentalAmber,
+          isDark ? Colors.amber.shade200 : Colors.amber.shade700,
+          0.22,
+        )!;
+        // Build the menu items as a compact, right-aligned vertical panel.
+        Widget item({
+          required IconData icon,
+          required String label,
+          required String action,
+          Widget? trailing,
+        }) {
+          return InkWell(
+            onTap: () => Navigator.pop(ctx, action),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(icon, size: 18, color: cs.onSurface),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(label, style: const TextStyle(fontSize: 13)),
+                  ),
+                  ?trailing,
+                ],
+              ),
+            ),
+          );
+        }
+
+        Widget switchItem({
+          required IconData icon,
+          required String label,
+          required bool value,
+          required ValueChanged<bool> onChanged,
+          bool experimental = false,
+        }) {
+          final child = InkWell(
+            onTap: () => onChanged(!value),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: experimental ? experimentalIcon : cs.onSurface,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(label, style: const TextStyle(fontSize: 13)),
+                  ),
+                  Transform.scale(
+                    scale: 0.75,
+                    child: Switch(value: value, onChanged: onChanged),
+                  ),
+                ],
+              ),
+            ),
+          );
+          if (!experimental) return child;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: experimentalBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: experimentalBorder),
+              ),
+              child: child,
+            ),
+          );
+        }
+
+        return Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12, bottom: 64),
+            child: Material(
+              color: cs.surface.withValues(alpha: 0.97),
+              elevation: 12,
+              borderRadius: BorderRadius.circular(10),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: 240,
+                  maxWidth: 280,
+                  maxHeight: 520,
+                ),
+                child: StatefulBuilder(
+                  builder: (ctx, setSheetState) {
+                    return SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (hasAudioOptions)
+                            item(
+                              icon: Icons.audiotrack,
+                              label: 'Audio track',
+                              action: 'audio',
+                            ),
+                          if (hasSubOptions)
+                            item(
+                              icon: Icons.subtitles,
+                              label: 'Subtitle track',
+                              action: 'subtitle',
+                            ),
+                          if (hasChapters)
+                            item(
+                              icon: Icons.menu_book,
+                              label: 'Chapters',
+                              action: 'chapters',
+                            ),
+                          item(
+                            icon: Icons.graphic_eq,
+                            label: 'Equalizer',
+                            action: 'equalizer',
+                          ),
+                          if (_currentFile != null && !_isAudioFile)
+                            item(
+                              icon: Icons.photo_camera,
+                              label: 'Take screenshot',
+                              action: 'screenshot',
+                            ),
+                          if (hasAudioOptions &&
+                              _settings.experimentalFeaturesEnabled)
+                            switchItem(
+                              icon: Icons.multitrack_audio,
+                              label: 'Mix all audio tracks',
+                              value: _settings.multiAudioMix,
+                              experimental: true,
+                              onChanged: (v) {
+                                _settings.multiAudioMix = v;
+                                setSheetState(() {});
+                                unawaited(() async {
+                                  await _applyMultiAudioMix(announce: true);
+                                  if (_currentFile != null) {
+                                    await _reloadCurrentForMixChange();
+                                  }
+                                }());
+                              },
+                            ),
+                          if (!_isAudioFile)
+                            switchItem(
+                              icon: Icons.image_search,
+                              label:
+                                  'Seek thumbnails (beta: uses more resources)',
+                              value: _settings.seekPreviewEnabled,
+                              onChanged: (v) {
+                                _settings.seekPreviewEnabled = v;
+                                setSheetState(() {});
+                                unawaited(
+                                  _seekPreviewService.setEnabled(v).then((_) {
+                                    if (v && _currentFile != null) {
+                                      return _seekPreviewService.setSource(
+                                        _currentFile,
+                                      );
+                                    }
+                                    return null;
+                                  }),
+                                );
+                                if (mounted) setState(() {});
+                              },
+                            ),
+                          item(
+                            icon: Icons.keyboard,
+                            label: 'Keyboard shortcuts',
+                            action: 'keybinds',
+                          ),
+                          const Divider(height: 1),
+                          item(
+                            icon: Icons.queue_music,
+                            label: _playlist.isEmpty
+                                ? 'Queue (empty)'
+                                : 'Queue (${_playlist.length})',
+                            action: 'queue',
+                          ),
+                          item(
+                            icon: Icons.playlist_add,
+                            label: 'Add files to queue…',
+                            action: 'enqueue',
+                          ),
+                          switchItem(
+                            icon: Icons.shuffle,
+                            label: 'Shuffle queue',
+                            value: _settings.playlistShuffle,
+                            onChanged: (v) {
+                              _settings.playlistShuffle = v;
+                              _playlist.setShuffle(v);
+                              setSheetState(() {});
+                            },
+                          ),
+                          switchItem(
+                            icon: Icons.picture_in_picture_alt,
+                            label: 'Mini-player (always on top)',
+                            value: _compactMode,
+                            onChanged: (_) => Navigator.pop(ctx, 'compact'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim, _, child) {
+        final curved = CurvedAnimation(
+          parent: anim,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.15, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+    if (!mounted) return;
+    switch (result) {
+      case 'audio':
+        unawaited(_showAudioTracksDialog());
+        break;
+      case 'subtitle':
+        unawaited(_showSubtitleTracksDialog());
+        break;
+      case 'chapters':
+        unawaited(_showChaptersDialog());
+        break;
+      case 'equalizer':
+        unawaited(_showEqualizerDialog());
+        break;
+      case 'screenshot':
+        unawaited(_takeScreenshot());
+        break;
+      case 'mix':
+        unawaited(_applyMultiAudioMix());
+        break;
+      case 'keybinds':
+        unawaited(_showKeybindsDialog());
+        break;
+      case 'queue':
+        unawaited(_showQueueDialog());
+        break;
+      case 'enqueue':
+        unawaited(_pickFilesToEnqueue());
+        break;
+      case 'shuffle':
+        // already toggled inline
+        break;
+      case 'compact':
+        unawaited(_toggleCompactMode());
+        break;
+    }
+  }
+
+  Future<void> _showAudioTracksDialog() async {
+    final tracks = _currentTracks;
+    if (tracks == null) return;
+    final list = tracks.audio
+        .where((t) => t.id != 'auto')
+        .toList(growable: false);
+    final current = _currentTrackSelection?.audio.id;
+    final selected = await showDialog<AudioTrack>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Audio track'),
+        children: list
+            .map(
+              (t) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, t),
+                child: Row(
+                  children: [
+                    Icon(
+                      t.id == current
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _trackLabel(t.title, t.language, t.id),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (selected != null) {
+      await _disableMixForManualTrackSelection();
+      await _playerService.setAudioTrack(selected);
+    }
+  }
+
+  Future<void> _showSubtitleTracksDialog() async {
+    final tracks = _currentTracks;
+    if (tracks == null) return;
+    final list = [
+      SubtitleTrack.no(),
+      ...tracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no'),
+    ];
+    final current = _currentTrackSelection?.subtitle.id;
+    final selected = await showDialog<SubtitleTrack>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Subtitle track'),
+        children: list
+            .map(
+              (t) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, t),
+                child: Row(
+                  children: [
+                    Icon(
+                      t.id == current
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        t.id == 'no'
+                            ? 'Off'
+                            : _trackLabel(t.title, t.language, t.id),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (selected != null) {
+      await _playerService.setSubtitleTrack(selected);
+      _subtitlesVisible = selected.id != 'no';
+    }
+  }
+
+  Future<void> _showChaptersDialog() async {
+    if (_chapters.isEmpty) await _refreshChapters();
+    if (!mounted || _chapters.isEmpty) return;
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Chapters'),
+        children: _chapters
+            .map(
+              (c) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, c.index),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        _formatDuration(c.time),
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(c.title, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (picked != null) {
+      await _playerService.setChapter(picked);
+    }
+  }
+
+  Future<void> _showEqualizerDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final bands = List<double>.from(_settings.eqBands);
+            return AlertDialog(
+              title: const Text('Equalizer'),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('Enable'),
+                        const Spacer(),
+                        Switch(
+                          value: _settings.eqEnabled,
+                          onChanged: (v) {
+                            _settings.eqEnabled = v;
+                            unawaited(_applyEqualizer());
+                            setLocal(() {});
+                          },
+                        ),
+                      ],
+                    ),
+                    DropdownButton<String>(
+                      value: _settings.eqPreset,
+                      isExpanded: true,
+                      onChanged: (id) {
+                        if (id == null) return;
+                        final preset = EqualizerService.presetById(id);
+                        if (preset == null) return;
+                        _settings.eqPreset = id;
+                        _settings.eqBands = preset.gains;
+                        unawaited(_applyEqualizer());
+                        setLocal(() {});
+                      },
+                      items: kEqPresets
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.id,
+                              child: Text(p.label),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 220,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: List.generate(SettingsService.eqBandCount, (
+                          i,
+                        ) {
+                          final freq = SettingsService.eqBandFrequencies[i];
+                          final label = freq < 1000
+                              ? '$freq'
+                              : '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k';
+                          return Expanded(
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: RotatedBox(
+                                    quarterTurns: 3,
+                                    child: Slider(
+                                      min: -12,
+                                      max: 12,
+                                      divisions: 48,
+                                      value: bands[i],
+                                      onChanged: (v) {
+                                        bands[i] = v;
+                                        _settings.eqBands = bands;
+                                        _settings.eqPreset = 'custom';
+                                        unawaited(_applyEqualizer());
+                                        setLocal(() {});
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  label,
+                                  style: Theme.of(ctx).textTheme.bodySmall,
+                                ),
+                                Text(
+                                  '${bands[i].toStringAsFixed(0)}dB',
+                                  style: Theme.of(ctx).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _settings.eqBands = List<double>.filled(
+                      SettingsService.eqBandCount,
+                      0,
+                    );
+                    _settings.eqPreset = 'flat';
+                    unawaited(_applyEqualizer());
+                    setLocal(() {});
+                  },
+                  child: const Text('Reset'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _pickFilesToEnqueue() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.media,
+      );
+      if (result == null) return;
+      final paths = result.paths
+          .whereType<String>()
+          .where((s) => s.trim().isNotEmpty)
+          .toList(growable: false);
+      if (paths.isEmpty) return;
+      _enqueue(paths);
+    } catch (e) {
+      _log(
+        'enqueue_picker_failed',
+        message: e.toString(),
+        severity: DebugSeverity.error,
+      );
+    }
+  }
+
+  Future<void> _showQueueDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final items = _playlist.items;
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Expanded(child: Text('Play queue')),
+                  if (items.isNotEmpty)
+                    TextButton(
+                      onPressed: () {
+                        _playlist.clear();
+                        setLocal(() {});
+                      },
+                      child: const Text('Clear'),
+                    ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                height: 360,
+                child: items.isEmpty
+                    ? const Center(child: Text('Queue is empty.'))
+                    : ListView.builder(
+                        itemCount: items.length,
+                        itemBuilder: (c, i) {
+                          final isCurrent = i == _playlist.index;
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              isCurrent ? Icons.play_arrow : Icons.music_note,
+                              size: 18,
+                            ),
+                            title: Text(
+                              p.basename(items[i]),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: isCurrent
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            onTap: () {
+                              _playlist.jumpTo(i);
+                              unawaited(_loadFile(items[i]));
+                              Navigator.pop(ctx);
+                            },
+                            trailing: IconButton(
+                              tooltip: 'Remove',
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                _playlist.removeAt(i);
+                                setLocal(() {});
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _pickFilesToEnqueue();
+                  },
+                  child: const Text('Add files\u2026'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showKeybindsDialog() async {
+    final current = Map<String, List<String>>.from(_settings.keybinds);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: const Text('Keyboard shortcuts'),
+              content: SizedBox(
+                width: 460,
+                height: 480,
+                child: Scrollbar(
+                  child: ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        child: Text(
+                          'Tip: press F1 or ? at any time to reopen this dialog.',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ),
+                      ...PlayerShortcutAction.values.map((a) {
+                        final accels =
+                            current[a.name] ??
+                            defaultKeybinds[a]?.toList(growable: true) ??
+                            const <String>[];
+                        return ListTile(
+                          dense: true,
+                          title: Text(shortcutActionLabel(a)),
+                          subtitle: Text(
+                            accels.isEmpty ? '(none)' : accels.join(', '),
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Set new binding',
+                                icon: const Icon(Icons.edit, size: 18),
+                                onPressed: () async {
+                                  final accel = await _captureKeybind(ctx);
+                                  if (accel == null) return;
+                                  current[a.name] = [accel];
+                                  _settings.keybinds = current;
+                                  setLocal(() {});
+                                },
+                              ),
+                              IconButton(
+                                tooltip: 'Reset to default',
+                                icon: const Icon(Icons.refresh, size: 18),
+                                onPressed: () {
+                                  current.remove(a.name);
+                                  _settings.keybinds = current;
+                                  setLocal(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _settings.resetKeybinds();
+                    current.clear();
+                    setLocal(() {});
+                  },
+                  child: const Text('Reset all'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<String?> _captureKeybind(BuildContext context) async {
+    final node = FocusNode();
+    String? captured;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            title: const Text('Press a key combination'),
+            content: SizedBox(
+              width: 320,
+              child: Focus(
+                autofocus: true,
+                focusNode: node,
+                onKeyEvent: (n, e) {
+                  if (e is KeyDownEvent &&
+                      e.logicalKey != LogicalKeyboardKey.controlLeft &&
+                      e.logicalKey != LogicalKeyboardKey.controlRight &&
+                      e.logicalKey != LogicalKeyboardKey.shiftLeft &&
+                      e.logicalKey != LogicalKeyboardKey.shiftRight &&
+                      e.logicalKey != LogicalKeyboardKey.altLeft &&
+                      e.logicalKey != LogicalKeyboardKey.altRight &&
+                      e.logicalKey != LogicalKeyboardKey.metaLeft &&
+                      e.logicalKey != LogicalKeyboardKey.metaRight) {
+                    captured = PlayerShortcutsService.acceleratorFromEvent(e);
+                    setLocal(() {});
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  alignment: Alignment.center,
+                  child: Text(
+                    captured ?? 'Waiting…',
+                    style: Theme.of(ctx).textTheme.titleMedium,
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: captured == null ? null : () => Navigator.pop(ctx),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    node.dispose();
+    return captured;
+  }
+}
+
+class _ChapterInfo {
+  const _ChapterInfo({
+    required this.index,
+    required this.title,
+    required this.time,
+  });
+  final int index;
+  final String title;
+  final Duration time;
+}
+
+class _CompactExitButton extends StatefulWidget {
+  const _CompactExitButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_CompactExitButton> createState() => _CompactExitButtonState();
+}
+
+class _CompactExitButtonState extends State<_CompactExitButton> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Exit mini-player',
+      child: Semantics(
+        button: true,
+        label: 'Exit mini-player',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovering = true),
+          onExit: (_) => setState(() => _hovering = false),
+          child: GestureDetector(
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: _hovering ? 0.72 : 0.48),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(
+                    alpha: _hovering ? 0.85 : 0.55,
+                  ),
+                  width: 1,
+                ),
+              ),
+              child: const Icon(
+                Icons.close_fullscreen,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
