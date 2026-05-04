@@ -9,6 +9,7 @@ final class MediaSessionBridge {
   private var channel: FlutterMethodChannel?
   private var enabled = false
   private var info: [String: Any] = [:]
+  private var artworkRequestId: UInt64 = 0
 
   func attach(messenger: FlutterBinaryMessenger) {
     let ch = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
@@ -61,7 +62,49 @@ final class MediaSessionBridge {
       MPNowPlayingInfoCenter.default().playbackState =
         playing ? .playing : .paused
     }
+    if let rate = args["rate"] as? Double, rate > 0 {
+      info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate
+    }
+    if let artUri = args["artUri"] as? String, !artUri.isEmpty {
+      if isLocalArtwork(artUri) {
+        if let image = loadLocalArtwork(artUri) {
+          info[MPMediaItemPropertyArtwork] = makeArtwork(image)
+        } else {
+          info.removeValue(forKey: MPMediaItemPropertyArtwork)
+        }
+      } else {
+        // Remote URLs may stall on the main thread; fetch in the background
+        // and patch the artwork in once it loads.
+        info.removeValue(forKey: MPMediaItemPropertyArtwork)
+        loadRemoteArtworkAsync(artUri)
+      }
+    } else if args.keys.contains("artUri") {
+      info.removeValue(forKey: MPMediaItemPropertyArtwork)
+    }
     MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+  }
+
+  private func makeArtwork(_ image: NSImage) -> MPMediaItemArtwork {
+    let size = image.size
+    return MPMediaItemArtwork(boundsSize: size) { requested in
+      return resizedImage(image, to: requested) ?? image
+    }
+  }
+
+  private func loadRemoteArtworkAsync(_ uri: String) {
+    guard let url = URL(string: uri) else { return }
+    let token = artworkRequestId &+ 1
+    artworkRequestId = token
+    URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+      guard let self = self,
+            let data = data,
+            let image = NSImage(data: data) else { return }
+      DispatchQueue.main.async {
+        guard self.artworkRequestId == token else { return }
+        self.info[MPMediaItemPropertyArtwork] = self.makeArtwork(image)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = self.info
+      }
+    }.resume()
   }
 
   private func clear() {
@@ -115,4 +158,35 @@ final class MediaSessionBridge {
       self?.channel?.invokeMethod("command", arguments: args)
     }
   }
+}
+private func isLocalArtwork(_ uri: String) -> Bool {
+  return !(uri.hasPrefix("http://") || uri.hasPrefix("https://"))
+}
+
+private func loadLocalArtwork(_ uri: String) -> NSImage? {
+  if uri.hasPrefix("file://") {
+    if let url = URL(string: uri), let image = NSImage(contentsOf: url) {
+      return image
+    }
+    // Fall back to decoding the percent-encoded path if URL(string:) parsed
+    // it but NSImage couldn't open it (e.g. paths with characters that need
+    // additional escaping).
+    let path = String(uri.dropFirst("file://".count))
+      .removingPercentEncoding ?? String(uri.dropFirst("file://".count))
+    return NSImage(contentsOf: URL(fileURLWithPath: path))
+  }
+  return NSImage(contentsOf: URL(fileURLWithPath: uri))
+}
+
+private func resizedImage(_ source: NSImage, to size: CGSize) -> NSImage? {
+  guard size.width > 0, size.height > 0 else { return source }
+  let result = NSImage(size: size)
+  result.lockFocus()
+  source.draw(
+    in: NSRect(origin: .zero, size: size),
+    from: NSRect(origin: .zero, size: source.size),
+    operation: .copy,
+    fraction: 1.0)
+  result.unlockFocus()
+  return result
 }

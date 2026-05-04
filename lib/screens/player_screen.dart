@@ -256,6 +256,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playerService.volumeStream.listen((vol) {
         if (!mounted || _isDisposed) return;
         setState(() => _volume = vol);
+        unawaited(_mediaSession.updateVolume((vol / 100.0).clamp(0.0, 1.0)));
         if (widget.debugLog.isEnabled) {
           _log(
             'volume_stream_updated',
@@ -426,6 +427,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     unawaited(_applyEqualizer());
     unawaited(_applyMultiAudioMix());
     unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
+    unawaited(
+      _mediaSession.updateLoop(switch (_settings.loopMode) {
+        LoopMode.none => 'none',
+        LoopMode.single => 'single',
+        LoopMode.loop => 'loop',
+      }),
+    );
+    unawaited(_mediaSession.updateShuffle(_settings.playlistShuffle));
+    unawaited(_mediaSession.updateRate(_settings.speed));
     unawaited(
       windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
         Object e,
@@ -2146,6 +2156,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _playerService.seek(Duration(milliseconds: cmd.positionMs!)),
           );
         }
+        break;
+      case 'loop':
+        final v = cmd.value ?? 0.0;
+        final mode = v >= 1.5
+            ? LoopMode.loop
+            : (v >= 0.5 ? LoopMode.single : LoopMode.none);
+        _settings.loopMode = mode;
+        break;
+      case 'shuffle':
+        final on = (cmd.value ?? 0.0) > 0.5;
+        _settings.playlistShuffle = on;
+        _playlist.setShuffle(on);
+        break;
+      case 'volume':
+        final v = (cmd.value ?? 0.0).clamp(0.0, 1.0);
+        final pct = v * 100.0;
+        setState(() {
+          _volume = pct;
+        });
+        unawaited(_playerService.setVolume(pct).catchError((_) {}));
+        break;
+      case 'rate':
+        final r = (cmd.value ?? 1.0).clamp(0.25, 4.0);
+        _settings.speed = r;
         break;
     }
   }

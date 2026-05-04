@@ -5,12 +5,14 @@
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
+#include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Storage.Streams.h>
 
 #include <Windows.Media.h>
 #include <SystemMediaTransportControlsInterop.h>
 #include <wrl/client.h>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -50,6 +52,28 @@ std::string GetString(const EncodableMap& m, const char* key) {
   if (it == m.end()) return std::string();
   if (auto p = std::get_if<std::string>(&it->second)) return *p;
   return std::string();
+}
+
+// RFC 3986 percent-encoding for the path portion of a file:// URI. Leaves
+// unreserved characters and '/' untouched; encodes spaces, '#', '?', etc.
+std::string PercentEncodePath(const std::string& path) {
+  static const char* hex = "0123456789ABCDEF";
+  std::string out;
+  out.reserve(path.size());
+  for (unsigned char c : path) {
+    const bool unreserved =
+        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' ||
+        c == '~' || c == '/' || c == ':' || c == '\\';
+    if (unreserved) {
+      out.push_back(static_cast<char>(c));
+    } else {
+      out.push_back('%');
+      out.push_back(hex[c >> 4]);
+      out.push_back(hex[c & 0x0F]);
+    }
+  }
+  return out;
 }
 
 class MediaSession {
@@ -118,6 +142,12 @@ class MediaSession {
     smtc_.IsNextEnabled(true);
     smtc_.IsPreviousEnabled(true);
     smtc_.IsStopEnabled(true);
+    smtc_.PlaybackPositionChangeRequested(
+        [this](auto&&, PlaybackPositionChangeRequestedEventArgs args) {
+          int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          args.RequestedPlaybackPosition()).count();
+          DispatchPosition(static_cast<int>(ms));
+        });
     updater_ = smtc_.DisplayUpdater();
     updater_.Type(MediaPlaybackType::Music);
     button_token_ = smtc_.ButtonPressed(
@@ -137,20 +167,57 @@ class MediaSession {
     EnsureInit();
     if (!smtc_ || !enabled_) return;
     using namespace winrt::Windows::Media;
+    using namespace winrt::Windows::Storage::Streams;
 
     std::string title = GetString(m, "title");
     std::string artist = GetString(m, "artist");
     std::string album = GetString(m, "album");
+    bool changedDisplay = false;
     if (!title.empty()) {
       updater_.MusicProperties().Title(Utf8ToWide(title));
+      changedDisplay = true;
     }
     if (!artist.empty()) {
       updater_.MusicProperties().Artist(Utf8ToWide(artist));
+      changedDisplay = true;
     }
     if (!album.empty()) {
       updater_.MusicProperties().AlbumTitle(Utf8ToWide(album));
+      changedDisplay = true;
     }
-    updater_.Update();
+    auto artIt = m.find(EncodableValue("artUri"));
+    if (artIt != m.end()) {
+      std::string artUri;
+      if (auto p = std::get_if<std::string>(&artIt->second)) artUri = *p;
+      if (!artUri.empty()) {
+        try {
+          winrt::Windows::Foundation::Uri uri{nullptr};
+          if (artUri.rfind("http://", 0) == 0 ||
+              artUri.rfind("https://", 0) == 0 ||
+              artUri.rfind("file://", 0) == 0) {
+            uri = winrt::Windows::Foundation::Uri(winrt::to_hstring(artUri));
+          } else {
+            // Bare local path -- normalize separators and percent-encode so
+            // characters like spaces, '#', '?' don't break the URI parser.
+            std::string normalized = artUri;
+            for (auto& ch : normalized) {
+              if (ch == '\\') ch = '/';
+            }
+            uri = winrt::Windows::Foundation::Uri(
+                winrt::to_hstring(std::string("file:///") +
+                                  PercentEncodePath(normalized)));
+          }
+          updater_.Thumbnail(
+              RandomAccessStreamReference::CreateFromUri(uri));
+          changedDisplay = true;
+        } catch (...) {
+        }
+      } else {
+        updater_.Thumbnail(nullptr);
+        changedDisplay = true;
+      }
+    }
+    if (changedDisplay) updater_.Update();
 
     auto pi = m.find(EncodableValue("playing"));
     if (pi != m.end()) {
@@ -158,6 +225,36 @@ class MediaSession {
       if (auto p = std::get_if<bool>(&pi->second)) playing = *p;
       smtc_.PlaybackStatus(playing ? MediaPlaybackStatus::Playing
                                    : MediaPlaybackStatus::Paused);
+    }
+
+    auto durIt = m.find(EncodableValue("durationMs"));
+    auto posIt = m.find(EncodableValue("positionMs"));
+    int64_t durMs = -1;
+    int64_t posMs = -1;
+    if (durIt != m.end()) {
+      if (auto p = std::get_if<int>(&durIt->second)) durMs = *p;
+      else if (auto p = std::get_if<int64_t>(&durIt->second)) durMs = *p;
+    }
+    if (posIt != m.end()) {
+      if (auto p = std::get_if<int>(&posIt->second)) posMs = *p;
+      else if (auto p = std::get_if<int64_t>(&posIt->second)) posMs = *p;
+    }
+    if (durMs >= 0 || posMs >= 0) {
+      if (durMs >= 0) last_duration_ms_ = durMs;
+      if (posMs >= 0) last_position_ms_ = posMs;
+      // SMTC rejects timeline updates where Position > MaxSeekTime; clamp.
+      int64_t clampedPos = last_position_ms_;
+      if (last_duration_ms_ > 0 && clampedPos > last_duration_ms_) {
+        clampedPos = last_duration_ms_;
+      }
+      if (clampedPos < 0) clampedPos = 0;
+      SystemMediaTransportControlsTimelineProperties tl;
+      tl.StartTime(std::chrono::milliseconds{0});
+      tl.MinSeekTime(std::chrono::milliseconds{0});
+      tl.EndTime(std::chrono::milliseconds{last_duration_ms_});
+      tl.MaxSeekTime(std::chrono::milliseconds{last_duration_ms_});
+      tl.Position(std::chrono::milliseconds{clampedPos});
+      smtc_.UpdateTimelineProperties(tl);
     }
   }
 
@@ -189,6 +286,18 @@ class MediaSession {
         std::make_unique<EncodableValue>(EncodableValue(args)));
   }
 
+  void DispatchPosition(int positionMs) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!channel_) return;
+    EncodableMap args{
+        {EncodableValue("action"), EncodableValue("seek")},
+        {EncodableValue("positionMs"), EncodableValue(positionMs)},
+    };
+    channel_->InvokeMethod(
+        "command",
+        std::make_unique<EncodableValue>(EncodableValue(args)));
+  }
+
   std::mutex mutex_;
   std::unique_ptr<MethodChannel> channel_;
   winrt::Windows::Media::SystemMediaTransportControls smtc_{nullptr};
@@ -196,6 +305,8 @@ class MediaSession {
       nullptr};
   winrt::event_token button_token_{};
   std::atomic<bool> enabled_{false};
+  int64_t last_duration_ms_{0};
+  int64_t last_position_ms_{0};
 };
 
 }  // namespace

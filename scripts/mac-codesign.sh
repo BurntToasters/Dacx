@@ -106,7 +106,7 @@ xcrun notarytool submit "$ZIP_PATH" \
   --team-id "$APPLE_TEAM_ID" \
   --wait
 
-# Staple Noatry
+# Staple notarization ticket to the app bundle
 echo "Stapling notarization ticket..."
 xcrun stapler staple "$APP_BUNDLE"
 
@@ -148,13 +148,17 @@ echo "Stapling DMG..."
 xcrun stapler staple "$DMG_PATH"
 
 echo "Verifying Gatekeeper acceptance of stapled .app..."
-spctl --assess --type execute --verbose=4 "$APP_BUNDLE" || {
-  echo "WARN: spctl assessment failed for $APP_BUNDLE"
-}
+if ! spctl --assess --type execute --verbose=4 "$APP_BUNDLE"; then
+  echo "ERROR: spctl assessment failed for $APP_BUNDLE"
+  echo "       The signed/stapled .app would be rejected by Gatekeeper."
+  exit 1
+fi
 echo "Verifying Gatekeeper acceptance of DMG..."
-spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH" || {
-  echo "WARN: spctl assessment failed for $DMG_PATH"
-}
+if ! spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"; then
+  echo "ERROR: spctl assessment failed for $DMG_PATH"
+  echo "       The notarized DMG would be rejected by Gatekeeper."
+  exit 1
+fi
 
 echo ""
 echo "Done:"
