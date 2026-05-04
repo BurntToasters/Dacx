@@ -241,6 +241,7 @@
 			buildConfigurationList = 33CC10FB2044A3C60003C045 /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
 				027BC1D6802B1D7F9098BF45 /* [CP] Check Pods Manifest.lock */,
+				DA02C1C0030000000000B001 /* Generate document icons */,
 				33CC10E92044A3C60003C045 /* Sources */,
 				33CC10EA2044A3C60003C045 /* Frameworks */,
 				33CC10EB2044A3C60003C045 /* Resources */,
@@ -330,6 +331,22 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		DA02C1C0030000000000B001 /* Generate document icons */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../assets/dacx_music_icon.png",
+			);
+			name = "Generate document icons";
+			outputPaths = (
+				"$(SRCROOT)/Runner/dacx_music_icon.icns",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"$SRCROOT/Runner/Scripts/generate-document-icons.sh\"\n";
+		};
 		00AD173E2A4EC6247F000CF0 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
