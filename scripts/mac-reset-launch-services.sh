@@ -4,11 +4,11 @@
 # machines after upgrading between Dacx releases if "Open With" launches the
 # wrong build, or if the custom document icon doesn't refresh.
 #
-# WARNING: `lsregister -kill -r` wipes the SYSTEM-WIDE Launch Services
-# database, not just Dacx's entries. All other apps will silently re-register
-# themselves within a few seconds. This is normal LS maintenance and is the
-# documented way to clear stale records, but you may briefly see "Open With"
-# menus look sparse for other apps until macOS rebuilds the index.
+# WARNING: On macOS versions that still support `lsregister -kill`, this script
+# uses a SYSTEM-WIDE Launch Services reset. All other apps then silently
+# re-register themselves within a few seconds. On newer macOS versions where
+# `-kill` is removed, the script uses a targeted Dacx unregister + LS rebuild
+# path instead.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -34,9 +34,11 @@ fi
 
 echo "==> Locating every copy of $BUNDLE_ID on this machine..."
 COPY_COUNT=0
+COPIES=()
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   echo "    $line"
+  COPIES+=("$line")
   COPY_COUNT=$((COPY_COUNT + 1))
 done < <(mdfind "kMDItemCFBundleIdentifier == '$BUNDLE_ID'" 2>/dev/null)
 if [[ "$COPY_COUNT" -eq 0 ]]; then
@@ -45,8 +47,23 @@ if [[ "$COPY_COUNT" -eq 0 ]]; then
 fi
 
 echo
-echo "==> Wiping Launch Services database (all apps will silently re-register)..."
-"$LSREGISTER" -kill -r -domain local -domain system -domain user
+if [[ "$COPY_COUNT" -gt 0 ]]; then
+  echo "==> Unregistering discovered Dacx copies from Launch Services..."
+  for copy in "${COPIES[@]}"; do
+    "$LSREGISTER" -u "$copy" >/dev/null 2>&1 || true
+  done
+  echo
+fi
+
+echo "==> Refreshing Launch Services registrations..."
+if "$LSREGISTER" -h 2>&1 | grep -q -- " -kill"; then
+  echo "    Using legacy full reset mode (-kill supported)."
+  "$LSREGISTER" -kill -r -domain local -domain system -domain user
+else
+  echo "    -kill not supported on this macOS; using targeted rebuild mode."
+  "$LSREGISTER" -gc
+  "$LSREGISTER" -r -apps local,system,user
+fi
 
 echo "==> Restarting Finder, Dock, and cfprefsd to refresh icon caches..."
 killall Finder Dock cfprefsd 2>/dev/null || true
