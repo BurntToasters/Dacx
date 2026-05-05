@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
+import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
 import 'theme/window_visuals.dart';
 
@@ -59,6 +60,7 @@ void main(List<String> args) async {
 
   final prefs = await SharedPreferences.getInstance();
   final settings = SettingsService(prefs);
+  unawaited(settings.syncInstanceModeFlag());
   final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
   _installAsyncErrorHandler(debugLog);
 
@@ -175,6 +177,7 @@ void main(List<String> args) async {
 String? _parseCliFilePath(List<String> args) {
   for (final rawArg in args) {
     if (rawArg.trim().isEmpty || rawArg.startsWith('-')) continue;
+    if (rawArg == InstanceModeService.newInstanceFlag) continue;
     final candidatePath = _normalizeCliPath(rawArg);
     if (candidatePath != null && File(candidatePath).existsSync()) {
       return candidatePath;

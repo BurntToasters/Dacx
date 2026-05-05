@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../services/player_service.dart';
 import '../services/player_shortcuts_service.dart';
+import '../services/instance_mode_service.dart';
 import '../services/settings_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/debug_log_service.dart';
@@ -41,10 +42,10 @@ const _audioExtensions = {
   'alac',
 };
 
-const _macOpenFileMethodChannel = MethodChannel(
+const _openFileMethodChannel = MethodChannel(
   'run.rosie.dacx/open_file/methods',
 );
-const _macOpenFileEventChannel = EventChannel(
+const _openFileEventChannel = EventChannel(
   'run.rosie.dacx/open_file/events',
 );
 
@@ -454,22 +455,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _initializePlatformFileOpenBridge() {
-    if (!Platform.isMacOS) return;
-    _log('mac_open_file_bridge_init', category: DebugLogCategory.system);
-    unawaited(_bootstrapMacOpenFileBridge());
+    if (!Platform.isMacOS && !Platform.isLinux && !Platform.isWindows) return;
+    _log('open_file_bridge_init', category: DebugLogCategory.system);
+    unawaited(_bootstrapOpenFileBridge());
   }
 
-  Future<void> _bootstrapMacOpenFileBridge() async {
+  Future<void> _bootstrapOpenFileBridge() async {
     if (_isDisposed) return;
     var bridgeReady = true;
     try {
-      final pending = await _macOpenFileMethodChannel.invokeListMethod<dynamic>(
+      final pending = await _openFileMethodChannel.invokeListMethod<dynamic>(
         'getPendingFiles',
       );
       if (_isDisposed || !mounted) return;
       if (pending != null && pending.isNotEmpty) {
         _log(
-          'mac_pending_files_found',
+          'open_file_pending_found',
           category: DebugLogCategory.system,
           detailsBuilder: () => {'count': pending.length},
         );
@@ -483,20 +484,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } on MissingPluginException {
       bridgeReady = false;
       _log(
-        'mac_open_file_bridge_missing_plugin',
+        'open_file_bridge_missing_plugin',
         category: DebugLogCategory.system,
         severity: DebugSeverity.warn,
       );
     } on PlatformException {
       bridgeReady = false;
       _log(
-        'mac_open_file_bridge_platform_exception',
+        'open_file_bridge_platform_exception',
         category: DebugLogCategory.system,
         severity: DebugSeverity.warn,
       );
     } catch (e) {
       _log(
-        'mac_open_file_bridge_failed',
+        'open_file_bridge_failed',
         category: DebugLogCategory.system,
         message: e.toString(),
         severity: DebugSeverity.error,
@@ -505,13 +506,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     if (_isDisposed || !mounted) return;
     _subscriptions.add(
-      _macOpenFileEventChannel.receiveBroadcastStream().listen(
+      _openFileEventChannel.receiveBroadcastStream().listen(
         (event) {
           if (_isDisposed || !mounted) return;
           final path = _coerceOpenPath(event);
           if (path != null) {
             _log(
-              'mac_open_file_event_received',
+              'open_file_event_received',
               category: DebugLogCategory.system,
               detailsBuilder: () => {'path': path},
             );
@@ -520,7 +521,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
         onError: (error) {
           _log(
-            'mac_open_file_event_error',
+            'open_file_event_error',
             category: DebugLogCategory.system,
             message: error.toString(),
             severity: DebugSeverity.warn,
@@ -533,12 +534,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       Future<void>.delayed(const Duration(milliseconds: 250), () async {
         if (_isDisposed || !mounted) return;
         try {
-          final pending = await _macOpenFileMethodChannel
+          final pending = await _openFileMethodChannel
               .invokeListMethod<dynamic>('getPendingFiles');
           if (_isDisposed || !mounted) return;
           if (pending == null || pending.isEmpty) return;
           _log(
-            'mac_pending_files_found_retry',
+            'open_file_pending_found_retry',
             category: DebugLogCategory.system,
             detailsBuilder: () => {'count': pending.length},
           );
@@ -1196,6 +1197,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case PlayerShortcutAction.toggleCompactMode:
         _log('shortcut_toggle_compact', category: DebugLogCategory.ui);
         unawaited(_toggleCompactMode());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.newWindow:
+        _log('shortcut_new_window', category: DebugLogCategory.ui);
+        unawaited(InstanceModeService.spawnNewInstance());
         return KeyEventResult.handled;
       case null:
         return KeyEventResult.ignored;
