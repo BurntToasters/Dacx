@@ -21,9 +21,13 @@ const defaultTimeoutMs = 300_000;
 
 function createInitialResults() {
   return {
+    "version-sync": { status: "pending" },
+    static: { status: "pending" },
     analyze: { status: "pending" },
     format: { status: "pending" },
     test: { status: "pending", passed: null, failed: null },
+    "build-smoke": { status: "pending" },
+    outdated: { status: "pending" },
   };
 }
 
@@ -113,35 +117,32 @@ function printSummary(results) {
 ╚══════════════════════════════════════╝
 ${colors.reset}`);
 
+  function fmt(name) {
+    const r = results[name];
+    if (r.status === "passed") return `${colors.green}✓ PASS${colors.reset}`;
+    if (r.status === "skipped") return `${colors.blue}⏭  SKIP${colors.reset}`;
+    return `${colors.red}✗ FAIL${colors.reset}`;
+  }
+
   const allPassed = Object.values(results).every(
-    (result) => result.status === "passed",
+    (result) => result.status === "passed" || result.status === "skipped",
   );
 
+  console.log(`${colors.bold}Version sync:${colors.reset} ${fmt("version-sync")}`);
+  console.log(`${colors.bold}Static:${colors.reset}       ${fmt("static")}`);
+  console.log(`${colors.bold}Analyze:${colors.reset}      ${fmt("analyze")}`);
+  console.log(`${colors.bold}Format:${colors.reset}       ${fmt("format")}`);
   console.log(
-    `${colors.bold}Analyze:${colors.reset}  ${
-      results.analyze.status === "passed"
-        ? `${colors.green}✓ PASS`
-        : `${colors.red}✗ FAIL`
-    }${colors.reset}`,
-  );
-  console.log(
-    `${colors.bold}Format:${colors.reset}   ${
-      results.format.status === "passed"
-        ? `${colors.green}✓ PASS`
-        : `${colors.red}✗ FAIL`
-    }${colors.reset}`,
-  );
-  console.log(
-    `${colors.bold}Tests:${colors.reset}    ${
-      results.test.status === "passed"
-        ? `${colors.green}✓ PASS`
-        : `${colors.red}✗ FAIL`
-    }${colors.reset} (${results.test.passed ?? "n/a"} passed${
+    `${colors.bold}Tests:${colors.reset}        ${fmt("test")} (${
+      results.test.passed ?? "n/a"
+    } passed${
       results.test.failed && results.test.failed > 0
         ? `, ${results.test.failed} failed`
         : ""
     })`,
   );
+  console.log(`${colors.bold}Build smoke:${colors.reset}  ${fmt("build-smoke")}`);
+  console.log(`${colors.bold}Outdated:${colors.reset}     ${fmt("outdated")}`);
 
   console.log("");
   if (allPassed) {
@@ -161,9 +162,54 @@ function main() {
   const results = createInitialResults();
   printBanner();
 
+  runCommand(
+    "version-sync",
+    "node",
+    ["scripts/check-version-sync.js"],
+    null,
+    results,
+  );
+  runCommand("static", "node", ["scripts/check-static.js"], null, results);
   runCommand("analyze", "dart", ["analyze"], null, results);
-  runCommand("format", "dart", ["format", "--set-exit-if-changed", "lib/", "test/"], null, results);
+  runCommand(
+    "format",
+    "dart",
+    ["format", "--set-exit-if-changed", "lib/", "test/"],
+    null,
+    results,
+  );
   runCommand("test", "flutter", ["test"], parseTest, results);
+
+  if (process.env.DACX_SKIP_BUILD_SMOKE === "1") {
+    results["build-smoke"].status = "skipped";
+    console.log(
+      `${colors.blue}⏭  build-smoke skipped (DACX_SKIP_BUILD_SMOKE=1)${colors.reset}\n`,
+    );
+  } else {
+    runCommand(
+      "build-smoke",
+      "node",
+      ["scripts/check-build-smoke.js"],
+      null,
+      results,
+      { timeout: 600_000 },
+    );
+  }
+
+  if (process.env.DACX_SKIP_OUTDATED === "1") {
+    results.outdated.status = "skipped";
+    console.log(
+      `${colors.blue}⏭  outdated skipped (DACX_SKIP_OUTDATED=1)${colors.reset}\n`,
+    );
+  } else {
+    runCommand(
+      "outdated",
+      "node",
+      ["scripts/check-outdated.js"],
+      null,
+      results,
+    );
+  }
 
   return printSummary(results);
 }
