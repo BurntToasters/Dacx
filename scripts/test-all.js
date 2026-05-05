@@ -23,9 +23,12 @@ function createInitialResults() {
   return {
     "version-sync": { status: "pending" },
     static: { status: "pending" },
+    hygiene: { status: "pending" },
+    "metainfo-idempotency": { status: "pending" },
     analyze: { status: "pending" },
     format: { status: "pending" },
     test: { status: "pending", passed: null, failed: null },
+    coverage: { status: "pending" },
     "build-smoke": { status: "pending" },
     outdated: { status: "pending" },
   };
@@ -130,6 +133,8 @@ ${colors.reset}`);
 
   console.log(`${colors.bold}Version sync:${colors.reset} ${fmt("version-sync")}`);
   console.log(`${colors.bold}Static:${colors.reset}       ${fmt("static")}`);
+  console.log(`${colors.bold}Hygiene:${colors.reset}      ${fmt("hygiene")}`);
+  console.log(`${colors.bold}Metainfo:${colors.reset}     ${fmt("metainfo-idempotency")}`);
   console.log(`${colors.bold}Analyze:${colors.reset}      ${fmt("analyze")}`);
   console.log(`${colors.bold}Format:${colors.reset}       ${fmt("format")}`);
   console.log(
@@ -141,6 +146,7 @@ ${colors.reset}`);
         : ""
     })`,
   );
+  console.log(`${colors.bold}Coverage:${colors.reset}     ${fmt("coverage")}`);
   console.log(`${colors.bold}Build smoke:${colors.reset}  ${fmt("build-smoke")}`);
   console.log(`${colors.bold}Outdated:${colors.reset}     ${fmt("outdated")}`);
 
@@ -170,6 +176,14 @@ function main() {
     results,
   );
   runCommand("static", "node", ["scripts/check-static.js"], null, results);
+  runCommand("hygiene", "node", ["scripts/check-hygiene.js"], null, results);
+  runCommand(
+    "metainfo-idempotency",
+    "node",
+    ["scripts/check-metainfo-idempotency.js"],
+    null,
+    results,
+  );
   runCommand("analyze", "dart", ["analyze"], null, results);
   runCommand(
     "format",
@@ -178,7 +192,28 @@ function main() {
     null,
     results,
   );
-  runCommand("test", "flutter", ["test"], parseTest, results);
+  if (process.env.DACX_SKIP_COVERAGE === "1") {
+    runCommand("test", "flutter", ["test"], parseTest, results);
+    results.coverage.status = "skipped";
+    console.log(
+      `${colors.blue}⏭  coverage skipped (DACX_SKIP_COVERAGE=1)${colors.reset}\n`,
+    );
+  } else {
+    runCommand(
+      "test",
+      "flutter",
+      ["test", "--coverage"],
+      parseTest,
+      results,
+    );
+    runCommand(
+      "coverage",
+      "node",
+      ["scripts/check-coverage.js"],
+      null,
+      results,
+    );
+  }
 
   if (process.env.DACX_SKIP_BUILD_SMOKE === "1") {
     results["build-smoke"].status = "skipped";

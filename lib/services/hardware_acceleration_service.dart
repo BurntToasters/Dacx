@@ -49,9 +49,12 @@ class HardwareAccelerationService {
     _macHardwareAccelerationSupportedCache = supported;
     if (!_macHardwareAccelerationSupportLogged) {
       _macHardwareAccelerationSupportLogged = true;
-      debugPrint(
-        'macOS HW acceleration support detected: ${supported ? 'available' : 'not available'}',
-      );
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print(
+          'macOS HW acceleration support detected: ${supported ? 'available' : 'not available'}',
+        );
+      }
     }
     return supported;
   }

@@ -27,6 +27,8 @@
     "test:all": "node scripts/test-all.js",
     "check:version": "node scripts/check-version-sync.js",
     "check:static": "node scripts/check-static.js",
+    "check:hygiene": "node scripts/check-hygiene.js",
+    "check:metainfo": "node scripts/check-metainfo-idempotency.js",
     "check:build-smoke": "node scripts/check-build-smoke.js",
     "check:outdated": "node scripts/check-outdated.js",
     "analyze": "dart analyze",
