@@ -82,24 +82,33 @@ void main(List<String> args) async {
   final windowReady = Completer<void>();
   final firstFrameReady = Completer<void>();
   var windowShown = false;
+  var hiddenTitleBarConfirmed = false;
 
   Future<void> ensureHiddenTitleBarApplied() async {
+    if (hiddenTitleBarConfirmed) return;
     if (Platform.isMacOS) {
       try {
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+        hiddenTitleBarConfirmed = true;
       } catch (_) {}
       return;
     }
-    if (!Platform.isWindows) return;
-    for (var attempt = 0; attempt < 6; attempt++) {
+    if (!Platform.isWindows) {
+      hiddenTitleBarConfirmed = true;
+      return;
+    }
+    for (var attempt = 0; attempt < 4; attempt++) {
       try {
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
         final titleBarHeight = await windowManager.getTitleBarHeight();
-        if (titleBarHeight <= 8) return;
+        if (titleBarHeight <= 8) {
+          hiddenTitleBarConfirmed = true;
+          return;
+        }
       } catch (_) {
         return;
       }
-      await Future<void>.delayed(Duration(milliseconds: 36 * (attempt + 1)));
+      await Future<void>.delayed(Duration(milliseconds: 24 * (attempt + 1)));
     }
   }
 
@@ -112,13 +121,11 @@ void main(List<String> args) async {
     windowShown = true;
     // Apply the hidden title bar style BEFORE showing the window so the user
     // never sees a frame with the native Windows caption visible alongside
-    // the custom title bar.
+    // the custom title bar. Cached after first success — see
+    // hiddenTitleBarConfirmed.
     await ensureHiddenTitleBarApplied();
     await windowManager.show();
     await windowManager.focus();
-    // Re-apply once after show in case Windows re-introduced the caption when
-    // the window was made visible.
-    unawaited(ensureHiddenTitleBarApplied());
   }
 
   unawaited(
@@ -151,7 +158,7 @@ void main(List<String> args) async {
   });
 
   unawaited(
-    Future<void>.delayed(const Duration(seconds: 2), () async {
+    Future<void>.delayed(const Duration(milliseconds: 1200), () async {
       if (windowShown) return;
       if (!windowReady.isCompleted) {
         windowReady.complete();

@@ -25,6 +25,7 @@ class SeekPreviewService {
   bool _enabled = false;
   bool _disposed = false;
   bool _tuned = false;
+  int _sourceGeneration = 0;
 
   final _LruCache<int, Uint8List> _cache = _LruCache(_cacheLimit);
 
@@ -60,6 +61,15 @@ class SeekPreviewService {
       return;
     }
     if (_loadedPath == normalized && _player != null) return;
+    _sourceGeneration++;
+    final pendingCompleter = _pendingCompleter;
+    if (pendingCompleter != null && !pendingCompleter.isCompleted) {
+      pendingCompleter.complete(null);
+    }
+    _pendingCompleter = null;
+    _pendingKey = null;
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
     _cache.clear();
     _prefetchQueue.clear();
     await _ensurePlayer();
@@ -173,6 +183,7 @@ class SeekPreviewService {
   Future<Uint8List?> _captureAt(int key) async {
     final p = _player;
     if (p == null || _loadedPath == null) return null;
+    final generation = _sourceGeneration;
     try {
       await p.seek(Duration(milliseconds: key));
     } catch (_) {}
@@ -183,6 +194,7 @@ class SeekPreviewService {
     } catch (_) {
       bytes = null;
     }
+    if (generation != _sourceGeneration) return null;
     if (bytes != null) _cache.put(key, bytes);
     return bytes;
   }

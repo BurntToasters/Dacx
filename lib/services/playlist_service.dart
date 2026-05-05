@@ -39,7 +39,7 @@ class PlaylistService extends ChangeNotifier {
     } else {
       _index = startIndex.clamp(0, _items.length - 1);
     }
-    _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
   }
 
@@ -50,7 +50,7 @@ class PlaylistService extends ChangeNotifier {
     final wasEmpty = _items.isEmpty;
     _items.addAll(filtered);
     if (wasEmpty) _index = 0;
-    _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
   }
 
@@ -64,7 +64,7 @@ class PlaylistService extends ChangeNotifier {
     } else {
       _items.insert(_index + 1, trimmed);
     }
-    _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
   }
 
@@ -78,7 +78,7 @@ class PlaylistService extends ChangeNotifier {
     } else if (i == _index && _index >= _items.length) {
       _index = _items.length - 1;
     }
-    _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
   }
 

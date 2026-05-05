@@ -678,6 +678,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _showUpdateSnackbar(UpdateInfo update) {
+    if (!mounted) return;
     _log(
       'update_snackbar_shown',
       category: DebugLogCategory.update,
@@ -1029,6 +1030,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Navigation ────────────────────────────────────────────
 
   void _openSettings() {
+    if (!mounted) return;
     _log('open_settings_requested', category: DebugLogCategory.ui);
     Navigator.of(context).push(
       PageRouteBuilder<void>(
@@ -1884,7 +1886,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (list.isEmpty) return;
     final current = _currentTrackSelection?.audio.id;
     final idx = list.indexWhere((t) => t.id == current);
-    final next = list[(idx + 1) % list.length];
+    final next = idx < 0 ? list.first : list[(idx + 1) % list.length];
     await _disableMixForManualTrackSelection();
     await _playerService.setAudioTrack(next);
     _showOsdMessage(
@@ -1902,7 +1904,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (list.length <= 1) return;
     final current = _currentTrackSelection?.subtitle.id;
     final idx = list.indexWhere((t) => t.id == current);
-    final next = list[(idx + 1) % list.length];
+    final next = idx < 0 ? list.first : list[(idx + 1) % list.length];
     await _playerService.setSubtitleTrack(next);
     _subtitlesVisible = next.id != 'no';
     _showOsdMessage(
@@ -2317,7 +2319,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── More menu ─────────────────────────────────────────────
 
-  void _showMoreMenu() async {
+  Future<void> _showMoreMenu() async {
     final tracks = _currentTracks;
     final hasAudioOptions = tracks != null && tracks.audio.length > 1;
     final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
@@ -2608,7 +2610,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final tracks = _currentTracks;
     if (tracks == null) return;
     final list = tracks.audio
-        .where((t) => t.id != 'auto')
+        .where((t) => t.id != 'auto' && t.id != 'no')
         .toList(growable: false);
     final current = _currentTrackSelection?.audio.id;
     final selected = await showDialog<AudioTrack>(

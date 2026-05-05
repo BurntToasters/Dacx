@@ -125,7 +125,10 @@ class MediaSession {
   void EnsureInit() {
     if (smtc_) return;
     HWND hwnd = ::GetActiveWindow();
-    if (!hwnd) return;
+    if (!hwnd) {
+      ::OutputDebugStringW(L"[Dacx] SMTC init: no active window yet.\n");
+      return;
+    }
     auto interop = winrt::get_activation_factory<
         winrt::Windows::Media::SystemMediaTransportControls,
         ISystemMediaTransportControlsInterop>();
@@ -133,7 +136,13 @@ class MediaSession {
     HRESULT hr = interop->GetForWindow(
         hwnd, winrt::guid_of<winrt::Windows::Media::SystemMediaTransportControls>(),
         winrt::put_abi(controls));
-    if (FAILED(hr)) return;
+    if (FAILED(hr)) {
+      wchar_t buf[128];
+      swprintf_s(buf, L"[Dacx] SMTC GetForWindow failed: hr=0x%08lX\n",
+                 static_cast<unsigned long>(hr));
+      ::OutputDebugStringW(buf);
+      return;
+    }
     smtc_ = controls;
     using namespace winrt::Windows::Media;
     smtc_.IsEnabled(true);

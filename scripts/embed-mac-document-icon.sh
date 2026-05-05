@@ -24,6 +24,7 @@ fi
 ICONSET_DIR="$ROOT/build/mac-audio-icon.iconset"
 rm -rf "$ICONSET_DIR"
 mkdir -p "$ICONSET_DIR"
+trap 'rm -rf "$ICONSET_DIR"' EXIT
 while IFS=: read -r icon_name size; do
   sips -z "$size" "$size" "$SOURCE_PNG" --out "$ICONSET_DIR/$icon_name" >/dev/null
 done <<'EOF'
@@ -39,5 +40,4 @@ icon_512x512.png:512
 icon_512x512@2x.png:1024
 EOF
 iconutil -c icns "$ICONSET_DIR" -o "$DEST_ICNS"
-rm -rf "$ICONSET_DIR"
 echo "Embedded audio document icon at $DEST_ICNS"

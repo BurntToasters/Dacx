@@ -10,6 +10,11 @@ final class MediaSessionBridge {
   private var enabled = false
   private var info: [String: Any] = [:]
   private var artworkRequestId: UInt64 = 0
+  private var artworkTask: URLSessionDataTask?
+
+  deinit {
+    artworkTask?.cancel()
+  }
 
   func attach(messenger: FlutterBinaryMessenger) {
     let ch = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
@@ -95,7 +100,8 @@ final class MediaSessionBridge {
     guard let url = URL(string: uri) else { return }
     let token = artworkRequestId &+ 1
     artworkRequestId = token
-    URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+    artworkTask?.cancel()
+    let task = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
       guard let self = self,
             let data = data,
             let image = NSImage(data: data) else { return }
@@ -104,7 +110,9 @@ final class MediaSessionBridge {
         self.info[MPMediaItemPropertyArtwork] = self.makeArtwork(image)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = self.info
       }
-    }.resume()
+    }
+    artworkTask = task
+    task.resume()
   }
 
   private func clear() {
