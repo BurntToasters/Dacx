@@ -38,7 +38,8 @@ syncFile("pubspec.yaml", path.join(root, "pubspec.yaml"), (text) => {
     exitCode = 1;
     return null;
   }
-  const buildNumber = match[3] || "1";
+  const [major, minor, patch] = version.replace(/-.*$/, "").split(".").map(Number);
+  const buildNumber = String(major * 10_000 + minor * 100 + patch);
   return text.replace(versionPattern, `${match[1]}${version}+${buildNumber}`);
 });
 
