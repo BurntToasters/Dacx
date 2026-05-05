@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
+import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/screens/settings_screen.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/settings_service.dart';
@@ -61,6 +62,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,
@@ -79,6 +82,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,
@@ -107,6 +112,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,
@@ -150,6 +157,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,
@@ -173,6 +182,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,
@@ -210,6 +221,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,
@@ -241,6 +254,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: _theme(),
           home: SettingsScreen(
             settings: services.settings,

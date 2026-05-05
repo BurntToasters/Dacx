@@ -51,6 +51,16 @@ static gboolean dacx_proc_args_request_new_instance() {
   if (cmdline == nullptr) return FALSE;
   char buf[8192];
   size_t read = fread(buf, 1, sizeof(buf) - 1, cmdline);
+  // If we filled the buffer, the kernel almost certainly truncated us.
+  // Treat this as "not asking for a new instance" rather than scanning a
+  // potentially-spliced argv that could match our flag mid-string.
+  if (read >= sizeof(buf) - 1) {
+    g_warning(
+        "dacx: /proc/self/cmdline exceeded %zu bytes; ignoring for instance "
+        "flag detection", sizeof(buf) - 1);
+    fclose(cmdline);
+    return FALSE;
+  }
   fclose(cmdline);
   buf[read] = '\0';
   size_t i = 0;
@@ -241,10 +251,16 @@ static void my_application_open(GApplication* application, GFile** files,
     if (n_files > 0 && files != nullptr) {
       g_autofree gchar* path = g_file_get_path(files[0]);
       if (path != nullptr) {
-        g_strfreev(self->dart_entrypoint_arguments);
-        self->dart_entrypoint_arguments = g_new0(char*, 2);
-        self->dart_entrypoint_arguments[0] = g_strdup(path);
-        self->dart_entrypoint_arguments[1] = nullptr;
+        // Allocate the new args array first; only release the previous
+        // argv after the new one is fully constructed so a g_new0 failure
+        // (or future expansion of this block) cannot leave the field
+        // dangling.
+        char** next_args = g_new0(char*, 2);
+        next_args[0] = g_strdup(path);
+        next_args[1] = nullptr;
+        char** previous = self->dart_entrypoint_arguments;
+        self->dart_entrypoint_arguments = next_args;
+        g_strfreev(previous);
       }
     }
     GtkWindow* window = my_application_create_window(self, application);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/screens/settings_screen.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/settings_service.dart';
@@ -29,6 +30,8 @@ ThemeData _theme() {
 }
 
 Widget _wrap(SettingsService s, DebugLogService log) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   theme: _theme(),
   home: SettingsScreen(settings: s, debugLog: log),
 );

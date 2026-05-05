@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -79,9 +79,12 @@ class SeekPreviewService {
       await p.open(Media(normalized), play: false);
       try {
         await p.setVolume(0);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: seek-preview setVolume failed: $e');
+      }
       _loadedPath = normalized;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Dacx: seek-preview open failed: $e');
       _loadedPath = null;
     }
   }
@@ -94,7 +97,9 @@ class SeekPreviewService {
     _controller = controller;
     try {
       await player.setVolume(0);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Dacx: seek-preview ensurePlayer setVolume failed: $e');
+    }
     await _applyTuning(player);
   }
 
@@ -105,7 +110,9 @@ class SeekPreviewService {
     Future<void> trySet(String name, String value) async {
       try {
         await platform.setProperty(name, value);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: seek-preview setProperty $name failed: $e');
+      }
     }
 
     await trySet('audio', 'no');
@@ -151,7 +158,7 @@ class SeekPreviewService {
   int _quantize(int ms) => (ms ~/ _quantumMs) * _quantumMs;
 
   Future<void> _runPending() async {
-    if (_busy) return;
+    if (_busy || _disposed) return;
     final key = _pendingKey;
     final completer = _pendingCompleter;
     if (key == null || completer == null) return;
@@ -162,38 +169,51 @@ class SeekPreviewService {
         if (!completer.isCompleted) completer.complete(cached);
         _pendingCompleter = null;
         _pendingKey = null;
-        _scheduleNeighborPrefetch(key);
+        if (!_disposed) _scheduleNeighborPrefetch(key);
         return;
       }
       final bytes = await _captureAt(key);
+      if (_disposed) {
+        if (!completer.isCompleted) completer.complete(null);
+        return;
+      }
       if (!completer.isCompleted) completer.complete(bytes);
       _pendingCompleter = null;
       _pendingKey = null;
       if (bytes != null) _scheduleNeighborPrefetch(key);
     } finally {
       _busy = false;
-      if (_pendingCompleter != null && !(_debounceTimer?.isActive ?? false)) {
-        unawaited(Future.microtask(_runPending));
-      } else {
-        unawaited(_drainPrefetch());
+      if (!_disposed) {
+        if (_pendingCompleter != null && !(_debounceTimer?.isActive ?? false)) {
+          unawaited(Future.microtask(_runPending));
+        } else {
+          unawaited(_drainPrefetch());
+        }
       }
     }
   }
 
   Future<Uint8List?> _captureAt(int key) async {
+    if (_disposed) return null;
     final p = _player;
     if (p == null || _loadedPath == null) return null;
     final generation = _sourceGeneration;
     try {
       await p.seek(Duration(milliseconds: key));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Dacx: seek-preview seek failed: $e');
+    }
+    if (_disposed) return null;
     await Future<void>.delayed(_frameSettleDelay);
+    if (_disposed) return null;
     Uint8List? bytes;
     try {
       bytes = await p.screenshot(format: 'image/jpeg');
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Dacx: seek-preview screenshot failed: $e');
       bytes = null;
     }
+    if (_disposed) return null;
     if (generation != _sourceGeneration) return null;
     if (bytes != null) _cache.put(key, bytes);
     return bytes;
@@ -256,7 +276,9 @@ class SeekPreviewService {
     if (p != null) {
       try {
         await p.dispose();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: seek-preview teardown dispose failed: $e');
+      }
     }
   }
 

@@ -37,11 +37,83 @@ enum LoopMode {
 class SettingsService extends ChangeNotifier {
   final SharedPreferences _prefs;
 
-  SettingsService(this._prefs);
+  SettingsService(this._prefs) {
+    _runMigrationsIfNeeded();
+  }
 
   List<double>? _eqBandsCache;
   Map<String, List<String>>? _keybindsCache;
-  Map<String, int>? _resumePositionsCache;
+  Map<String, _ResumeEntry>? _resumePositionsCache;
+
+  /// Bump this and append a new entry to [_migrations] whenever a stored
+  /// settings key is added/removed/renamed/retyped in a way that needs to
+  /// transform existing data on disk.
+  ///
+  /// Each migration is a synchronous function `(prefs) => void` that takes
+  /// the schema from version `i` to version `i + 1`, where `i` is the
+  /// migration's index in [_migrations].
+  static const int currentSchemaVersion = 2;
+  static const String _kSchemaVersion = 'settings_schema_version';
+
+  /// `_migrations[i]` upgrades from version `i` to version `i + 1`.
+  /// Adding a new migration: append, then bump [currentSchemaVersion] to
+  /// match the new list length.
+  static final List<void Function(SharedPreferences)> _migrations =
+      <void Function(SharedPreferences)>[
+        // 0 -> 1: baseline. No transform; just stamps the schema version on
+        // existing installs so future migrations have a known starting point.
+        (prefs) {},
+        // 1 -> 2: convert resume_positions_v1 (Map<path,int>) into
+        // resume_positions_v2 (Map<path,{p,t}>). Existing entries are stamped
+        // with the current wall-clock so subsequent LRU eviction has a starting
+        // ordering; v1 key is removed.
+        (prefs) {
+          final raw = prefs.getString('resume_positions_v1');
+          if (raw == null) return;
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is! Map) {
+              prefs.remove('resume_positions_v1');
+              return;
+            }
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final upgraded = <String, Map<String, int>>{};
+            decoded.forEach((key, value) {
+              if (key is String && value is int && value > 0) {
+                upgraded[key] = {'p': value, 't': now};
+              }
+            });
+            if (upgraded.isNotEmpty) {
+              prefs.setString('resume_positions_v2', jsonEncode(upgraded));
+            }
+            prefs.remove('resume_positions_v1');
+          } catch (_) {
+            prefs.remove('resume_positions_v1');
+          }
+        },
+      ];
+
+  void _runMigrationsIfNeeded() {
+    // Fresh install: no settings keys have been written yet — stamp the
+    // current schema version and skip running any migrations.
+    final hasAnyKey = _prefs.getKeys().isNotEmpty;
+    final stored = _prefs.getInt(_kSchemaVersion);
+    if (!hasAnyKey) {
+      _prefs.setInt(_kSchemaVersion, currentSchemaVersion);
+      return;
+    }
+    final from = stored ?? 0;
+    if (from >= currentSchemaVersion) return;
+    for (var i = from; i < currentSchemaVersion; i++) {
+      if (i < _migrations.length) {
+        _migrations[i](_prefs);
+      }
+    }
+    _prefs.setInt(_kSchemaVersion, currentSchemaVersion);
+  }
+
+  int get schemaVersion =>
+      _prefs.getInt(_kSchemaVersion) ?? currentSchemaVersion;
 
   static const _kVolume = 'playback_volume';
   static const _kSpeed = 'playback_speed';
@@ -78,7 +150,7 @@ class SettingsService extends ChangeNotifier {
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
   static const _kResumeEnabled = 'resume_playback_enabled';
-  static const _kResumePositions = 'resume_positions_v1';
+  static const _kResumePositions = 'resume_positions_v2';
   static const _kPlaylistShuffle = 'playlist_shuffle';
   static const _kAllowMultipleInstances = 'allow_multiple_instances';
 
@@ -236,9 +308,22 @@ class SettingsService extends ChangeNotifier {
     }
   }
 
+  /// Looser variant of [_isSafeDirectoryPath] for individual file paths
+  /// stored in recents / resume-position records. Files come and go on
+  /// disk so we don't gate on existence here, but we still reject obvious
+  /// path-traversal payloads and embedded NULs to keep the JSON store
+  /// hygienic.
+  bool _isSafeFilePath(String value) {
+    if (value.isEmpty) return false;
+    if (value.contains('\u0000')) return false;
+    final segments = value.replaceAll('\\', '/').split('/');
+    if (segments.any((s) => s == '..')) return false;
+    return true;
+  }
+
   void addRecentFile(String path) {
     final normalizedPath = path.trim();
-    if (normalizedPath.isEmpty || normalizedPath.contains('\u0000')) return;
+    if (!_isSafeFilePath(normalizedPath)) return;
     final files = List<String>.from(recentFiles)..remove(normalizedPath);
     files.insert(0, normalizedPath);
     if (files.length > maxRecentFiles) {
@@ -538,31 +623,38 @@ class SettingsService extends ChangeNotifier {
     await InstanceModeService.setAllowMultipleInstances(allowMultipleInstances);
   }
 
-  Map<String, int> _readResumePositions() {
+  Map<String, _ResumeEntry> _readResumePositions() {
     final cached = _resumePositionsCache;
-    if (cached != null) return Map<String, int>.of(cached);
+    if (cached != null) {
+      return Map<String, _ResumeEntry>.of(cached);
+    }
     final raw = _prefs.getString(_kResumePositions);
-    Map<String, int> result;
+    Map<String, _ResumeEntry> result;
     if (raw == null) {
-      result = <String, int>{};
+      result = <String, _ResumeEntry>{};
     } else {
       try {
         final decoded = jsonDecode(raw);
         if (decoded is! Map) {
-          result = <String, int>{};
+          result = <String, _ResumeEntry>{};
         } else {
-          result = <String, int>{};
+          result = <String, _ResumeEntry>{};
           decoded.forEach((key, value) {
-            if (key is String && value is int && value > 0) {
-              result[key] = value;
+            if (key is String && value is Map) {
+              final p = value['p'];
+              final t = value['t'];
+              if (p is int && p > 0 && t is int && t > 0) {
+                result[key] = _ResumeEntry(positionMs: p, lastAccessMs: t);
+              }
             }
           });
         }
-      } catch (_) {
-        result = <String, int>{};
+      } catch (e) {
+        debugPrint('Dacx: resume positions decode failed: $e');
+        result = <String, _ResumeEntry>{};
       }
     }
-    _resumePositionsCache = Map<String, int>.of(result);
+    _resumePositionsCache = Map<String, _ResumeEntry>.of(result);
     return result;
   }
 
@@ -571,35 +663,63 @@ class SettingsService extends ChangeNotifier {
     if (!resumePlaybackEnabled) return null;
     final normalized = path.trim();
     if (normalized.isEmpty) return null;
-    return _readResumePositions()[normalized];
+    final positions = _readResumePositions();
+    final entry = positions[normalized];
+    if (entry == null) return null;
+    // Touch the access timestamp so frequently-replayed files survive LRU
+    // eviction even when many other files are saved between visits.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - entry.lastAccessMs > 1000) {
+      positions[normalized] = _ResumeEntry(
+        positionMs: entry.positionMs,
+        lastAccessMs: now,
+      );
+      _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
+      _prefs.setString(_kResumePositions, _encodeResumePositions(positions));
+    }
+    return entry.positionMs;
   }
 
   /// Stores [positionMs] for [path]. Pass null/0 to clear.
   void saveResumePosition(String path, int? positionMs) {
     final normalized = path.trim();
-    if (normalized.isEmpty) return;
+    if (!_isSafeFilePath(normalized)) return;
     final positions = _readResumePositions();
     if (positionMs == null || positionMs <= 0) {
       if (positions.remove(normalized) == null) return;
     } else {
-      positions[normalized] = positionMs;
+      positions[normalized] = _ResumeEntry(
+        positionMs: positionMs,
+        lastAccessMs: DateTime.now().millisecondsSinceEpoch,
+      );
     }
     if (positions.length > maxResumeEntries) {
-      final keys = positions.keys.toList();
-      for (var i = 0; i < keys.length - maxResumeEntries; i++) {
-        positions.remove(keys[i]);
+      // True LRU eviction: drop the entries whose lastAccessMs is oldest.
+      final entries = positions.entries.toList()
+        ..sort((a, b) => a.value.lastAccessMs.compareTo(b.value.lastAccessMs));
+      final overflow = positions.length - maxResumeEntries;
+      for (var i = 0; i < overflow; i++) {
+        positions.remove(entries[i].key);
       }
     }
-    _resumePositionsCache = Map<String, int>.of(positions);
+    _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
     if (positions.isEmpty) {
       _prefs.remove(_kResumePositions);
     } else {
-      _prefs.setString(_kResumePositions, jsonEncode(positions));
+      _prefs.setString(_kResumePositions, _encodeResumePositions(positions));
     }
   }
 
+  String _encodeResumePositions(Map<String, _ResumeEntry> positions) {
+    final out = <String, Map<String, int>>{};
+    positions.forEach((k, v) {
+      out[k] = {'p': v.positionMs, 't': v.lastAccessMs};
+    });
+    return jsonEncode(out);
+  }
+
   void clearAllResumePositions() {
-    _resumePositionsCache = <String, int>{};
+    _resumePositionsCache = <String, _ResumeEntry>{};
     _prefs.remove(_kResumePositions);
     notifyListeners();
   }
@@ -622,7 +742,8 @@ class SettingsService extends ChangeNotifier {
           .map((entry) => entry.trim())
           .where((entry) => entry.isNotEmpty)
           .toList(growable: false);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Dacx: recent files decode failed: $e');
       return [];
     }
   }
@@ -640,4 +761,10 @@ class SettingsService extends ChangeNotifier {
       return false;
     }
   }
+}
+
+class _ResumeEntry {
+  final int positionMs;
+  final int lastAccessMs;
+  const _ResumeEntry({required this.positionMs, required this.lastAccessMs});
 }

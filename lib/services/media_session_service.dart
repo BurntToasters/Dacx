@@ -174,9 +174,13 @@ class MediaSessionService {
   }
 
   Future<void> dispose() async {
-    if (_mpris != null) {
-      await _mpris!.dispose();
-      _mpris = null;
+    final mpris = _mpris;
+    // Null out the field before awaiting so concurrent calls (e.g. a final
+    // updateMetadata firing during shutdown) don't double-dispose or race
+    // against this disposal.
+    _mpris = null;
+    if (mpris != null) {
+      await mpris.dispose();
     }
     await _commandsCtrl.close();
   }

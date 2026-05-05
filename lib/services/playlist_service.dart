@@ -142,9 +142,14 @@ class PlaylistService extends ChangeNotifier {
     }
     final indices = List<int>.generate(_items.length, (i) => i);
     indices.shuffle(Random());
-    if (preserveCurrent && _index >= 0) {
-      indices.remove(_index);
-      indices.insert(0, _index);
+    if (preserveCurrent && _index >= 0 && _index < _items.length) {
+      // Find the current index in the shuffled list and swap it to slot 0,
+      // avoiding the O(n) cost of List.remove + List.insert(0).
+      final pos = indices.indexOf(_index);
+      if (pos > 0) {
+        indices[pos] = indices[0];
+        indices[0] = _index;
+      }
     }
     _shuffleOrder
       ..clear()
