@@ -76,20 +76,12 @@ class InstanceModeService {
         args.add('--args');
         args.add(newInstanceFlag);
         if (filePath != null && filePath.isNotEmpty) args.add(filePath);
-        await Process.start(
-          'open',
-          args,
-          mode: ProcessStartMode.detached,
-        );
+        await Process.start('open', args, mode: ProcessStartMode.detached);
         return true;
       }
       final args = <String>[newInstanceFlag];
       if (filePath != null && filePath.isNotEmpty) args.add(filePath);
-      await Process.start(
-        exe,
-        args,
-        mode: ProcessStartMode.detached,
-      );
+      await Process.start(exe, args, mode: ProcessStartMode.detached);
       return true;
     } catch (_) {
       return false;

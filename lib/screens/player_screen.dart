@@ -45,9 +45,7 @@ const _audioExtensions = {
 const _openFileMethodChannel = MethodChannel(
   'run.rosie.dacx/open_file/methods',
 );
-const _openFileEventChannel = EventChannel(
-  'run.rosie.dacx/open_file/events',
-);
+const _openFileEventChannel = EventChannel('run.rosie.dacx/open_file/events');
 
 class PlayerScreen extends StatefulWidget {
   final SettingsService settings;
