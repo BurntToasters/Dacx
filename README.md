@@ -13,7 +13,7 @@ Built with Flutter + [media_kit](https://github.com/media-kit/media-kit) (libmpv
       </td>
       <td valign="middle" align="center">
         <p align="center">
-  <img width="65%" height="1012" alt="Dacx-1" src="https://github.com/BurntToasters/Dacx/blob/main/assets/screenshots/dacx_sc.png" />
+  <img width="85%" height="1012" alt="Dacx-1" src="https://github.com/BurntToasters/Dacx/blob/main/assets/screenshots/dacx_sc.png" />
 &nbsp;
 </p>
       </td>
