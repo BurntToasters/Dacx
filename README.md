@@ -44,17 +44,13 @@ Built with Flutter + [media_kit](https://github.com/media-kit/media-kit) (libmpv
 - Audio + video playback for MP3, FLAC, WAV, OGG, AAC, Opus, MP4, MKV, AVI, WebM and more (anything libmpv handles).
 - 10-band equalizer with presets.
 - Multi-audio-track mixing via `lavfi-complex`.
+  - This is an experimental feature and is unstable for now.
 - Resume playback from where you left off.
 - Compact mode and always-on-top window.
-- Drag-and-drop and CLI file opening.
-- System media-session integration: lock-screen / Now Playing / SMTC controls, artwork, scrubbing, and remote play/pause/next/previous/seek on all three platforms.
-- File associations + custom document icon on macOS, Windows installers, and Flatpak.
+- System media-session integration: lock-screen / Now Playing / SMTC controls, artwork, and scrubbing.
+- File associations + custom document icon on Windows and Linux.
 - Built-in update checker against GitHub releases.
-- Notarized + stapled DMG and ZIP for macOS; signed installers for Windows.
-
-## Changelog
-
-See [`run.rosie.dacx.metainfo.xml`](run.rosie.dacx.metainfo.xml) for per-version release notes.
+- Notarized & Signed DMG and ZIP for macOS; signed installers via GPG for Windows and Linux.
 
 ## Development
 
