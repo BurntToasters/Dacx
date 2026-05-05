@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 class InstanceModeService {
@@ -49,7 +50,7 @@ class InstanceModeService {
     }
   }
 
-  static Future<void> setAllowMultipleInstances(bool enabled) async {
+  static Future<bool> setAllowMultipleInstances(bool enabled) async {
     try {
       final path = flagFilePath();
       final file = File(path);
@@ -59,7 +60,11 @@ class InstanceModeService {
       } else if (file.existsSync()) {
         await file.delete();
       }
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      debugPrint('Dacx: setAllowMultipleInstances failed: $e');
+      return false;
+    }
   }
 
   static Future<bool> spawnNewInstance({String? filePath}) async {

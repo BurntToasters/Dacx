@@ -404,7 +404,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _playlist.dispose();
     try {
       _videoController.player.dispose();
-    } catch (_) {}
+    } catch (e) {
+      _log(
+        'video_controller_dispose_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
     unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
@@ -547,7 +553,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (path == null) continue;
             await _openRequestedFile(path, forcePlay: true);
           }
-        } catch (_) {}
+        } catch (e) {
+          _log(
+            'open_file_pending_retry_failed',
+            category: DebugLogCategory.system,
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }
       });
     }
   }
@@ -701,7 +714,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _log('file_picker_open_requested');
     try {
       final initialDirectory = _settings.lastOpenDirectory;
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.any,
         lockParentWindow: true,
         allowMultiple: false,
@@ -1562,7 +1575,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
               _log('control_play_pause_pressed', category: DebugLogCategory.ui);
               try {
                 await _playerService.playPause();
-              } catch (_) {}
+              } catch (e) {
+                _log(
+                  'control_play_pause_failed',
+                  category: DebugLogCategory.ui,
+                  message: e.toString(),
+                  severity: DebugSeverity.warn,
+                );
+              }
             },
             onStop: () async {
               _log('control_stop_pressed', category: DebugLogCategory.ui);
@@ -1595,7 +1615,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
               try {
                 await _playerService.setVolume(vol);
                 _settings.volume = vol;
-              } catch (_) {}
+              } catch (e) {
+                _log(
+                  'control_volume_apply_failed',
+                  category: DebugLogCategory.ui,
+                  message: e.toString(),
+                  severity: DebugSeverity.warn,
+                );
+              }
             },
             onLoopModeChanged: (mode) {
               _log(
@@ -1998,7 +2025,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final dir = _settings.screenshotDir ?? _defaultScreenshotDir();
     try {
       Directory(dir).createSync(recursive: true);
-    } catch (_) {}
+    } catch (e) {
+      _log(
+        'screenshot_dir_create_failed',
+        message: e.toString(),
+        details: {'dir': dir},
+        severity: DebugSeverity.warn,
+      );
+    }
     final base = p.basenameWithoutExtension(_currentFile!);
     final ts = DateTime.now()
         .toIso8601String()
@@ -2250,7 +2284,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) {
         _showOsdMessage('Resumed at ${_formatHms(Duration(milliseconds: ms))}');
       }
-    } catch (_) {}
+    } catch (e) {
+      _log(
+        'resume_seek_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
   }
 
   static String _formatHms(Duration d) {
@@ -2301,7 +2341,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           await windowManager.setPosition(_preCompactPos!);
         }
         await windowManager.setAlwaysOnTop(_preCompactAlwaysOnTop);
-      } catch (_) {}
+      } catch (e) {
+        _log(
+          'compact_mode_restore_failed',
+          category: DebugLogCategory.ui,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }
       setState(() => _compactMode = false);
       _showOsdMessage('Mini-player off');
     } else {
@@ -2314,7 +2361,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
         await windowManager.setSize(_compactWindowSize);
         await windowManager.setAlwaysOnTop(true);
-      } catch (_) {}
+      } catch (e) {
+        _log(
+          'compact_mode_enter_failed',
+          category: DebugLogCategory.ui,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }
       setState(() => _compactMode = true);
       _showOsdMessage('Mini-player on');
     }
@@ -2858,7 +2912,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _pickFilesToEnqueue() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         allowMultiple: true,
         type: FileType.media,
       );

@@ -50,9 +50,8 @@ class HardwareAccelerationService {
     if (!_macHardwareAccelerationSupportLogged) {
       _macHardwareAccelerationSupportLogged = true;
       if (kDebugMode) {
-        // ignore: avoid_print
-        print(
-          'macOS HW acceleration support detected: ${supported ? 'available' : 'not available'}',
+        debugPrint(
+          'Dacx: macOS HW acceleration support detected: ${supported ? 'available' : 'not available'}',
         );
       }
     }
@@ -129,7 +128,9 @@ class HardwareAccelerationService {
 
       if (explicitMetalUnsupported) return _MacMetalSupport.unsupported;
       if (sawMetalSignal) return _MacMetalSupport.supported;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Dacx: detectMacMetalSupport parse failed: $e');
+    }
 
     return _MacMetalSupport.unknown;
   }

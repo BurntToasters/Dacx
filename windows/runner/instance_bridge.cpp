@@ -6,6 +6,9 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 #include <windows.h>
+#include <accctrl.h>
+#include <aclapi.h>
+#include <sddl.h>
 
 #include <atomic>
 #include <memory>
@@ -155,11 +158,59 @@ void HandlePipeClient(HANDLE pipe) {
 void PipeServerLoop() {
   const std::wstring& name = PipeName();
   for (;;) {
+    // Build a SECURITY_ATTRIBUTES that restricts the named pipe to the
+    // current user only. Without this, the default DACL for named pipes
+    // permits other local users to connect and inject file paths into
+    // this process.
+    SECURITY_ATTRIBUTES sa{};
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    PACL acl = nullptr;
+    PSID user_sid = nullptr;
+    HANDLE token = nullptr;
+    bool restricted = false;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+      DWORD info_len = 0;
+      GetTokenInformation(token, TokenUser, nullptr, 0, &info_len);
+      if (info_len > 0) {
+        std::vector<BYTE> info_buf(info_len);
+        if (GetTokenInformation(token, TokenUser, info_buf.data(), info_len,
+                                &info_len)) {
+          PTOKEN_USER tu = reinterpret_cast<PTOKEN_USER>(info_buf.data());
+          DWORD sid_len = GetLengthSid(tu->User.Sid);
+          user_sid = static_cast<PSID>(LocalAlloc(LMEM_FIXED, sid_len));
+          if (user_sid && CopySid(sid_len, user_sid, tu->User.Sid)) {
+            EXPLICIT_ACCESSW ea{};
+            ea.grfAccessPermissions = GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE;
+            ea.grfAccessMode = SET_ACCESS;
+            ea.grfInheritance = NO_INHERITANCE;
+            ea.Trustee.TrusteeForm = TRUSTEE_IS_SID;
+            ea.Trustee.TrusteeType = TRUSTEE_IS_USER;
+            ea.Trustee.ptstrName = static_cast<LPWSTR>(user_sid);
+            if (SetEntriesInAclW(1, &ea, nullptr, &acl) == ERROR_SUCCESS) {
+              sd = LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
+              if (sd && InitializeSecurityDescriptor(
+                            sd, SECURITY_DESCRIPTOR_REVISION) &&
+                  SetSecurityDescriptorDacl(sd, TRUE, acl, FALSE)) {
+                sa.nLength = sizeof(sa);
+                sa.lpSecurityDescriptor = sd;
+                sa.bInheritHandle = FALSE;
+                restricted = true;
+              }
+            }
+          }
+        }
+      }
+      CloseHandle(token);
+    }
     HANDLE pipe = CreateNamedPipeW(
         name.c_str(),
         PIPE_ACCESS_INBOUND,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-        PIPE_UNLIMITED_INSTANCES, kPipeBufferSize, kPipeBufferSize, 0, nullptr);
+        PIPE_UNLIMITED_INSTANCES, kPipeBufferSize, kPipeBufferSize, 0,
+        restricted ? &sa : nullptr);
+    if (acl) LocalFree(acl);
+    if (sd) LocalFree(sd);
+    if (user_sid) LocalFree(user_sid);
     if (pipe == INVALID_HANDLE_VALUE) {
       Sleep(250);
       continue;

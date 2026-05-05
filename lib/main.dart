@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'l10n/app_localizations.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
 import 'services/instance_mode_service.dart';
@@ -92,7 +93,9 @@ void main(List<String> args) async {
       try {
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
         hiddenTitleBarConfirmed = true;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: setTitleBarStyle (macOS) failed: $e');
+      }
       return;
     }
     if (!Platform.isWindows) {
@@ -107,7 +110,8 @@ void main(List<String> args) async {
           hiddenTitleBarConfirmed = true;
           return;
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Dacx: setTitleBarStyle (Windows) failed: $e');
         return;
       }
       await Future<void>.delayed(Duration(milliseconds: 24 * (attempt + 1)));
@@ -138,7 +142,8 @@ void main(List<String> args) async {
         }
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
         await ensureHiddenTitleBarApplied();
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Dacx: startup window operations failed: $e');
         // Continue to show fallback even if startup window operations fail.
       } finally {
         if (!windowReady.isCompleted) {
@@ -200,7 +205,8 @@ String? _normalizeCliPath(String value) {
   if (uri != null && uri.scheme == 'file') {
     try {
       return uri.toFilePath(windows: Platform.isWindows);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
       return null;
     }
   }
@@ -214,7 +220,9 @@ String? _normalizeCliPath(String value) {
         RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed)) {
       return trimmed;
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
+  }
 
   return null;
 }
@@ -300,7 +308,9 @@ class _DacxAppState extends State<DacxApp>
   Future<void> _syncKeyboardState() async {
     try {
       await HardwareKeyboard.instance.syncKeyboardState();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Dacx: syncKeyboardState failed: $e');
+    }
   }
 
   @override
@@ -348,7 +358,9 @@ class _DacxAppState extends State<DacxApp>
         } else {
           await windowManager.setOpacity(effectiveOpacity);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: window opacity apply failed: $e');
+      }
 
       try {
         if (Platform.isMacOS) {
@@ -357,7 +369,9 @@ class _DacxAppState extends State<DacxApp>
             await Window.makeTitlebarTransparent();
             await Window.enableFullSizeContentView();
             await Window.hideTitle();
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
+          }
         }
 
         if (blurEnabled) {
@@ -408,7 +422,9 @@ class _DacxAppState extends State<DacxApp>
             dark: _isDarkMode(),
           );
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: window blur effect apply failed: $e');
+      }
       if (widget.debugLog.isEnabled) {
         widget.debugLog.logLazy(
           category: DebugLogCategory.system,
@@ -493,6 +509,8 @@ class _DacxAppState extends State<DacxApp>
     return MaterialApp(
       title: 'Dacx',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       scrollBehavior: const _NoBounceScrollBehavior(),
       themeMode: s.themeMode,
       theme: ThemeData(

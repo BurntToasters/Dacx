@@ -1,0 +1,32 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Dacx",
+  "@appTitle": { "description": "Application name shown in window title and About dialog." },
+
+  "settingsTitle": "Settings",
+  "@settingsTitle": { "description": "AppBar title for the settings screen." },
+
+  "settingsAutoPlay": "Auto-play on file open",
+  "settingsResumePlayback": "Resume from last position",
+  "settingsOnScreenDisplay": "On-screen display",
+  "settingsMediaSession": "System media keys / Now Playing",
+  "settingsAlwaysOnTop": "Always on top",
+  "settingsRememberWindow": "Remember window size & position",
+  "settingsAllowMultipleWindows": "Allow multiple windows",
+  "settingsCheckForUpdates": "Check for updates on launch",
+  "settingsTheme": "Theme",
+  "settingsThemeDark": "Dark",
+  "settingsThemeLight": "Light",
+  "settingsThemeSystem": "System",
+  "settingsAccentColor": "Accent color",
+  "settingsHardwareAcceleration": "Hardware acceleration",
+  "settingsHardwareAccelerationRestartNote": "Requires restart to take effect",
+  "settingsPlaybackSpeed": "Playback speed",
+  "settingsLoopMode": "Loop mode",
+
+  "snackCouldNotReadDroppedFile": "Could not read dropped file path.",
+  "snackCouldNotReadSelectedFile": "Could not read selected file path.",
+  "snackDebugLogCopied": "Redacted debug log copied to clipboard.",
+  "snackDebugLogCleared": "Debug log cleared."
+}

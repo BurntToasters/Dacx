@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/settings_service.dart';
@@ -82,12 +83,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final visuals = context.windowVisuals;
     final isDesktopCustomChrome = Platform.isMacOS || Platform.isWindows;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: isDesktopCustomChrome
           ? null
-          : AppBar(title: const Text('Settings')),
+          : AppBar(title: Text(l10n.settingsTitle)),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
