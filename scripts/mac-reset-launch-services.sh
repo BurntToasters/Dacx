@@ -25,6 +25,21 @@ if [[ ! -x "$LSREGISTER" ]]; then
   exit 1
 fi
 
+COPY_COUNT=0
+COPIES=()
+
+add_unique_copy() {
+  local candidate="$1"
+  [[ -z "$candidate" ]] && return
+  for existing in "${COPIES[@]}"; do
+    if [[ "$existing" == "$candidate" ]]; then
+      return
+    fi
+  done
+  COPIES+=("$candidate")
+  COPY_COUNT=$((COPY_COUNT + 1))
+}
+
 echo "==> Quitting Dacx (if running)..."
 if pgrep -x Dacx >/dev/null 2>&1; then
   osascript -e 'tell application "Dacx" to quit' 2>/dev/null || true
@@ -33,14 +48,34 @@ if pgrep -x Dacx >/dev/null 2>&1; then
 fi
 
 echo "==> Locating every copy of $BUNDLE_ID on this machine..."
-COPY_COUNT=0
-COPIES=()
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
-  echo "    $line"
-  COPIES+=("$line")
-  COPY_COUNT=$((COPY_COUNT + 1))
+  add_unique_copy "$line"
 done < <(mdfind "kMDItemCFBundleIdentifier == '$BUNDLE_ID'" 2>/dev/null)
+
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  add_unique_copy "$line"
+done < <(
+  "$LSREGISTER" -dump 2>/dev/null | awk -v id="$BUNDLE_ID" '
+    /^path:[[:space:]]*/ {
+      path = $0
+      sub(/^path:[[:space:]]*/, "", path)
+      sub(/[[:space:]]*\(0x[0-9a-fA-F]+\)$/, "", path)
+      next
+    }
+    /^identifier:[[:space:]]*/ {
+      ident = $0
+      sub(/^identifier:[[:space:]]*/, "", ident)
+      if (ident == id && path != "") print path
+      path = ""
+    }
+  '
+)
+
+for copy in "${COPIES[@]}"; do
+  echo "    $copy"
+done
 if [[ "$COPY_COUNT" -eq 0 ]]; then
   echo "    (Spotlight found no copies. Check /Applications, ~/Downloads,"
   echo "    ~/Desktop, and any mounted DMGs manually.)"
@@ -84,12 +119,23 @@ if [[ -d /Applications/Dacx.app ]]; then
 fi
 
 echo
-REGISTRATIONS="$("$LSREGISTER" -dump 2>/dev/null | grep -c "identifier:.*$BUNDLE_ID" || true)"
+REGISTRATIONS="$(
+  "$LSREGISTER" -dump 2>/dev/null | awk -v id="$BUNDLE_ID" '
+    /^identifier:[[:space:]]*/ {
+      ident = $0
+      sub(/^identifier:[[:space:]]*/, "", ident)
+      if (ident == id) count++
+    }
+    END {
+      print count + 0
+    }
+  '
+)"
 echo "==> Done. Launch Services now has $REGISTRATIONS registration(s) for $BUNDLE_ID."
 if [[ "$REGISTRATIONS" -gt 1 ]]; then
-  echo "    WARNING: more than one registration is still present. Make sure"
-  echo "    you've deleted every Dacx.app copy mdfind reported above, then"
-  echo "    re-run this script."
+  echo "    WARNING: more than one registration is still present. Remove any"
+  echo "    extra Dacx.app copies shown above (including local build outputs),"
+  echo "    then re-run this script."
   exit 2
 fi
 
