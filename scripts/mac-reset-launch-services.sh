@@ -83,6 +83,34 @@ if [[ "$COPY_COUNT" -eq 0 ]]; then
   echo "    ~/Desktop, and any mounted DMGs manually.)"
 fi
 
+VOLUMES_TO_EJECT=()
+for copy in ${COPIES[@]+"${COPIES[@]}"}; do
+  if [[ "$copy" == /Volumes/* ]]; then
+    volume="$(echo "$copy" | awk -F/ '{print "/"$2"/"$3}')"
+    already_listed=0
+    for v in ${VOLUMES_TO_EJECT[@]+"${VOLUMES_TO_EJECT[@]}"}; do
+      if [[ "$v" == "$volume" ]]; then
+        already_listed=1
+        break
+      fi
+    done
+    if [[ "$already_listed" -eq 0 ]]; then
+      VOLUMES_TO_EJECT+=("$volume")
+    fi
+  fi
+done
+
+if [[ "${#VOLUMES_TO_EJECT[@]}" -gt 0 ]]; then
+  echo
+  echo "==> Ejecting mounted Dacx DMG volumes (otherwise LS keeps re-registering them)..."
+  for volume in "${VOLUMES_TO_EJECT[@]}"; do
+    echo "    Ejecting $volume"
+    diskutil eject "$volume" >/dev/null 2>&1 \
+      || hdiutil detach "$volume" -force >/dev/null 2>&1 \
+      || echo "    (failed to eject $volume; eject it manually in Finder)"
+  done
+fi
+
 echo
 if [[ "$COPY_COUNT" -gt 0 ]]; then
   echo "==> Unregistering discovered Dacx copies from Launch Services..."
