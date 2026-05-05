@@ -55,4 +55,18 @@ if (result.error) {
   process.exit(1);
 }
 
-process.exit(result.status ?? 1);
+const exitCode = result.status ?? 1;
+if (exitCode === 0) {
+  const iconResult = spawnSync('bash', ['scripts/embed-mac-document-icon.sh'], {
+    stdio: 'inherit',
+    env,
+    shell: false,
+  });
+  if (iconResult.error) {
+    console.warn(`WARN: failed to run icon embed step: ${iconResult.error.message}`);
+  } else if ((iconResult.status ?? 0) !== 0) {
+    console.warn(`WARN: icon embed step exited with code ${iconResult.status}.`);
+  }
+}
+
+process.exit(exitCode);

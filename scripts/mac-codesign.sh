@@ -38,28 +38,7 @@ if [[ ! -f "$ENTITLEMENTS_FILE" ]]; then
 fi
 
 if [[ -f "$MUSIC_ICON_SOURCE" ]]; then
-  ICONSET_DIR="$ROOT/build/mac-audio-icon.iconset"
-  rm -rf "$ICONSET_DIR"
-  mkdir -p "$ICONSET_DIR"
-
-  while IFS=: read -r icon_name size; do
-    sips -z "$size" "$size" "$MUSIC_ICON_SOURCE" --out "$ICONSET_DIR/$icon_name" >/dev/null
-  done <<'EOF'
-icon_16x16.png:16
-icon_16x16@2x.png:32
-icon_32x32.png:32
-icon_32x32@2x.png:64
-icon_128x128.png:128
-icon_128x128@2x.png:256
-icon_256x256.png:256
-icon_256x256@2x.png:512
-icon_512x512.png:512
-icon_512x512@2x.png:1024
-EOF
-
-  iconutil -c icns "$ICONSET_DIR" -o "$MUSIC_ICON_DEST"
-  rm -rf "$ICONSET_DIR"
-  echo "Prepared audio document icon at $MUSIC_ICON_DEST"
+  bash "$ROOT/scripts/embed-mac-document-icon.sh" "$APP_BUNDLE"
 else
   echo "WARN: Missing $MUSIC_ICON_SOURCE; audio files will use the default document icon."
 fi

@@ -77,13 +77,27 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
 
   override func application(_ application: NSApplication, open urls: [URL]) {
     super.application(application, open: urls)
+    NSLog("[Dacx] application(_:open urls:) received \(urls.count) URL(s)")
     for url in urls {
+      // For sandboxed workaround
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer {
+        if scoped { url.stopAccessingSecurityScopedResource() }
+      }
       if url.isFileURL {
+        NSLog("[Dacx] handling file URL: \(url.path) (scoped=\(scoped))")
         handleOpenFile(url.path)
       } else {
+        NSLog("[Dacx] handling non-file URL: \(url.absoluteString)")
         handleOpenFile(url.absoluteString)
       }
     }
+  }
+
+  override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+    NSLog("[Dacx] application(_:openFile:) received: \(filename)")
+    handleOpenFile(filename)
+    return true
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
