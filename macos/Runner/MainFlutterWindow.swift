@@ -17,6 +17,12 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    if let appDelegate = NSApp.delegate as? AppDelegate {
+      appDelegate.registerFlutterChannels(
+        messenger: flutterViewController.engine.binaryMessenger
+      )
+    }
+
     super.awakeFromNib()
   }
 

@@ -461,6 +461,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _bootstrapMacOpenFileBridge() async {
     if (_isDisposed) return;
+    var bridgeReady = true;
     try {
       final pending = await _macOpenFileMethodChannel.invokeListMethod<dynamic>(
         'getPendingFiles',
@@ -480,20 +481,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }
     } on MissingPluginException {
+      bridgeReady = false;
       _log(
         'mac_open_file_bridge_missing_plugin',
         category: DebugLogCategory.system,
         severity: DebugSeverity.warn,
       );
-      return;
     } on PlatformException {
-      // Ignore if the native bridge is unavailable.
+      bridgeReady = false;
       _log(
         'mac_open_file_bridge_platform_exception',
         category: DebugLogCategory.system,
         severity: DebugSeverity.warn,
       );
-      return;
     } catch (e) {
       _log(
         'mac_open_file_bridge_failed',
@@ -528,6 +528,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
       ),
     );
+
+    if (!bridgeReady) {
+      Future<void>.delayed(const Duration(milliseconds: 250), () async {
+        if (_isDisposed || !mounted) return;
+        try {
+          final pending = await _macOpenFileMethodChannel
+              .invokeListMethod<dynamic>('getPendingFiles');
+          if (_isDisposed || !mounted) return;
+          if (pending == null || pending.isEmpty) return;
+          _log(
+            'mac_pending_files_found_retry',
+            category: DebugLogCategory.system,
+            detailsBuilder: () => {'count': pending.length},
+          );
+          for (final entry in pending) {
+            if (_isDisposed || !mounted) return;
+            final path = _coerceOpenPath(entry);
+            if (path == null) continue;
+            await _openRequestedFile(path, forcePlay: true);
+          }
+        } catch (_) {}
+      });
+    }
   }
 
   String? _coerceOpenPath(dynamic value) {

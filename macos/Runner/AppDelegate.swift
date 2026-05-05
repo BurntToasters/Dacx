@@ -1,4 +1,5 @@
 import Cocoa
+import CoreServices
 import FlutterMacOS
 
 @main
@@ -15,7 +16,23 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
+    refreshLaunchServicesRegistrationInBackground()
     configureOpenFileChannelsIfNeeded()
+  }
+
+  /// Re-registers the running bundle with Launch Services
+  private func refreshLaunchServicesRegistrationInBackground() {
+    let bundleURL = Bundle.main.bundleURL
+    DispatchQueue.global(qos: .utility).async {
+      let status = LSRegisterURL(bundleURL as CFURL, true)
+      NSLog("[Dacx] LSRegisterURL(\(bundleURL.path)) returned \(status)")
+    }
+  }
+
+  func registerFlutterChannels(messenger: FlutterBinaryMessenger) {
+    if channelsConfigured { return }
+    NSLog("[Dacx] registering Flutter channels eagerly from MainFlutterWindow")
+    setupChannels(messenger: messenger)
   }
 
   private func configureOpenFileChannelsIfNeeded() {
@@ -26,8 +43,11 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
       }
       return
     }
+    setupChannels(messenger: controller.engine.binaryMessenger)
+  }
 
-    let messenger = controller.engine.binaryMessenger
+  private func setupChannels(messenger: FlutterBinaryMessenger) {
+    if channelsConfigured { return }
     let methodChannel = FlutterMethodChannel(
       name: openFileMethodChannelName,
       binaryMessenger: messenger
@@ -55,6 +75,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     openFileEventChannel = eventChannel
     mediaSessionBridge.attach(messenger: messenger)
     channelsConfigured = true
+    NSLog("[Dacx] Flutter channels configured (pending=\(pendingOpenFiles.count))")
   }
 
   private func drainPendingOpenFiles() -> [String] {
