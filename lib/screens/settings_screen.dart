@@ -196,6 +196,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             );
                           }),
                         ),
+                        SwitchListTile(
+                          title: const Text('Allow multiple windows'),
+                          subtitle: const Text(
+                            'When off (default), opening a file from your '
+                            'OS reuses the running Dacx window. Press '
+                            'Ctrl/Cmd+N to open an extra window on demand.',
+                          ),
+                          value: _s.allowMultipleInstances,
+                          onChanged: (v) => setState(() {
+                            _s.allowMultipleInstances = v;
+                            _log(
+                              'allow_multiple_instances_changed',
+                              detailsBuilder: () => {'value': v},
+                            );
+                          }),
+                        ),
                         const Divider(),
                         _sectionHeader('General'),
                         SwitchListTile(

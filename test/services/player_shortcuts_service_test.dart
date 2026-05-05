@@ -42,6 +42,17 @@ void main() {
       expect(resolve(keyEvent, meta: true), PlayerShortcutAction.reopenLast);
     });
 
+    test('maps Ctrl/Cmd + N to open new window', () {
+      const keyEvent = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyN,
+        logicalKey: LogicalKeyboardKey.keyN,
+        timeStamp: Duration.zero,
+      );
+
+      expect(resolve(keyEvent, ctrl: true), PlayerShortcutAction.newWindow);
+      expect(resolve(keyEvent, meta: true), PlayerShortcutAction.newWindow);
+    });
+
     test('maps F and Escape for fullscreen actions', () {
       const fullscreenEvent = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.keyF,

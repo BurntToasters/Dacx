@@ -21,6 +21,7 @@ enum PlayerShortcutAction {
   playlistNext,
   playlistPrev,
   toggleCompactMode,
+  newWindow,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -45,6 +46,7 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.playlistNext: ['Shift+N'],
   PlayerShortcutAction.playlistPrev: ['Shift+P'],
   PlayerShortcutAction.toggleCompactMode: ['Ctrl+Shift+M'],
+  PlayerShortcutAction.newWindow: ['Ctrl+N'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a) => switch (a) {
@@ -68,6 +70,7 @@ String shortcutActionLabel(PlayerShortcutAction a) => switch (a) {
   PlayerShortcutAction.playlistNext => 'Next in queue',
   PlayerShortcutAction.playlistPrev => 'Previous in queue',
   PlayerShortcutAction.toggleCompactMode => 'Toggle mini-player',
+  PlayerShortcutAction.newWindow => 'Open new window',
 };
 
 class PlayerShortcutsService {
@@ -140,6 +143,11 @@ class PlayerShortcutsService {
         primaryModifierPressed &&
         key == LogicalKeyboardKey.keyR) {
       return PlayerShortcutAction.reopenLast;
+    }
+    if (event is KeyDownEvent &&
+        primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyN) {
+      return PlayerShortcutAction.newWindow;
     }
     if (event is KeyDownEvent &&
         primaryModifierPressed &&

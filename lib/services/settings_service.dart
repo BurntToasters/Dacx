@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'instance_mode_service.dart';
 
 enum AccentColor {
   blueGrey(Colors.blueGrey, 'Blue Grey'),
@@ -77,6 +80,7 @@ class SettingsService extends ChangeNotifier {
   static const _kResumeEnabled = 'resume_playback_enabled';
   static const _kResumePositions = 'resume_positions_v1';
   static const _kPlaylistShuffle = 'playlist_shuffle';
+  static const _kAllowMultipleInstances = 'allow_multiple_instances';
 
   /// Maximum playback-resume entries kept (per file). LRU pruned.
   static const int maxResumeEntries = 100;
@@ -520,6 +524,18 @@ class SettingsService extends ChangeNotifier {
   set playlistShuffle(bool v) {
     _prefs.setBool(_kPlaylistShuffle, v);
     notifyListeners();
+  }
+
+  bool get allowMultipleInstances =>
+      _prefs.getBool(_kAllowMultipleInstances) ?? false;
+  set allowMultipleInstances(bool v) {
+    _prefs.setBool(_kAllowMultipleInstances, v);
+    unawaited(InstanceModeService.setAllowMultipleInstances(v));
+    notifyListeners();
+  }
+
+  Future<void> syncInstanceModeFlag() async {
+    await InstanceModeService.setAllowMultipleInstances(allowMultipleInstances);
   }
 
   Map<String, int> _readResumePositions() {
