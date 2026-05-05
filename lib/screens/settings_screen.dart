@@ -448,7 +448,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _windowOpacityTile() {
-    final opacity = _s.windowOpacity;
+    final opacity = _s.windowOpacity.clamp(0.65, 1.0);
     final percent = (opacity * 100).round();
     final windowsBlurMode = Platform.isWindows && _s.windowBlurEnabled;
 

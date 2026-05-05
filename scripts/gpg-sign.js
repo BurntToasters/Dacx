@@ -416,13 +416,14 @@ function ghRequest(method, endpoint, body) {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             resolve(json);
           } else {
-            reject(new Error(`GitHub ${res.statusCode}: ${json.message || data}`));
+            const safe = json && typeof json.message === "string" ? json.message : "(error body omitted)";
+            reject(new Error(`GitHub ${res.statusCode}: ${safe}`));
           }
         } catch {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             resolve(data);
           } else {
-            reject(new Error(`GitHub ${res.statusCode}: ${data || "Non-JSON error response"}`));
+            reject(new Error(`GitHub ${res.statusCode}: non-JSON error response`));
           }
         }
       });
