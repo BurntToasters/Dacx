@@ -2,7 +2,29 @@
   "name": "dacx",
   "version": "0.6.3",
   "private": true,
-  "description": "Quick, lightweight cross-platform media player.",
+  "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
+  "license": "GPL-3.0-only",
+  "homepage": "https://github.com/BurntToasters/Dacx#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BurntToasters/Dacx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BurntToasters/Dacx/issues"
+  },
+  "keywords": [
+    "media-player",
+    "music-player",
+    "video-player",
+    "cross-platform",
+    "flutter",
+    "flutter-desktop",
+    "desktop-app",
+    "libmpv",
+    "windows",
+    "macos",
+    "linux"
+  ],
   "type": "module",
   "scripts": {
     "dev": "flutter run",
