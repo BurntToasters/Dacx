@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "description": "Quick, lightweight cross-platform media player.",
   "type": "module",

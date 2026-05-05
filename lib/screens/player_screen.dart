@@ -2608,7 +2608,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final tracks = _currentTracks;
     if (tracks == null) return;
     final list = tracks.audio
-        .where((t) => t.id != 'auto')
+        .where((t) => t.id != 'auto' && t.id != 'no')
         .toList(growable: false);
     final current = _currentTrackSelection?.audio.id;
     final selected = await showDialog<AudioTrack>(
