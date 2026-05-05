@@ -31,11 +31,13 @@ COPIES=()
 add_unique_copy() {
   local candidate="$1"
   [[ -z "$candidate" ]] && return
-  for existing in "${COPIES[@]}"; do
-    if [[ "$existing" == "$candidate" ]]; then
-      return
-    fi
-  done
+  if [[ "$COPY_COUNT" -gt 0 ]]; then
+    for existing in "${COPIES[@]}"; do
+      if [[ "$existing" == "$candidate" ]]; then
+        return
+      fi
+    done
+  fi
   COPIES+=("$candidate")
   COPY_COUNT=$((COPY_COUNT + 1))
 }
@@ -73,7 +75,7 @@ done < <(
   '
 )
 
-for copy in "${COPIES[@]}"; do
+for copy in ${COPIES[@]+"${COPIES[@]}"}; do
   echo "    $copy"
 done
 if [[ "$COPY_COUNT" -eq 0 ]]; then
