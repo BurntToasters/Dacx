@@ -30,6 +30,17 @@ function syncFile(label, filePath, mutate) {
   }
 }
 
+function syncLinuxPackageTemplateVersion(label, text) {
+  const versionPattern =
+    /^(Version:\s*)(?:\{\{VERSION\}\}|\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*$/m;
+  if (!versionPattern.test(text)) {
+    failures.push(`${label}: Version line not found`);
+    exitCode = 1;
+    return null;
+  }
+  return text.replace(versionPattern, `$1${version}`);
+}
+
 syncFile("pubspec.yaml", path.join(root, "pubspec.yaml"), (text) => {
   const versionPattern = /^(version:\s*)(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\+(\d+))?/m;
   const match = text.match(versionPattern);
@@ -69,13 +80,15 @@ syncFile(
 syncFile(
   "linux/packaging/control.template",
   path.join(root, "linux", "packaging", "control.template"),
-  (text) => text.replace(/Version:\s*\{\{VERSION\}\}/g, `Version: ${version}`),
+  (text) =>
+    syncLinuxPackageTemplateVersion("linux/packaging/control.template", text),
 );
 
 syncFile(
   "linux/packaging/dacx.spec.template",
   path.join(root, "linux", "packaging", "dacx.spec.template"),
-  (text) => text.replace(/Version:\s*\{\{VERSION\}\}/g, `Version: ${version}`),
+  (text) =>
+    syncLinuxPackageTemplateVersion("linux/packaging/dacx.spec.template", text),
 );
 
 if (failures.length) {

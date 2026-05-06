@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
@@ -8,6 +9,37 @@ enum _MacMetalSupport { supported, unsupported, unknown }
 class HardwareAccelerationService {
   static bool? _macHardwareAccelerationSupportedCache;
   static bool _macHardwareAccelerationSupportLogged = false;
+  static Future<void>? _macPrimeFuture;
+
+  /// Resolve macOS hardware-acceleration support off the UI isolate so the
+  /// expensive `sysctl` + `system_profiler` probes do not block the first
+  /// frame. Safe to call multiple times — subsequent calls reuse the cached
+  /// result. No-op on non-macOS platforms.
+  static Future<void> prime() {
+    if (!Platform.isMacOS) return Future.value();
+    if (_macHardwareAccelerationSupportedCache != null) return Future.value();
+    return _macPrimeFuture ??= Isolate.run(_detectMacSupport)
+        .then((supported) {
+          _macHardwareAccelerationSupportedCache = supported;
+          if (!_macHardwareAccelerationSupportLogged) {
+            _macHardwareAccelerationSupportLogged = true;
+            if (kDebugMode) {
+              debugPrint(
+                'Dacx: macOS HW acceleration support detected: ${supported ? 'available' : 'not available'}',
+              );
+            }
+          }
+        })
+        .catchError((Object e) {
+          debugPrint('Dacx: HardwareAccelerationService.prime failed: $e');
+        });
+  }
+
+  static bool _detectMacSupport() {
+    if (_looksLikeVirtualizedMac()) return false;
+    if (_detectMacMetalSupport() == _MacMetalSupport.unsupported) return false;
+    return true;
+  }
 
   static bool shouldEnableHardwareAcceleration(String hwDec) {
     if (hwDec == 'no' || hwDec == 'auto-safe') return false;

@@ -31,7 +31,11 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     let bundleURL = Bundle.main.bundleURL
     DispatchQueue.global(qos: .utility).async {
       let status = LSRegisterURL(bundleURL as CFURL, true)
-      os_log("LSRegisterURL(%{private}@) returned %d", log: dacxLog, type: .info, bundleURL.path, status)
+      if status == noErr {
+        os_log("LSRegisterURL(%{private}@) succeeded", log: dacxLog, type: .info, bundleURL.path)
+      } else {
+        os_log("LSRegisterURL(%{private}@) failed with OSStatus %d", log: dacxLog, type: .error, bundleURL.path, status)
+      }
     }
   }
 

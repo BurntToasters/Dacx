@@ -21,6 +21,7 @@ import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
 import '../services/seek_preview_service.dart';
+import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
@@ -178,6 +179,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
         enableHardwareAcceleration: hwEnabled,
       ),
     );
+    _mediaSession = MediaSessionService(debugLog: widget.debugLog);
+    unawaited(
+      _mediaSession.init(enabled: _settings.mediaSessionEnabled).catchError((
+        Object e,
+      ) {
+        _log(
+          'media_session_init_failed',
+          category: DebugLogCategory.system,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
+    _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
     _volume = _settings.volume;
     _log(
       'player_init',
@@ -357,13 +372,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }),
     ]);
 
-    // Media session
-    _mediaSession = MediaSessionService(debugLog: widget.debugLog);
-    unawaited(_mediaSession.init(enabled: _settings.mediaSessionEnabled));
     _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
-
-    // Playlist (in-memory; reflects shuffle from settings).
-    _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
 
     // Periodic resume-position saver (every 5s while playing).
     _resumeSaveTimer = Timer.periodic(
@@ -402,15 +411,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     unawaited(_mediaSession.dispose());
     _playlist.dispose();
-    try {
-      _videoController.player.dispose();
-    } catch (e) {
-      _log(
-        'video_controller_dispose_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    }
     unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
@@ -616,25 +616,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _applyHwDec(String value) {
-    try {
-      final nativePlayer = _playerService.player.platform;
-      if (nativePlayer is NativePlayer) {
-        nativePlayer.setProperty('hwdec', value);
-        _log(
-          'hwdec_property_applied',
-          category: DebugLogCategory.hwaccel,
-          detailsBuilder: () => {'hwdec': value},
-        );
-      }
-    } catch (_) {
-      // hwdec may not be available on all platforms.
-      _log(
-        'hwdec_property_failed',
-        category: DebugLogCategory.hwaccel,
-        detailsBuilder: () => {'hwdec': value},
-        severity: DebugSeverity.warn,
-      );
-    }
+    unawaited(
+      _playerService
+          .setProperty('hwdec', value)
+          .then((applied) {
+            if (applied) {
+              _log(
+                'hwdec_property_applied',
+                category: DebugLogCategory.hwaccel,
+                detailsBuilder: () => {'hwdec': value},
+              );
+            } else {
+              _log(
+                'hwdec_property_unavailable',
+                category: DebugLogCategory.hwaccel,
+                detailsBuilder: () => {'hwdec': value},
+                severity: DebugSeverity.warn,
+              );
+            }
+          })
+          .catchError((Object e) {
+            _log(
+              'hwdec_property_failed',
+              category: DebugLogCategory.hwaccel,
+              message: e.toString(),
+              detailsBuilder: () => {'hwdec': value},
+              severity: DebugSeverity.warn,
+            );
+          }),
+    );
+  }
+
+  double _dialogWidth(BuildContext context, double desired) {
+    final available = MediaQuery.sizeOf(context).width - 48;
+    return math.min(desired, math.max(280.0, available));
+  }
+
+  double _dialogHeight(BuildContext context, double desired) {
+    final available = MediaQuery.sizeOf(context).height - 120;
+    return math.min(desired, math.max(160.0, available));
   }
 
   void _applyLoopMode(LoopMode mode) {
@@ -698,7 +718,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Dacx v${update.version} is available'),
+        content: Text(
+          AppLocalizations.of(context).snackUpdateAvailable(update.version),
+        ),
         duration: const Duration(seconds: 10),
         action: SnackBarAction(
           label: 'View',
@@ -730,7 +752,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _log('file_picker_invalid_path', severity: DebugSeverity.warn);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not read selected file path.')),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context).snackCouldNotReadSelectedFile,
+              ),
+            ),
           );
         }
         return;
@@ -744,12 +770,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        final detail = e.message?.trim().isNotEmpty == true
-            ? e.message!.trim()
-            : e.code;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('File picker failed. $detail')));
+        final rawDetail = e.message?.trim();
+        final detail = rawDetail == null || rawDetail.isEmpty
+            ? e.code
+            : rawDetail;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackFilePickerFailed(detail),
+            ),
+          ),
+        );
       }
     } catch (e) {
       _log(
@@ -759,7 +790,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open file picker.')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackUnableToOpenFilePicker,
+            ),
+          ),
         );
       }
     }
@@ -786,7 +821,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid file path. Try another file.')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).snackInvalidFilePath),
+          ),
         );
       }
       return;
@@ -801,8 +838,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _settings.pruneRecentFiles();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File not found. It may have moved or been deleted.'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).snackFileNotFound),
           ),
         );
       }
@@ -822,8 +859,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unsupported file type. Open an audio/video file.'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackUnsupportedFileType,
+            ),
           ),
         );
       }
@@ -958,23 +997,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onDragDone(DropDoneDetails details) {
     if (details.files.isEmpty) return;
+    final rawCount = details.files.length;
     final paths = details.files
-        .map((f) => f.path)
+        .map((f) => _normalizeDropPath(f.path))
         .where((s) => s.trim().isNotEmpty)
         .toList(growable: false);
+    final droppedCount = rawCount - paths.length;
     if (paths.isEmpty) {
-      _log('drop_file_invalid_path', severity: DebugSeverity.warn);
+      _log(
+        'drop_file_invalid_path',
+        detailsBuilder: () => {'count': rawCount},
+        severity: DebugSeverity.warn,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not read dropped file path.')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackCouldNotReadDroppedFile,
+            ),
+          ),
         );
       }
       return;
     }
     _log(
       'drop_file_received',
-      detailsBuilder: () => {'path': paths.first, 'count': paths.length},
+      detailsBuilder: () => {
+        'path': paths.first,
+        'count': paths.length,
+        'skipped': droppedCount,
+      },
     );
+    if (droppedCount > 0 && mounted) {
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            droppedCount == 1
+                ? l10n.snackSkippedUnreadableFile
+                : l10n.snackSkippedUnreadableFiles(droppedCount),
+          ),
+        ),
+      );
+    }
     if (paths.length == 1) {
       unawaited(_loadFile(paths.first));
     } else {
@@ -986,6 +1051,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_isDragging) return;
     _log('drag_entered', category: DebugLogCategory.ui);
     setState(() => _isDragging = true);
+  }
+
+  String _normalizeDropPath(String raw) {
+    final trimmed = raw.trim();
+    if (!trimmed.toLowerCase().startsWith('file:')) return trimmed;
+    try {
+      return Uri.parse(trimmed).toFilePath(windows: Platform.isWindows);
+    } catch (e) {
+      _log(
+        'drop_path_decode_failed',
+        message: e.toString(),
+        detailsBuilder: () => {'raw': trimmed},
+        severity: DebugSeverity.warn,
+      );
+      return trimmed;
+    }
   }
 
   void _onDragExited() {
@@ -1305,9 +1386,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final actual = await windowManager.isFullScreen();
       if (actual == enabled && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Fullscreen change rejected by window manager.'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).snackFullscreenRejected),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -1643,6 +1724,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildDropZone() {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return Center(
       child: _buildCenterPanel(
@@ -1655,7 +1737,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            'Drop a file here or click Open',
+            l10n.emptyStateMessage,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: colorScheme.onSurface.withValues(alpha: 0.74),
             ),
@@ -1670,13 +1752,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               FilledButton.icon(
                 onPressed: _openFile,
                 icon: const Icon(Icons.folder_open),
-                label: const Text('Open File'),
+                label: Text(l10n.buttonOpenFile),
               ),
               FilledButton.tonalIcon(
                 key: const Key('reopen-last-empty-button'),
                 onPressed: _reopenLastFile,
                 icon: const Icon(Icons.history),
-                label: const Text('Reopen Last'),
+                label: Text(l10n.buttonReopenLast),
               ),
             ],
           ),
@@ -1816,7 +1898,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                'Audio playback',
+                AppLocalizations.of(context).labelAudioPlayback,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurface.withValues(alpha: 0.62),
                   height: 1.2,
@@ -2673,7 +2755,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final selected = await showDialog<AudioTrack>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Audio track'),
+        title: Text(AppLocalizations.of(ctx).dialogAudioTrackTitle),
         children: list
             .map(
               (t) => SimpleDialogOption(
@@ -2717,7 +2799,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final selected = await showDialog<SubtitleTrack>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Subtitle track'),
+        title: Text(AppLocalizations.of(ctx).dialogSubtitleTrackTitle),
         children: list
             .map(
               (t) => SimpleDialogOption(
@@ -2757,7 +2839,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final picked = await showDialog<int>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Chapters'),
+        title: Text(AppLocalizations.of(ctx).dialogChaptersTitle),
         children: _chapters
             .map(
               (c) => SimpleDialogOption(
@@ -2792,17 +2874,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
+            final l10n = AppLocalizations.of(ctx);
             final bands = List<double>.from(_settings.eqBands);
             return AlertDialog(
-              title: const Text('Equalizer'),
+              title: Text(l10n.dialogEqualizerTitle),
               content: SizedBox(
-                width: 480,
+                width: _dialogWidth(ctx, 480),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
-                        const Text('Enable'),
+                        Text(l10n.dialogEqualizerEnable),
                         const Spacer(),
                         Switch(
                           value: _settings.eqEnabled,
@@ -2837,7 +2920,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                     const SizedBox(height: 12),
                     SizedBox(
-                      height: 220,
+                      height: math.min(
+                        220.0,
+                        math.max(120.0, _dialogHeight(ctx, 360) - 140),
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: List.generate(SettingsService.eqBandCount, (
@@ -2896,11 +2982,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     unawaited(_applyEqualizer());
                     setLocal(() {});
                   },
-                  child: const Text('Reset'),
+                  child: Text(l10n.actionReset),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close'),
+                  child: Text(l10n.actionClose),
                 ),
               ],
             );
@@ -2938,26 +3024,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
+            final l10n = AppLocalizations.of(ctx);
             final items = _playlist.items;
             return AlertDialog(
               title: Row(
                 children: [
-                  const Expanded(child: Text('Play queue')),
+                  Expanded(child: Text(l10n.dialogPlayQueueTitle)),
                   if (items.isNotEmpty)
                     TextButton(
                       onPressed: () {
                         _playlist.clear();
                         setLocal(() {});
                       },
-                      child: const Text('Clear'),
+                      child: Text(l10n.actionClear),
                     ),
                 ],
               ),
               content: SizedBox(
-                width: 480,
-                height: 360,
+                width: _dialogWidth(ctx, 480),
+                height: _dialogHeight(ctx, 360),
                 child: items.isEmpty
-                    ? const Center(child: Text('Queue is empty.'))
+                    ? Center(child: Text(l10n.dialogPlayQueueEmpty))
                     : ListView.builder(
                         itemCount: items.length,
                         itemBuilder: (c, i) {
@@ -2983,7 +3070,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               Navigator.pop(ctx);
                             },
                             trailing: IconButton(
-                              tooltip: 'Remove',
+                              tooltip: l10n.actionRemove,
                               icon: const Icon(Icons.close, size: 18),
                               onPressed: () {
                                 _playlist.removeAt(i);
@@ -3000,11 +3087,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Navigator.pop(ctx);
                     await _pickFilesToEnqueue();
                   },
-                  child: const Text('Add files\u2026'),
+                  child: Text(l10n.dialogPlayQueueAddFiles),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close'),
+                  child: Text(l10n.actionClose),
                 ),
               ],
             );
@@ -3021,11 +3108,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
+            final l10n = AppLocalizations.of(ctx);
             return AlertDialog(
-              title: const Text('Keyboard shortcuts'),
+              title: Text(l10n.dialogKeyboardShortcutsTitle),
               content: SizedBox(
-                width: 460,
-                height: 480,
+                width: _dialogWidth(ctx, 460),
+                height: _dialogHeight(ctx, 480),
                 child: Scrollbar(
                   child: ListView(
                     children: [
@@ -3052,7 +3140,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             spacing: 4,
                             children: [
                               IconButton(
-                                tooltip: 'Set new binding',
+                                tooltip: l10n.actionSetNewBinding,
                                 icon: const Icon(Icons.edit, size: 18),
                                 onPressed: () async {
                                   final accel = await _captureKeybind(ctx);
@@ -3063,7 +3151,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 },
                               ),
                               IconButton(
-                                tooltip: 'Reset to default',
+                                tooltip: l10n.actionResetToDefault,
                                 icon: const Icon(Icons.refresh, size: 18),
                                 onPressed: () {
                                   current.remove(a.name);
@@ -3086,11 +3174,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     current.clear();
                     setLocal(() {});
                   },
-                  child: const Text('Reset all'),
+                  child: Text(l10n.actionResetAll),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close'),
+                  child: Text(l10n.actionClose),
                 ),
               ],
             );
@@ -3107,10 +3195,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
+          final l10n = AppLocalizations.of(ctx);
           return AlertDialog(
-            title: const Text('Press a key combination'),
+            title: Text(l10n.dialogKeyCaptureTitle),
             content: SizedBox(
-              width: 320,
+              width: _dialogWidth(ctx, 320),
               child: Focus(
                 autofocus: true,
                 focusNode: node,
@@ -3143,11 +3232,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
+                child: Text(l10n.actionCancel),
               ),
               TextButton(
                 onPressed: captured == null ? null : () => Navigator.pop(ctx),
-                child: const Text('Save'),
+                child: Text(l10n.actionSave),
               ),
             ],
           );

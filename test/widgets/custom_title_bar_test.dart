@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/theme/window_visuals.dart';
 import 'package:dacx/widgets/custom_title_bar.dart';
 
@@ -20,6 +21,7 @@ void main() {
           calls.add(call);
           switch (call.method) {
             case 'isMaximized':
+            case 'isFullScreen':
               return false;
             case 'getTitleBarHeight':
               return 0;
@@ -49,8 +51,15 @@ void main() {
     );
     return MaterialApp(
       theme: ThemeData.dark().copyWith(extensions: [visuals]),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: child),
     );
+  }
+
+  Offset windowButtonCenter(WidgetTester tester, int indexFromRight) {
+    final topRight = tester.getTopRight(find.byType(CustomTitleBar));
+    return topRight.translate(-23 - (46.0 * indexFromRight), 16);
   }
 
   testWidgets('renders nothing on Linux', (tester) async {
@@ -81,6 +90,9 @@ void main() {
     if (!Platform.isWindows) return;
     await tester.pumpWidget(wrap(const CustomTitleBar()));
     await tester.pump();
+    // Wait past the first startup probe (50ms) so the controls become
+    // visible after the title-bar style is confirmed hidden.
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.bySemanticsLabel('Minimize window'), findsOneWidget);
     expect(find.bySemanticsLabel('Maximize window'), findsOneWidget);
     expect(find.bySemanticsLabel('Close window'), findsOneWidget);
@@ -124,21 +136,24 @@ void main() {
     if (!Platform.isWindows) return;
     await tester.pumpWidget(wrap(const CustomTitleBar()));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     calls.clear();
 
-    await tester.tap(find.bySemanticsLabel('Minimize window'));
-    await tester.pump();
+    await tester.tapAt(windowButtonCenter(tester, 2));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(calls.any((c) => c.method == 'minimize'), isTrue);
 
-    await tester.tap(find.bySemanticsLabel('Maximize window'));
-    await tester.pump();
+    calls.clear();
+    await tester.tapAt(windowButtonCenter(tester, 1));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(
       calls.any((c) => c.method == 'maximize' || c.method == 'unmaximize'),
       isTrue,
     );
 
-    await tester.tap(find.bySemanticsLabel('Close window'));
-    await tester.pump();
+    calls.clear();
+    await tester.tapAt(windowButtonCenter(tester, 0));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(calls.any((c) => c.method == 'close'), isTrue);
   });
 

@@ -437,27 +437,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         spacing: 6,
         children: AccentColor.values.map((ac) {
           final isSelected = ac == _s.accentColor;
-          return GestureDetector(
-            onTap: () => setState(() {
-              _s.accentColor = ac;
-              _log(
-                'accent_color_changed',
-                detailsBuilder: () => {'value': ac.name},
-              );
-            }),
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: ac.color,
-                shape: BoxShape.circle,
-                border: isSelected
-                    ? Border.all(color: colorScheme.onSurface, width: 2.5)
+          return Semantics(
+            label: 'Accent color ${ac.name}',
+            button: true,
+            selected: isSelected,
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _s.accentColor = ac;
+                _log(
+                  'accent_color_changed',
+                  detailsBuilder: () => {'value': ac.name},
+                );
+              }),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: ac.color,
+                  shape: BoxShape.circle,
+                  border: isSelected
+                      ? Border.all(color: colorScheme.onSurface, width: 2.5)
+                      : null,
+                ),
+                child: isSelected
+                    ? Icon(Icons.check, size: 16, color: colorScheme.onSurface)
                     : null,
               ),
-              child: isSelected
-                  ? Icon(Icons.check, size: 16, color: colorScheme.onSurface)
-                  : null,
             ),
           );
         }).toList(),

@@ -104,10 +104,11 @@ class SeekPreviewService {
   }
 
   Future<void> _applyTuning(Player player) async {
-    if (_tuned) return;
+    if (_tuned || _disposed) return;
     final platform = player.platform;
     if (platform is! NativePlayer) return;
     Future<void> trySet(String name, String value) async {
+      if (_disposed || _player != player) return;
       try {
         await platform.setProperty(name, value);
       } catch (e) {
@@ -125,6 +126,7 @@ class SeekPreviewService {
     await trySet('vf', 'scale=$_thumbWidth:-2');
     await trySet('cache', 'no');
     await trySet('hwdec', 'auto-safe');
+    if (_disposed || _player != player) return;
     _tuned = true;
   }
 

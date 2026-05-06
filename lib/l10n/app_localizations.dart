@@ -231,6 +231,306 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Debug log cleared.'**
   String get snackDebugLogCleared;
+
+  /// No description provided for @snackUnableToOpenFilePicker.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open file picker.'**
+  String get snackUnableToOpenFilePicker;
+
+  /// Shown when the OS file picker raises an error.
+  ///
+  /// In en, this message translates to:
+  /// **'File picker failed. {detail}'**
+  String snackFilePickerFailed(String detail);
+
+  /// No description provided for @snackInvalidFilePath.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid file path. Try another file.'**
+  String get snackInvalidFilePath;
+
+  /// No description provided for @snackFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'File not found. It may have moved or been deleted.'**
+  String get snackFileNotFound;
+
+  /// No description provided for @snackUnsupportedFileType.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported file type. Open an audio/video file.'**
+  String get snackUnsupportedFileType;
+
+  /// No description provided for @snackFullscreenRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Fullscreen change rejected by window manager.'**
+  String get snackFullscreenRejected;
+
+  /// No description provided for @snackUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Dacx v{version} is available'**
+  String snackUpdateAvailable(String version);
+
+  /// No description provided for @snackSkippedUnreadableFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped 1 unreadable file.'**
+  String get snackSkippedUnreadableFile;
+
+  /// No description provided for @snackSkippedUnreadableFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {count} unreadable files.'**
+  String snackSkippedUnreadableFiles(int count);
+
+  /// No description provided for @emptyStateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop a file here or click Open'**
+  String get emptyStateMessage;
+
+  /// No description provided for @buttonOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open File'**
+  String get buttonOpenFile;
+
+  /// No description provided for @buttonReopenLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen Last'**
+  String get buttonReopenLast;
+
+  /// No description provided for @dialogAudioTrackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio track'**
+  String get dialogAudioTrackTitle;
+
+  /// No description provided for @dialogSubtitleTrackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle track'**
+  String get dialogSubtitleTrackTitle;
+
+  /// No description provided for @dialogChaptersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get dialogChaptersTitle;
+
+  /// No description provided for @dialogEqualizerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Equalizer'**
+  String get dialogEqualizerTitle;
+
+  /// No description provided for @dialogEqualizerEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get dialogEqualizerEnable;
+
+  /// No description provided for @dialogPlayQueueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Play queue'**
+  String get dialogPlayQueueTitle;
+
+  /// No description provided for @dialogPlayQueueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue is empty.'**
+  String get dialogPlayQueueEmpty;
+
+  /// No description provided for @dialogPlayQueueAddFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files…'**
+  String get dialogPlayQueueAddFiles;
+
+  /// No description provided for @dialogKeyboardShortcutsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get dialogKeyboardShortcutsTitle;
+
+  /// No description provided for @dialogKeyCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Press a key combination'**
+  String get dialogKeyCaptureTitle;
+
+  /// No description provided for @actionReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get actionReset;
+
+  /// No description provided for @actionResetAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset all'**
+  String get actionResetAll;
+
+  /// No description provided for @actionClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get actionClose;
+
+  /// No description provided for @actionClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get actionClear;
+
+  /// No description provided for @actionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get actionCancel;
+
+  /// No description provided for @actionSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get actionSave;
+
+  /// No description provided for @actionRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get actionRemove;
+
+  /// No description provided for @actionSetNewBinding.
+  ///
+  /// In en, this message translates to:
+  /// **'Set new binding'**
+  String get actionSetNewBinding;
+
+  /// No description provided for @actionResetToDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to default'**
+  String get actionResetToDefault;
+
+  /// No description provided for @labelAudioPlayback.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio playback'**
+  String get labelAudioPlayback;
+
+  /// No description provided for @tooltipReopenLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen last file (Ctrl/Cmd+R)'**
+  String get tooltipReopenLast;
+
+  /// No description provided for @tooltipStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get tooltipStop;
+
+  /// No description provided for @tooltipMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get tooltipMore;
+
+  /// No description provided for @tooltipSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get tooltipSettings;
+
+  /// No description provided for @tooltipOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open file'**
+  String get tooltipOpenFile;
+
+  /// No description provided for @tooltipRecentFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent files'**
+  String get tooltipRecentFiles;
+
+  /// No description provided for @windowMinimize.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize window'**
+  String get windowMinimize;
+
+  /// No description provided for @windowMaximize.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximize window'**
+  String get windowMaximize;
+
+  /// No description provided for @windowRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore window'**
+  String get windowRestore;
+
+  /// No description provided for @windowClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close window'**
+  String get windowClose;
+
+  /// No description provided for @actionPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get actionPlay;
+
+  /// No description provided for @actionPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get actionPause;
+
+  /// No description provided for @loopOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Loop: Off'**
+  String get loopOff;
+
+  /// No description provided for @loopAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Loop: All'**
+  String get loopAll;
+
+  /// No description provided for @loopSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loop: Single'**
+  String get loopSingle;
+
+  /// No description provided for @volumeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get volumeLabel;
+
+  /// No description provided for @volumeMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get volumeMuted;
+
+  /// No description provided for @volumePercent.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume {pct} percent'**
+  String volumePercent(int pct);
 }
 
 class _AppLocalizationsDelegate
