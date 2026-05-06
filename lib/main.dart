@@ -90,47 +90,13 @@ void main(List<String> args) async {
   final windowReady = Completer<void>();
   final firstFrameReady = Completer<void>();
   var windowShown = false;
-  var hiddenTitleBarConfirmed = false;
 
-  Future<void> ensureHiddenTitleBarApplied() async {
-    if (hiddenTitleBarConfirmed) return;
-    if (Platform.isMacOS) {
-      try {
-        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-        hiddenTitleBarConfirmed = true;
-      } catch (e) {
-        debugPrint('Dacx: setTitleBarStyle (macOS) failed: $e');
-      }
-      return;
-    }
-    if (!Platform.isWindows) {
-      hiddenTitleBarConfirmed = true;
-      return;
-    }
-    // Require two consecutive small-titlebar reads before declaring the
-    // hidden style applied. A single small read can be a transient value
-    // returned during DPI/compositor bootstrap, after which Windows still
-    // briefly renders the native caption — producing the "two title bars
-    // at once" race users have reported.
-    var consecutiveSmall = 0;
-    for (var attempt = 0; attempt < 8; attempt++) {
-      try {
-        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-        final titleBarHeight = await windowManager.getTitleBarHeight();
-        if (titleBarHeight <= 8) {
-          consecutiveSmall++;
-          if (consecutiveSmall >= 2) {
-            hiddenTitleBarConfirmed = true;
-            return;
-          }
-        } else {
-          consecutiveSmall = 0;
-        }
-      } catch (e) {
-        debugPrint('Dacx: setTitleBarStyle (Windows) failed: $e');
-        return;
-      }
-      await Future<void>.delayed(Duration(milliseconds: 40 + attempt * 30));
+  Future<void> applyHiddenTitleBarBestEffort() async {
+    if (!Platform.isWindows && !Platform.isMacOS) return;
+    try {
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    } catch (e) {
+      debugPrint('Dacx: setTitleBarStyle failed: $e');
     }
   }
 
@@ -141,11 +107,6 @@ void main(List<String> args) async {
       return;
     }
     windowShown = true;
-    // Apply the hidden title bar style BEFORE showing the window so the user
-    // never sees a frame with the native Windows caption visible alongside
-    // the custom title bar. Cached after first success — see
-    // hiddenTitleBarConfirmed.
-    await ensureHiddenTitleBarApplied();
     await windowManager.show();
     await windowManager.focus();
   }
@@ -157,10 +118,9 @@ void main(List<String> args) async {
           await windowManager.setPosition(savedPos);
         }
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
-        await ensureHiddenTitleBarApplied();
+        await applyHiddenTitleBarBestEffort();
       } catch (e) {
         debugPrint('Dacx: startup window operations failed: $e');
-        // Continue to show fallback even if startup window operations fail.
       } finally {
         if (!windowReady.isCompleted) {
           windowReady.complete();
@@ -181,7 +141,7 @@ void main(List<String> args) async {
   });
 
   unawaited(
-    Future<void>.delayed(const Duration(milliseconds: 1200), () async {
+    Future<void>.delayed(const Duration(milliseconds: 600), () async {
       if (windowShown) return;
       if (!windowReady.isCompleted) {
         windowReady.complete();
