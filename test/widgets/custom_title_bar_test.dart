@@ -72,6 +72,8 @@ void main() {
     if (Platform.isLinux) return;
     await tester.pumpWidget(wrap(const CustomTitleBar()));
     await tester.pump();
+    // Allow first startup probe to confirm native caption is hidden.
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('Dacx'), findsOneWidget);
   });
 
@@ -104,6 +106,7 @@ void main() {
     if (Platform.isLinux) return;
     await tester.pumpWidget(wrap(const CustomTitleBar()));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('Dacx')),
     );
@@ -119,6 +122,7 @@ void main() {
     if (Platform.isLinux) return;
     await tester.pumpWidget(wrap(const CustomTitleBar()));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     final center = tester.getCenter(find.text('Dacx'));
     await tester.tapAt(center);
     await tester.pump(const Duration(milliseconds: 50));

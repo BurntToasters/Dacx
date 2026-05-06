@@ -17,23 +17,17 @@ class CustomTitleBar extends StatefulWidget {
 
 class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   bool _isMaximized = false;
-  // Default to assuming the native caption is hidden. main.dart explicitly
-  // sets TitleBarStyle.hidden and re-applies it before the window is shown,
-  // so in the overwhelming majority of launches no native caption exists.
-  bool _nativeCaptionVisible = false;
+  // On Windows, assume the native caption is still visible until the first
+  // probe proves otherwise. This avoids the visual race where our custom
+  // Dacx label/icon render alongside the native min/max/close buttons during
+  // the brief startup window before TitleBarStyle.hidden takes effect.
+  bool _nativeCaptionVisible = Platform.isWindows;
   // Until the first probe confirms hidden, suppress our own window control
   // buttons (min/max/close) so they cannot render on top of native ones
   // during the brief startup window where Windows may still draw the native
   // caption before TitleBarStyle.hidden takes effect.
   bool _customControlsConfirmed = !Platform.isWindows;
-  static const List<int> _startupProbeDelaysMs = [
-    50,
-    150,
-    350,
-    800,
-    1600,
-    3200,
-  ];
+  static const List<int> _startupProbeDelaysMs = [16, 50, 150, 350, 800, 1600];
   int _startupProbeIndex = 0;
   Timer? _startupProbeTimer;
 
