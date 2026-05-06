@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_localizations.dart';
 import '../services/settings_service.dart';
 
 class TransportControls extends StatelessWidget {
@@ -54,24 +55,25 @@ class TransportControls extends StatelessWidget {
     LoopMode.single => Icons.repeat_one_on,
   };
 
-  String get _loopTooltip => switch (loopMode) {
-    LoopMode.none => 'Loop: Off',
-    LoopMode.loop => 'Loop: All',
-    LoopMode.single => 'Loop: Single',
+  String _loopTooltip(AppLocalizations l10n) => switch (loopMode) {
+    LoopMode.none => l10n.loopOff,
+    LoopMode.loop => l10n.loopAll,
+    LoopMode.single => l10n.loopSingle,
   };
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       child: Row(
         children: [
           // Open button (with recent files popup)
-          _buildOpenButton(context),
+          _buildOpenButton(context, l10n),
           IconButton(
             key: const Key('reopen-last-transport-button'),
             icon: const Icon(Icons.history),
-            tooltip: 'Reopen last file (Ctrl/Cmd+R)',
+            tooltip: l10n.tooltipReopenLast,
             onPressed: onReopenLast,
           ),
           const SizedBox(width: 8),
@@ -95,20 +97,20 @@ class TransportControls extends StatelessWidget {
                 key: ValueKey<bool>(isPlaying),
               ),
             ),
-            tooltip: isPlaying ? 'Pause' : 'Play',
+            tooltip: isPlaying ? l10n.actionPause : l10n.actionPlay,
             iconSize: 36,
             onPressed: hasMedia ? onPlayPause : null,
           ),
           IconButton(
             icon: const Icon(Icons.stop),
-            tooltip: 'Stop',
+            tooltip: l10n.tooltipStop,
             onPressed: hasMedia ? onStop : null,
           ),
           const SizedBox(width: 4),
           // Loop toggle
           IconButton(
             icon: Icon(_loopIcon),
-            tooltip: _loopTooltip,
+            tooltip: _loopTooltip(l10n),
             onPressed: _cycleLoopMode,
             iconSize: 20,
           ),
@@ -146,7 +148,9 @@ class TransportControls extends StatelessWidget {
           ),
           const Spacer(),
           Semantics(
-            label: volume == 0 ? 'Muted' : 'Volume ${volume.round()} percent',
+            label: volume == 0
+                ? l10n.volumeMuted
+                : l10n.volumePercent(volume.round()),
             child: Icon(
               volume == 0 ? Icons.volume_off : Icons.volume_up,
               size: 20,
@@ -156,7 +160,7 @@ class TransportControls extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 160, minWidth: 60),
             child: Semantics(
               slider: true,
-              label: 'Volume',
+              label: l10n.volumeLabel,
               value: '${volume.round()}%',
               child: Slider(
                 value: volume.clamp(0, 100),
@@ -171,14 +175,14 @@ class TransportControls extends StatelessWidget {
           if (onMoreActions != null)
             IconButton(
               icon: const Icon(Icons.more_vert),
-              tooltip: 'More',
+              tooltip: l10n.tooltipMore,
               iconSize: 20,
               onPressed: hasMedia ? onMoreActions : null,
             ),
           // Settings gear
           IconButton(
             icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
+            tooltip: l10n.tooltipSettings,
             iconSize: 20,
             onPressed: onSettingsPressed,
           ),
@@ -187,7 +191,7 @@ class TransportControls extends StatelessWidget {
     );
   }
 
-  Widget _buildOpenButton(BuildContext context) {
+  Widget _buildOpenButton(BuildContext context, AppLocalizations l10n) {
     final recents = recentFiles
         .where((path) => path.trim().isNotEmpty)
         .take(10)
@@ -198,12 +202,12 @@ class TransportControls extends StatelessWidget {
       children: [
         IconButton(
           icon: const Icon(Icons.folder_open),
-          tooltip: 'Open file',
+          tooltip: l10n.tooltipOpenFile,
           onPressed: onOpenFile,
         ),
         if (recents.isNotEmpty)
           PopupMenuButton<String>(
-            tooltip: 'Recent files',
+            tooltip: l10n.tooltipRecentFiles,
             position: PopupMenuPosition.over,
             icon: const Icon(Icons.arrow_drop_down),
             onSelected: onRecentFileSelected,

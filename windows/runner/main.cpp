@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "flutter_window.h"
+#include "instance_bridge.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -25,6 +26,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+
+  bool force_new_instance =
+      dacx::ConsumeNewInstanceFlag(command_line_arguments);
+  bool allow_multi = dacx::AllowMultipleInstancesEnabled();
+
+  if (!force_new_instance && !allow_multi) {
+    if (!dacx::AcquireSingletonMutex()) {
+      // Another Dacx is already running: forward any file paths and exit.
+      std::vector<std::string> file_paths;
+      for (const auto& arg : command_line_arguments) {
+        if (!arg.empty() && arg[0] != '-') {
+          file_paths.push_back(arg);
+        }
+      }
+      if (!file_paths.empty()) {
+        dacx::ForwardToRunningInstance(file_paths);
+      }
+      ::CoUninitialize();
+      return EXIT_SUCCESS;
+    }
+  }
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 

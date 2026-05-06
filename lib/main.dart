@@ -9,8 +9,11 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'l10n/app_localizations.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
+import 'services/hardware_acceleration_service.dart';
+import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
 import 'theme/window_visuals.dart';
 
@@ -59,8 +62,13 @@ void main(List<String> args) async {
 
   final prefs = await SharedPreferences.getInstance();
   final settings = SettingsService(prefs);
+  unawaited(settings.syncInstanceModeFlag());
   final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
   _installAsyncErrorHandler(debugLog);
+  // Prime macOS hardware-acceleration probes off the UI isolate so the first
+  // frame is not blocked by sysctl + system_profiler subprocesses. No-op
+  // elsewhere.
+  unawaited(HardwareAccelerationService.prime());
 
   await windowManager.ensureInitialized();
 
@@ -90,25 +98,39 @@ void main(List<String> args) async {
       try {
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
         hiddenTitleBarConfirmed = true;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: setTitleBarStyle (macOS) failed: $e');
+      }
       return;
     }
     if (!Platform.isWindows) {
       hiddenTitleBarConfirmed = true;
       return;
     }
-    for (var attempt = 0; attempt < 4; attempt++) {
+    // Require two consecutive small-titlebar reads before declaring the
+    // hidden style applied. A single small read can be a transient value
+    // returned during DPI/compositor bootstrap, after which Windows still
+    // briefly renders the native caption — producing the "two title bars
+    // at once" race users have reported.
+    var consecutiveSmall = 0;
+    for (var attempt = 0; attempt < 8; attempt++) {
       try {
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
         final titleBarHeight = await windowManager.getTitleBarHeight();
         if (titleBarHeight <= 8) {
-          hiddenTitleBarConfirmed = true;
-          return;
+          consecutiveSmall++;
+          if (consecutiveSmall >= 2) {
+            hiddenTitleBarConfirmed = true;
+            return;
+          }
+        } else {
+          consecutiveSmall = 0;
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Dacx: setTitleBarStyle (Windows) failed: $e');
         return;
       }
-      await Future<void>.delayed(Duration(milliseconds: 24 * (attempt + 1)));
+      await Future<void>.delayed(Duration(milliseconds: 40 + attempt * 30));
     }
   }
 
@@ -136,7 +158,8 @@ void main(List<String> args) async {
         }
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
         await ensureHiddenTitleBarApplied();
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Dacx: startup window operations failed: $e');
         // Continue to show fallback even if startup window operations fail.
       } finally {
         if (!windowReady.isCompleted) {
@@ -175,6 +198,7 @@ void main(List<String> args) async {
 String? _parseCliFilePath(List<String> args) {
   for (final rawArg in args) {
     if (rawArg.trim().isEmpty || rawArg.startsWith('-')) continue;
+    if (rawArg == InstanceModeService.newInstanceFlag) continue;
     final candidatePath = _normalizeCliPath(rawArg);
     if (candidatePath != null && File(candidatePath).existsSync()) {
       return candidatePath;
@@ -197,7 +221,8 @@ String? _normalizeCliPath(String value) {
   if (uri != null && uri.scheme == 'file') {
     try {
       return uri.toFilePath(windows: Platform.isWindows);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
       return null;
     }
   }
@@ -211,7 +236,9 @@ String? _normalizeCliPath(String value) {
         RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed)) {
       return trimmed;
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
+  }
 
   return null;
 }
@@ -237,6 +264,8 @@ class _DacxAppState extends State<DacxApp>
   bool _applyingWindowVisuals = false;
   bool _pendingWindowVisuals = false;
   Timer? _geometrySaveDebounce;
+  _ThemeBundle? _cachedThemes;
+  _ThemeInputs? _cachedThemeInputs;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
     if (!settings.experimentalFeaturesEnabled) return false;
@@ -263,10 +292,6 @@ class _DacxAppState extends State<DacxApp>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_applyWindowVisualSettings());
       unawaited(_syncKeyboardState());
-      Future<void>.delayed(const Duration(milliseconds: 140), () {
-        if (!mounted) return;
-        unawaited(_applyWindowVisualSettings());
-      });
     });
   }
 
@@ -297,7 +322,9 @@ class _DacxAppState extends State<DacxApp>
   Future<void> _syncKeyboardState() async {
     try {
       await HardwareKeyboard.instance.syncKeyboardState();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Dacx: syncKeyboardState failed: $e');
+    }
   }
 
   @override
@@ -345,7 +372,9 @@ class _DacxAppState extends State<DacxApp>
         } else {
           await windowManager.setOpacity(effectiveOpacity);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: window opacity apply failed: $e');
+      }
 
       try {
         if (Platform.isMacOS) {
@@ -354,7 +383,9 @@ class _DacxAppState extends State<DacxApp>
             await Window.makeTitlebarTransparent();
             await Window.enableFullSizeContentView();
             await Window.hideTitle();
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
+          }
         }
 
         if (blurEnabled) {
@@ -405,7 +436,9 @@ class _DacxAppState extends State<DacxApp>
             dark: _isDarkMode(),
           );
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Dacx: window blur effect apply failed: $e');
+      }
       if (widget.debugLog.isEnabled) {
         widget.debugLog.logLazy(
           category: DebugLogCategory.system,
@@ -465,43 +498,67 @@ class _DacxAppState extends State<DacxApp>
     final popupAlpha = blurEnabled
         ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
         : 1.0;
-    final seed = s.accentColor.color;
-    final lightScheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: Brightness.light,
-    );
-    final darkScheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: Brightness.dark,
-    );
-    final lightVisuals = WindowVisuals.fromScheme(
-      lightScheme,
+    final inputs = _ThemeInputs(
+      seed: s.accentColor.color,
       blurEnabled: blurEnabled,
       blurStrength: s.windowBlurStrength,
-      uiOpacity: windowsBlurUiOpacity,
+      windowsBlurUiOpacity: windowsBlurUiOpacity,
+      popupAlpha: popupAlpha,
     );
-    final darkVisuals = WindowVisuals.fromScheme(
-      darkScheme,
-      blurEnabled: blurEnabled,
-      blurStrength: s.windowBlurStrength,
-      uiOpacity: windowsBlurUiOpacity,
-    );
+    final themes = _cachedThemeInputs == inputs && _cachedThemes != null
+        ? _cachedThemes!
+        : (_cachedThemes = _buildThemes(inputs));
+    _cachedThemeInputs = inputs;
 
     return MaterialApp(
       title: 'Dacx',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       scrollBehavior: const _NoBounceScrollBehavior(),
       themeMode: s.themeMode,
-      theme: ThemeData(
+      theme: themes.light,
+      darkTheme: themes.dark,
+      home: PlayerScreen(
+        settings: s,
+        debugLog: widget.debugLog,
+        initialFile: widget.initialFile,
+      ),
+    );
+  }
+
+  _ThemeBundle _buildThemes(_ThemeInputs inputs) {
+    final lightScheme = ColorScheme.fromSeed(
+      seedColor: inputs.seed,
+      brightness: Brightness.light,
+    );
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: inputs.seed,
+      brightness: Brightness.dark,
+    );
+    final lightVisuals = WindowVisuals.fromScheme(
+      lightScheme,
+      blurEnabled: inputs.blurEnabled,
+      blurStrength: inputs.blurStrength,
+      uiOpacity: inputs.windowsBlurUiOpacity,
+    );
+    final darkVisuals = WindowVisuals.fromScheme(
+      darkScheme,
+      blurEnabled: inputs.blurEnabled,
+      blurStrength: inputs.blurStrength,
+      uiOpacity: inputs.windowsBlurUiOpacity,
+    );
+    return _ThemeBundle(
+      light: ThemeData(
         colorScheme: lightScheme,
         useMaterial3: true,
-        scaffoldBackgroundColor: blurEnabled
+        scaffoldBackgroundColor: inputs.blurEnabled
             ? Colors.transparent
             : lightVisuals.windowBottomColor,
         canvasColor: lightVisuals.contentColor,
         dividerColor: lightVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: lightVisuals.contentColor.withValues(alpha: popupAlpha),
+          color: lightVisuals.contentColor.withValues(alpha: inputs.popupAlpha),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -510,17 +567,17 @@ class _DacxAppState extends State<DacxApp>
         ),
         extensions: [lightVisuals],
       ),
-      darkTheme: ThemeData(
+      dark: ThemeData(
         colorScheme: darkScheme,
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: blurEnabled
+        scaffoldBackgroundColor: inputs.blurEnabled
             ? Colors.transparent
             : darkVisuals.windowBottomColor,
         canvasColor: darkVisuals.contentColor,
         dividerColor: darkVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: darkVisuals.contentColor.withValues(alpha: popupAlpha),
+          color: darkVisuals.contentColor.withValues(alpha: inputs.popupAlpha),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -529,11 +586,47 @@ class _DacxAppState extends State<DacxApp>
         ),
         extensions: [darkVisuals],
       ),
-      home: PlayerScreen(
-        settings: s,
-        debugLog: widget.debugLog,
-        initialFile: widget.initialFile,
-      ),
     );
   }
+}
+
+class _ThemeInputs {
+  final Color seed;
+  final bool blurEnabled;
+  final double blurStrength;
+  final double windowsBlurUiOpacity;
+  final double popupAlpha;
+
+  const _ThemeInputs({
+    required this.seed,
+    required this.blurEnabled,
+    required this.blurStrength,
+    required this.windowsBlurUiOpacity,
+    required this.popupAlpha,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ThemeInputs &&
+      other.seed.toARGB32() == seed.toARGB32() &&
+      other.blurEnabled == blurEnabled &&
+      other.blurStrength == blurStrength &&
+      other.windowsBlurUiOpacity == windowsBlurUiOpacity &&
+      other.popupAlpha == popupAlpha;
+
+  @override
+  int get hashCode => Object.hash(
+    seed.toARGB32(),
+    blurEnabled,
+    blurStrength,
+    windowsBlurUiOpacity,
+    popupAlpha,
+  );
+}
+
+class _ThemeBundle {
+  final ThemeData light;
+  final ThemeData dark;
+
+  const _ThemeBundle({required this.light, required this.dark});
 }

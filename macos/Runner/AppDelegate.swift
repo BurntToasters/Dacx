@@ -1,6 +1,12 @@
 import Cocoa
 import CoreServices
 import FlutterMacOS
+import os.log
+
+// Subsystem identifies our binary in unified logging; category groups the
+// open-file/Launch-Services bridge messages. Paths are passed via
+// %{private}@ so Console.app redacts them unless explicitly enabled.
+private let dacxLog = OSLog(subsystem: "run.rosie.dacx", category: "open-file")
 
 @main
 class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
@@ -25,13 +31,17 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     let bundleURL = Bundle.main.bundleURL
     DispatchQueue.global(qos: .utility).async {
       let status = LSRegisterURL(bundleURL as CFURL, true)
-      NSLog("[Dacx] LSRegisterURL(\(bundleURL.path)) returned \(status)")
+      if status == noErr {
+        os_log("LSRegisterURL(%{private}@) succeeded", log: dacxLog, type: .info, bundleURL.path)
+      } else {
+        os_log("LSRegisterURL(%{private}@) failed with OSStatus %d", log: dacxLog, type: .error, bundleURL.path, status)
+      }
     }
   }
 
   func registerFlutterChannels(messenger: FlutterBinaryMessenger) {
     if channelsConfigured { return }
-    NSLog("[Dacx] registering Flutter channels eagerly from MainFlutterWindow")
+    os_log("registering Flutter channels eagerly from MainFlutterWindow", log: dacxLog, type: .debug)
     setupChannels(messenger: messenger)
   }
 
@@ -75,7 +85,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     openFileEventChannel = eventChannel
     mediaSessionBridge.attach(messenger: messenger)
     channelsConfigured = true
-    NSLog("[Dacx] Flutter channels configured (pending=\(pendingOpenFiles.count))")
+    os_log("Flutter channels configured (pending=%d)", log: dacxLog, type: .debug, pendingOpenFiles.count)
   }
 
   private func drainPendingOpenFiles() -> [String] {
@@ -98,7 +108,7 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
 
   override func application(_ application: NSApplication, open urls: [URL]) {
     super.application(application, open: urls)
-    NSLog("[Dacx] application(_:open urls:) received \(urls.count) URL(s)")
+    os_log("application(_:open urls:) received %d URL(s)", log: dacxLog, type: .info, urls.count)
     for url in urls {
       // For sandboxed workaround
       let scoped = url.startAccessingSecurityScopedResource()
@@ -106,17 +116,17 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
         if scoped { url.stopAccessingSecurityScopedResource() }
       }
       if url.isFileURL {
-        NSLog("[Dacx] handling file URL: \(url.path) (scoped=\(scoped))")
+        os_log("handling file URL: %{private}@ (scoped=%{public}@)", log: dacxLog, type: .info, url.path, scoped ? "true" : "false")
         handleOpenFile(url.path)
       } else {
-        NSLog("[Dacx] handling non-file URL: \(url.absoluteString)")
+        os_log("handling non-file URL: %{private}@", log: dacxLog, type: .info, url.absoluteString)
         handleOpenFile(url.absoluteString)
       }
     }
   }
 
   override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-    NSLog("[Dacx] application(_:openFile:) received: \(filename)")
+    os_log("application(_:openFile:) received: %{private}@", log: dacxLog, type: .info, filename)
     handleOpenFile(filename)
     return true
   }

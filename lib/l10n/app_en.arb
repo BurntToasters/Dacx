@@ -1,0 +1,107 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Dacx",
+  "@appTitle": { "description": "Application name shown in window title and About dialog." },
+
+  "settingsTitle": "Settings",
+  "@settingsTitle": { "description": "AppBar title for the settings screen." },
+
+  "settingsAutoPlay": "Auto-play on file open",
+  "settingsResumePlayback": "Resume from last position",
+  "settingsOnScreenDisplay": "On-screen display",
+  "settingsMediaSession": "System media keys / Now Playing",
+  "settingsAlwaysOnTop": "Always on top",
+  "settingsRememberWindow": "Remember window size & position",
+  "settingsAllowMultipleWindows": "Allow multiple windows",
+  "settingsCheckForUpdates": "Check for updates on launch",
+  "settingsTheme": "Theme",
+  "settingsThemeDark": "Dark",
+  "settingsThemeLight": "Light",
+  "settingsThemeSystem": "System",
+  "settingsAccentColor": "Accent color",
+  "settingsHardwareAcceleration": "Hardware acceleration",
+  "settingsHardwareAccelerationRestartNote": "Requires restart to take effect",
+  "settingsPlaybackSpeed": "Playback speed",
+  "settingsLoopMode": "Loop mode",
+
+  "snackCouldNotReadDroppedFile": "Could not read dropped file path.",
+  "snackCouldNotReadSelectedFile": "Could not read selected file path.",
+  "snackDebugLogCopied": "Redacted debug log copied to clipboard.",
+  "snackDebugLogCleared": "Debug log cleared.",
+
+  "snackUnableToOpenFilePicker": "Unable to open file picker.",
+  "snackFilePickerFailed": "File picker failed. {detail}",
+  "@snackFilePickerFailed": {
+    "description": "Shown when the OS file picker raises an error.",
+    "placeholders": { "detail": { "type": "String", "example": "Permission denied" } }
+  },
+  "snackInvalidFilePath": "Invalid file path. Try another file.",
+  "snackFileNotFound": "File not found. It may have moved or been deleted.",
+  "snackUnsupportedFileType": "Unsupported file type. Open an audio/video file.",
+  "snackFullscreenRejected": "Fullscreen change rejected by window manager.",
+  "snackUpdateAvailable": "Dacx v{version} is available",
+  "@snackUpdateAvailable": {
+    "placeholders": { "version": { "type": "String", "example": "0.7.1" } }
+  },
+  "snackSkippedUnreadableFile": "Skipped 1 unreadable file.",
+  "snackSkippedUnreadableFiles": "Skipped {count} unreadable files.",
+  "@snackSkippedUnreadableFiles": {
+    "placeholders": { "count": { "type": "int", "example": "3" } }
+  },
+
+  "emptyStateMessage": "Drop a file here or click Open",
+  "buttonOpenFile": "Open File",
+  "buttonReopenLast": "Reopen Last",
+
+  "dialogAudioTrackTitle": "Audio track",
+  "dialogSubtitleTrackTitle": "Subtitle track",
+  "dialogChaptersTitle": "Chapters",
+  "dialogEqualizerTitle": "Equalizer",
+  "dialogEqualizerEnable": "Enable",
+  "dialogPlayQueueTitle": "Play queue",
+  "dialogPlayQueueEmpty": "Queue is empty.",
+  "dialogPlayQueueAddFiles": "Add files…",
+  "dialogKeyboardShortcutsTitle": "Keyboard shortcuts",
+  "dialogKeyCaptureTitle": "Press a key combination",
+
+  "actionReset": "Reset",
+  "actionResetAll": "Reset all",
+  "actionClose": "Close",
+  "actionClear": "Clear",
+  "actionCancel": "Cancel",
+  "actionSave": "Save",
+  "actionRemove": "Remove",
+  "actionSetNewBinding": "Set new binding",
+  "actionResetToDefault": "Reset to default",
+
+  "labelAudioPlayback": "Audio playback",
+
+  "tooltipReopenLast": "Reopen last file (Ctrl/Cmd+R)",
+  "tooltipStop": "Stop",
+  "tooltipMore": "More",
+  "tooltipSettings": "Settings",
+  "tooltipOpenFile": "Open file",
+  "tooltipRecentFiles": "Recent files",
+
+  "windowMinimize": "Minimize window",
+  "windowMaximize": "Maximize window",
+  "windowRestore": "Restore window",
+  "windowClose": "Close window",
+
+  "actionPlay": "Play",
+  "actionPause": "Pause",
+
+  "loopOff": "Loop: Off",
+  "loopAll": "Loop: All",
+  "loopSingle": "Loop: Single",
+
+  "volumeLabel": "Volume",
+  "volumeMuted": "Muted",
+  "volumePercent": "Volume {pct} percent",
+  "@volumePercent": {
+    "placeholders": {
+      "pct": { "type": "int" }
+    }
+  }
+}

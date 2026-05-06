@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
 
 /// Custom title bar for Windows and macOS. Returns [SizedBox.shrink] on Linux.
@@ -19,14 +20,21 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
   // Default to assuming the native caption is hidden. main.dart explicitly
   // sets TitleBarStyle.hidden and re-applies it before the window is shown,
   // so in the overwhelming majority of launches no native caption exists.
-  // The probe below will flip this to true only if it positively detects a
-  // native caption (titleBarHeight > 8) AND failed re-applies of the hidden
-  // style cannot dismiss it. Defaulting to false avoids a known race where
-  // `getTitleBarHeight()` returns a stale large value during startup on some
-  // Windows DPI/compositor configurations, which previously caused the
-  // custom title bar to never render at all.
   bool _nativeCaptionVisible = false;
-  int _startupProbeAttempts = 0;
+  // Until the first probe confirms hidden, suppress our own window control
+  // buttons (min/max/close) so they cannot render on top of native ones
+  // during the brief startup window where Windows may still draw the native
+  // caption before TitleBarStyle.hidden takes effect.
+  bool _customControlsConfirmed = !Platform.isWindows;
+  static const List<int> _startupProbeDelaysMs = [
+    50,
+    150,
+    350,
+    800,
+    1600,
+    3200,
+  ];
+  int _startupProbeIndex = 0;
   Timer? _startupProbeTimer;
 
   @override
@@ -36,25 +44,26 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     windowManager.isMaximized().then((v) {
       if (mounted) setState(() => _isMaximized = v);
     });
-    unawaited(_refreshNativeCaptionVisibility());
     if (Platform.isWindows) {
-      // Probe more aggressively at startup so the custom bar can take over as
-      // soon as the native caption is reliably hidden. Keep going for up to
-      // ~6 seconds (50 * 120ms) to survive slow first-frame scenarios.
-      _startupProbeTimer = Timer.periodic(const Duration(milliseconds: 120), (
-        timer,
-      ) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        _startupProbeAttempts += 1;
-        unawaited(_refreshNativeCaptionVisibility());
-        if (_startupProbeAttempts >= 50) {
-          timer.cancel();
-        }
-      });
+      _scheduleNextStartupProbe();
+    } else {
+      unawaited(_refreshNativeCaptionVisibility());
     }
+  }
+
+  void _scheduleNextStartupProbe() {
+    if (!mounted || _startupProbeIndex >= _startupProbeDelaysMs.length) return;
+    final delayMs = _startupProbeDelaysMs[_startupProbeIndex++];
+    _startupProbeTimer?.cancel();
+    _startupProbeTimer = Timer(Duration(milliseconds: delayMs), () async {
+      if (!mounted) return;
+      await _refreshNativeCaptionVisibility();
+      if (!mounted) return;
+      if (!_nativeCaptionVisible && !_customControlsConfirmed) {
+        setState(() => _customControlsConfirmed = true);
+      }
+      _scheduleNextStartupProbe();
+    });
   }
 
   @override
@@ -100,7 +109,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
       if (mounted && nativeCaptionVisible != _nativeCaptionVisible) {
         setState(() => _nativeCaptionVisible = nativeCaptionVisible);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Dacx: refreshNativeCaptionVisibility failed: $e');
+    }
   }
 
   @override
@@ -113,6 +124,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     final colorScheme = Theme.of(context).colorScheme;
     final visuals = context.windowVisuals;
     final isMac = Platform.isMacOS;
+    final l10n = AppLocalizations.of(context);
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -151,10 +163,10 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                 ),
               ),
               const Expanded(child: SizedBox.shrink()),
-              if (!isMac) ...[
+              if (!isMac && _customControlsConfirmed) ...[
                 _WindowButton(
                   icon: Icons.minimize,
-                  semanticLabel: 'Minimize window',
+                  semanticLabel: l10n.windowMinimize,
                   onPressed: windowManager.minimize,
                   hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
                   iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
@@ -163,8 +175,8 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                   icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
                   iconSize: _isMaximized ? 14 : 16,
                   semanticLabel: _isMaximized
-                      ? 'Restore window'
-                      : 'Maximize window',
+                      ? l10n.windowRestore
+                      : l10n.windowMaximize,
                   onPressed: () async {
                     if (_isMaximized) {
                       await windowManager.unmaximize();
@@ -177,7 +189,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                 ),
                 _WindowButton(
                   icon: Icons.close,
-                  semanticLabel: 'Close window',
+                  semanticLabel: l10n.windowClose,
                   onPressed: windowManager.close,
                   hoverColor: Colors.red,
                   hoverIconColor: Colors.white,

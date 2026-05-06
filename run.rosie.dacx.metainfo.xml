@@ -65,12 +65,18 @@
     <mediatype>audio/aac</mediatype>
     <mediatype>audio/x-m4a</mediatype>
     <mediatype>audio/opus</mediatype>
+    <mediatype>audio/x-ms-wma</mediatype>
+    <mediatype>audio/x-ape</mediatype>
     <mediatype>video/mp4</mediatype>
     <mediatype>video/x-matroska</mediatype>
     <mediatype>video/webm</mediatype>
     <mediatype>video/quicktime</mediatype>
+    <mediatype>video/x-msvideo</mediatype>
+    <mediatype>video/x-ms-wmv</mediatype>
+    <mediatype>video/x-flv</mediatype>
   </provides>
   <releases>
+    <release version="0.7.0" date="2026-05-06"/>
     <release version="0.6.3" date="2026-05-05"/>
     <release version="0.6.2" date="2026-05-05"/>
     <release version="0.6.1" date="2026-05-04"/>

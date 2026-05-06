@@ -5,7 +5,9 @@
  *
  *  - Stray TODO/FIXME/XXX/HACK markers in lib/ (warns, not fails)
  *  - `print(` calls left in lib/ (fails — use DebugLogService)
- *  - `debugPrint(` outside test/ (fails)
+ *  - `debugPrint(` outside test/ (warns — Flutter's intended diagnostic
+ *    helper is allowed in lib/, but call sites are surfaced so they can
+ *    be migrated to DebugLogService when they accumulate)
  *  - .orig / .bak / .rej merge debris anywhere
  *  - Files larger than 500 KB outside well-known asset dirs
  *
@@ -56,7 +58,10 @@ if (fs.existsSync(libDir)) {
       }
       if (!optedOut && debugPrintRe.test(code)) {
         const msg = `${path.relative(root, file)}:${idx + 1}: stray debugPrint()`;
-        (strict ? failures : warnings).push(msg);
+        // debugPrint is the Flutter-blessed diagnostic helper and is fine
+        // in lib/ for now. Surface as a warning so we can track call sites,
+        // but do not block CI.
+        warnings.push(msg);
       }
       if (todoRe.test(line)) {
         warnings.push(

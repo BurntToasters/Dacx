@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/settings_service.dart';
@@ -82,12 +83,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final visuals = context.windowVisuals;
     final isDesktopCustomChrome = Platform.isMacOS || Platform.isWindows;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: isDesktopCustomChrome
           ? null
-          : AppBar(title: const Text('Settings')),
+          : AppBar(title: Text(l10n.settingsTitle)),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -192,6 +194,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             _s.rememberWindow = v;
                             _log(
                               'remember_window_changed',
+                              detailsBuilder: () => {'value': v},
+                            );
+                          }),
+                        ),
+                        SwitchListTile(
+                          title: const Text('Allow multiple windows'),
+                          subtitle: const Text(
+                            'When off (default), opening a file from your '
+                            'OS reuses the running Dacx window. Press '
+                            'Ctrl/Cmd+N to open an extra window on demand.',
+                          ),
+                          value: _s.allowMultipleInstances,
+                          onChanged: (v) => setState(() {
+                            _s.allowMultipleInstances = v;
+                            _log(
+                              'allow_multiple_instances_changed',
                               detailsBuilder: () => {'value': v},
                             );
                           }),
@@ -419,27 +437,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         spacing: 6,
         children: AccentColor.values.map((ac) {
           final isSelected = ac == _s.accentColor;
-          return GestureDetector(
-            onTap: () => setState(() {
-              _s.accentColor = ac;
-              _log(
-                'accent_color_changed',
-                detailsBuilder: () => {'value': ac.name},
-              );
-            }),
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: ac.color,
-                shape: BoxShape.circle,
-                border: isSelected
-                    ? Border.all(color: colorScheme.onSurface, width: 2.5)
+          return Semantics(
+            label: 'Accent color ${ac.name}',
+            button: true,
+            selected: isSelected,
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _s.accentColor = ac;
+                _log(
+                  'accent_color_changed',
+                  detailsBuilder: () => {'value': ac.name},
+                );
+              }),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: ac.color,
+                  shape: BoxShape.circle,
+                  border: isSelected
+                      ? Border.all(color: colorScheme.onSurface, width: 2.5)
+                      : null,
+                ),
+                child: isSelected
+                    ? Icon(Icons.check, size: 16, color: colorScheme.onSurface)
                     : null,
               ),
-              child: isSelected
-                  ? Icon(Icons.check, size: 16, color: colorScheme.onSurface)
-                  : null,
             ),
           );
         }).toList(),

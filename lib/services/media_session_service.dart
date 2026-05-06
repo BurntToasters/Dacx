@@ -50,7 +50,7 @@ class MediaSessionService {
     }
     if (Platform.isLinux) {
       try {
-        _mpris = _MprisAdapter(_commandsCtrl.add, debugLog);
+        _mpris = _MprisAdapter(_dispatchCommand, debugLog);
       } catch (e) {
         _platformAvailable = false;
         debugLog.log(
@@ -174,9 +174,13 @@ class MediaSessionService {
   }
 
   Future<void> dispose() async {
-    if (_mpris != null) {
-      await _mpris!.dispose();
-      _mpris = null;
+    final mpris = _mpris;
+    // Null out the field before awaiting so concurrent calls (e.g. a final
+    // updateMetadata firing during shutdown) don't double-dispose or race
+    // against this disposal.
+    _mpris = null;
+    if (mpris != null) {
+      await mpris.dispose();
     }
     await _commandsCtrl.close();
   }
@@ -209,8 +213,13 @@ class MediaSessionService {
     final action = args['action']?.toString() ?? '';
     final positionMs = (args['positionMs'] as num?)?.toInt();
     final value = (args['value'] as num?)?.toDouble();
-    _commandsCtrl.add(MediaSessionCommand(action, positionMs, value: value));
+    _dispatchCommand(MediaSessionCommand(action, positionMs, value: value));
     return null;
+  }
+
+  void _dispatchCommand(MediaSessionCommand command) {
+    if (_commandsCtrl.isClosed) return;
+    _commandsCtrl.add(command);
   }
 }
 

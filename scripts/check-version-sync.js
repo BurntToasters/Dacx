@@ -57,6 +57,27 @@ if (fs.existsSync(path.join(root, metainfoPath))) {
   }
 }
 
+function checkLinuxPackageTemplate(rel) {
+  if (!fs.existsSync(path.join(root, rel))) return;
+  const text = readText(rel);
+  const match = text.match(
+    /^Version:\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*$/m,
+  );
+  if (!match) {
+    failures.push(`${rel} Version line not found or malformed`);
+    return;
+  }
+  const [, templateVersion] = match;
+  if (templateVersion !== pkgVersion) {
+    failures.push(
+      `version drift: package.json=${pkgVersion} ${rel}=${templateVersion}`,
+    );
+  }
+}
+
+checkLinuxPackageTemplate("linux/packaging/control.template");
+checkLinuxPackageTemplate("linux/packaging/dacx.spec.template");
+
 if (failures.length) {
   console.error("Version sync FAILED:");
   for (const f of failures) console.error(`  - ${f}`);
