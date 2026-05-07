@@ -117,11 +117,43 @@ Future<void> _dacxMainAsync(List<String> args) async {
   // #endregion
   try {
     await Window.initialize();
+    // #region agent log
+    agentDebugNdjson(
+      location: 'main.dart:main',
+      message: 'flutter_acrylic_init_ok',
+      hypothesisId: 'H3',
+      data: const {},
+    );
+    // #endregion
   } catch (e) {
     debugPrint('Dacx: Window.initialize failed: $e');
+    // #region agent log
+    agentDebugNdjson(
+      location: 'main.dart:main',
+      message: 'flutter_acrylic_init_failed',
+      hypothesisId: 'H3',
+      data: {'error': e.toString()},
+    );
+    // #endregion
   }
 
+  // #region agent log
+  agentDebugNdjson(
+    location: 'main.dart:main',
+    message: 'prefs_get_instance_start',
+    hypothesisId: 'H3',
+    data: const {},
+  );
+  // #endregion
   final prefs = await SharedPreferences.getInstance();
+  // #region agent log
+  agentDebugNdjson(
+    location: 'main.dart:main',
+    message: 'prefs_ready',
+    hypothesisId: 'H3',
+    data: const {},
+  );
+  // #endregion
   final settings = SettingsService(prefs);
   unawaited(settings.syncInstanceModeFlag());
   final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
