@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'l10n/app_localizations.dart';
-import 'debug_agent_log.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
 import 'services/hardware_acceleration_service.dart';
@@ -28,21 +27,6 @@ class _NoBounceScrollBehavior extends MaterialScrollBehavior {
   ScrollPhysics getScrollPhysics(BuildContext context) {
     return const ClampingScrollPhysics();
   }
-}
-
-void _installAgentFlutterErrorHook() {
-  final previousOnError = FlutterError.onError;
-  FlutterError.onError = (FlutterErrorDetails details) {
-    // #region agent log
-    agentDebugNdjson(
-      location: 'main.dart:flutter_error',
-      message: 'framework_error',
-      hypothesisId: 'H2',
-      data: {'exception': details.exceptionAsString()},
-    );
-    // #endregion
-    previousOnError?.call(details);
-  };
 }
 
 void _installKeyboardStateRecovery() {
@@ -63,17 +47,6 @@ void _installKeyboardStateRecovery() {
 
 void _installAsyncErrorHandler(DebugLogService debugLog) {
   PlatformDispatcher.instance.onError = (error, stack) {
-    // #region agent log
-    agentDebugNdjson(
-      location: 'main.dart:async_error',
-      message: 'uncaught_async_error',
-      hypothesisId: 'H2',
-      data: {
-        'error': error.toString(),
-        'stack_present': stack.toString().isNotEmpty,
-      },
-    );
-    // #endregion
     debugLog.log(
       category: DebugLogCategory.error,
       event: 'uncaught_async_error',
@@ -84,81 +57,22 @@ void _installAsyncErrorHandler(DebugLogService debugLog) {
   };
 }
 
-void main(List<String> args) {
-  runZonedGuarded(() {
-    WidgetsFlutterBinding.ensureInitialized();
-    _dacxMainAsync(args).then((_) {}, onError: fatalStartupCapture);
-  }, fatalStartupCapture);
-}
-
-Future<void> _dacxMainAsync(List<String> args) async {
-  // #region agent log
-  agentDebugNdjson(
-    location: 'main.dart:main',
-    message: 'binding_ready',
-    hypothesisId: 'H3',
-    data: {
-      'arg_count': args.length,
-      'safe_startup_arg': args.contains(_safeStartupArg),
-      'os': Platform.operatingSystem,
-    },
-  );
-  // #endregion
+void main(List<String> args) async {
+  WidgetsFlutterBinding.ensureInitialized();
   final startupSafeMode = args.contains(_safeStartupArg);
   _installKeyboardStateRecovery();
-  _installAgentFlutterErrorHook();
   MediaKit.ensureInitialized();
-  // #region agent log
-  agentDebugNdjson(
-    location: 'main.dart:main',
-    message: 'media_kit_ready',
-    hypothesisId: 'H3',
-    data: const {},
-  );
-  // #endregion
   try {
     await Window.initialize();
-    // #region agent log
-    agentDebugNdjson(
-      location: 'main.dart:main',
-      message: 'flutter_acrylic_init_ok',
-      hypothesisId: 'H3',
-      data: const {},
-    );
-    // #endregion
   } catch (e) {
     debugPrint('Dacx: Window.initialize failed: $e');
-    // #region agent log
-    agentDebugNdjson(
-      location: 'main.dart:main',
-      message: 'flutter_acrylic_init_failed',
-      hypothesisId: 'H3',
-      data: {'error': e.toString()},
-    );
-    // #endregion
   }
 
   if (Platform.isWindows) {
     await dacxRepairSharedPreferencesFileBestEffort();
   }
 
-  // #region agent log
-  agentDebugNdjson(
-    location: 'main.dart:main',
-    message: 'prefs_get_instance_start',
-    hypothesisId: 'H3',
-    data: const {},
-  );
-  // #endregion
   final prefs = await SharedPreferences.getInstance();
-  // #region agent log
-  agentDebugNdjson(
-    location: 'main.dart:main',
-    message: 'prefs_ready',
-    hypothesisId: 'H3',
-    data: const {},
-  );
-  // #endregion
   final settings = SettingsService(prefs);
   unawaited(settings.syncInstanceModeFlag());
   final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
@@ -170,24 +84,8 @@ Future<void> _dacxMainAsync(List<String> args) async {
 
   try {
     await windowManager.ensureInitialized();
-    // #region agent log
-    agentDebugNdjson(
-      location: 'main.dart:main',
-      message: 'window_manager_ready',
-      hypothesisId: 'H3',
-      data: const {},
-    );
-    // #endregion
   } catch (e) {
     debugPrint('Dacx: windowManager.ensureInitialized failed: $e');
-    // #region agent log
-    agentDebugNdjson(
-      location: 'main.dart:main',
-      message: 'window_manager_failed',
-      hypothesisId: 'H3',
-      data: {'error': e.toString()},
-    );
-    // #endregion
   }
 
   // Restore saved window geometry or use defaults.
@@ -249,18 +147,6 @@ Future<void> _dacxMainAsync(List<String> args) async {
     }),
   );
   final cliFile = _parseCliFilePath(args);
-
-  // #region agent log
-  agentDebugNdjson(
-    location: 'main.dart:main',
-    message: 'run_app',
-    hypothesisId: 'H3',
-    data: {
-      'remember_window': settings.rememberWindow,
-      'cli_file': cliFile != null,
-    },
-  );
-  // #endregion
 
   runApp(
     DacxApp(
@@ -539,16 +425,6 @@ class _DacxAppState extends State<DacxApp>
         }
       } catch (e) {
         debugPrint('Dacx: window blur effect apply failed: $e');
-        // #region agent log
-        if (Platform.isWindows) {
-          agentDebugNdjson(
-            location: 'main.dart:_applyWindowVisualSettings',
-            message: 'window_blur_apply_failed',
-            hypothesisId: 'H4',
-            data: {'error': e.toString()},
-          );
-        }
-        // #endregion
       }
       if (widget.debugLog.isEnabled) {
         widget.debugLog.logLazy(

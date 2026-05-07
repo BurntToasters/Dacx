@@ -3,7 +3,6 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <cstdint>
 #include <cwctype>
 #include <string>
 #include <vector>
@@ -117,38 +116,6 @@ void LogStartup(const std::wstring& message) {
   CloseHandle(file);
 }
 
-void AgentDebugNdjson(const char* hypothesis_id, const char* location,
-                      const char* message) {
-  const std::wstring dir = ResolveDacxDataDir();
-  if (dir.empty()) return;
-  EnsureDirExists(dir);
-  const std::wstring log_path = dir + L"\\debug-1a3b4a.log";
-
-  FILETIME ft;
-  GetSystemTimeAsFileTime(&ft);
-  ULARGE_INTEGER uli;
-  uli.LowPart = ft.dwLowDateTime;
-  uli.HighPart = ft.dwHighDateTime;
-  const uint64_t unix_ms =
-      (uli.QuadPart - 116444736000000000ULL) / 10000ULL;
-
-  std::string json = std::string("{\"sessionId\":\"1a3b4a\",\"timestamp\":") +
-                     std::to_string(unix_ms) + ",\"location\":\"" +
-                     std::string(location) + "\",\"message\":\"" +
-                     std::string(message) + "\",\"hypothesisId\":\"" +
-                     std::string(hypothesis_id) +
-                     "\",\"runId\":\"pre-fix\",\"data\":{}}\n";
-
-  HANDLE file = CreateFileW(log_path.c_str(), FILE_APPEND_DATA,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                            nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-  if (file == INVALID_HANDLE_VALUE) return;
-  DWORD written = 0;
-  WriteFile(file, json.data(), static_cast<DWORD>(json.size()), &written,
-            nullptr);
-  CloseHandle(file);
-}
-
 }  // namespace
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -166,10 +133,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::OutputDebugStringW(L"[Dacx] CoInitializeEx failed; aborting startup.\n");
     return EXIT_FAILURE;
   }
-
-  // #region agent log
-  AgentDebugNdjson("H5", "main.cpp:wWinMain", "com_initialized");
-  // #endregion
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
@@ -190,9 +153,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       if (!file_paths.empty()) {
         dacx::ForwardToRunningInstance(file_paths);
       }
-      // #region agent log
-      AgentDebugNdjson("H5", "main.cpp:wWinMain", "exit_second_instance");
-      // #endregion
       ::CoUninitialize();
       return EXIT_SUCCESS;
     }
@@ -239,9 +199,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::CoUninitialize();
     return EXIT_FAILURE;
   }
-  // #region agent log
-  AgentDebugNdjson("H3", "main.cpp:wWinMain", "flutter_window_created");
-  // #endregion
   // Quit-on-last-window-close handled by the registry instead of
   // SetQuitOnClose so closing the primary while aux windows live keeps
   // the app alive.
