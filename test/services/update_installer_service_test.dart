@@ -495,7 +495,12 @@ void main() {
         expect(executable, '/usr/bin/osascript');
         expect(arguments?[0], '-e');
         expect(arguments?[1], contains('with administrator privileges'));
-        expect(arguments?[1], contains(prepared.helperScript.path));
+        // Full shell command is passed through _escapeAppleScriptString, which
+        // doubles backslashes; Windows temp paths must match the escaped form.
+        final helperPathInAppleScript = prepared.helperScript.path
+            .replaceAll(r'\', r'\\')
+            .replaceAll('"', r'\"');
+        expect(arguments?[1], contains(helperPathInAppleScript));
       },
     );
   });

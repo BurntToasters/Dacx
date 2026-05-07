@@ -21,6 +21,7 @@ import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
 import '../services/seek_preview_service.dart';
+import '../debug_agent_log.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_installer_service.dart';
@@ -167,6 +168,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       debugSource: 'player_screen',
     );
     _playerService = PlayerService();
+    // #region agent log
+    agentDebugNdjson(
+      location: 'player_screen.dart:initState',
+      message: 'player_service_constructed',
+      hypothesisId: 'H1',
+      data: {'startup_safe_mode': widget.startupSafeMode},
+    );
+    // #endregion
     _seekPreviewService = SeekPreviewService();
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     _settings.pruneRecentFiles(notifyListeners: false);
