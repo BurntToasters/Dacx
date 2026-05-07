@@ -15,7 +15,19 @@ namespace {
 
 using IsWow64Process2Fn = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
 
+bool IsArm64EmulationRuntimeLoaded() {
+  return GetModuleHandleW(L"xtajit64se.dll") != nullptr ||
+         GetModuleHandleW(L"xtajit.dll") != nullptr;
+}
+
 bool IsRunningUnderArm64Emulation() {
+#if defined(_M_ARM64) || defined(__aarch64__)
+  return false;
+#else
+  if (IsArm64EmulationRuntimeLoaded()) {
+    return true;
+  }
+
   HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
   if (kernel32 == nullptr) {
     return false;
@@ -30,11 +42,11 @@ bool IsRunningUnderArm64Emulation() {
   USHORT native_machine = IMAGE_FILE_MACHINE_UNKNOWN;
   if (!is_wow64_process2(GetCurrentProcess(), &process_machine,
                          &native_machine)) {
-    return false;
+    return IsArm64EmulationRuntimeLoaded();
   }
 
-  return native_machine == IMAGE_FILE_MACHINE_ARM64 &&
-         process_machine != IMAGE_FILE_MACHINE_UNKNOWN;
+  return native_machine == IMAGE_FILE_MACHINE_ARM64;
+#endif
 }
 
 bool IsImeMessage(UINT message) {
@@ -125,14 +137,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
   }
 
-  if (running_under_arm64_emulation_) {
-    // On some Windows-on-ARM systems the engine can crash handling
-    // WM_PARENTNOTIFY/WM_DESTROY while processing child-window teardown.
-    // Let the default Win32 path handle this notification instead.
-    if (message == WM_PARENTNOTIFY && LOWORD(wparam) == WM_DESTROY) {
-      return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
-    }
+  // Flutter does not need this child-window teardown notification, and on
+  // WoA it can trigger a null dereference inside flutter_windows.dll.
+  if (message == WM_PARENTNOTIFY && LOWORD(wparam) == WM_DESTROY) {
+    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
 
+  if (running_under_arm64_emulation_) {
     // IME messages can also trigger the same null-deref during startup on
     // WoA x64 emulation. Use the OS default IME handling path there.
     if (IsImeMessage(message)) {
