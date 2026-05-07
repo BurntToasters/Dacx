@@ -12,12 +12,15 @@ private let dacxLog = OSLog(subsystem: "run.rosie.dacx", category: "open-file")
 class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
   private let openFileMethodChannelName = "run.rosie.dacx/open_file/methods"
   private let openFileEventChannelName = "run.rosie.dacx/open_file/events"
+  private let windowMethodChannelName = "run.rosie.dacx/window/methods"
 
   private var openFileMethodChannel: FlutterMethodChannel?
   private var openFileEventChannel: FlutterEventChannel?
+  private var windowMethodChannels: [ObjectIdentifier: FlutterMethodChannel] = [:]
   private var openFileEventSink: FlutterEventSink?
   private var pendingOpenFiles: [String] = []
   private var channelsConfigured = false
+  private var auxiliaryWindows: [MainFlutterWindow] = []
   private let mediaSessionBridge = MediaSessionBridge()
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,7 +42,8 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     }
   }
 
-  func registerFlutterChannels(messenger: FlutterBinaryMessenger) {
+  func registerFlutterChannels(messenger: FlutterBinaryMessenger, for window: MainFlutterWindow) {
+    setupWindowChannel(messenger: messenger, for: window)
     if channelsConfigured { return }
     os_log("registering Flutter channels eagerly from MainFlutterWindow", log: dacxLog, type: .debug)
     setupChannels(messenger: messenger)
@@ -53,7 +57,39 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
       }
       return
     }
+    if let window = mainFlutterWindow as? MainFlutterWindow {
+      setupWindowChannel(messenger: controller.engine.binaryMessenger, for: window)
+    }
     setupChannels(messenger: controller.engine.binaryMessenger)
+  }
+
+  private func setupWindowChannel(messenger: FlutterBinaryMessenger, for window: MainFlutterWindow) {
+    let windowId = ObjectIdentifier(window)
+    if windowMethodChannels[windowId] != nil { return }
+
+    let methodChannel = FlutterMethodChannel(
+      name: windowMethodChannelName,
+      binaryMessenger: messenger
+    )
+    methodChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(false)
+        return
+      }
+      switch call.method {
+      case "openNewWindow":
+        result(self.openNewWindow())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    windowMethodChannels[windowId] = methodChannel
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(flutterWindowWillClose(_:)),
+      name: NSWindow.willCloseNotification,
+      object: window
+    )
   }
 
   private func setupChannels(messenger: FlutterBinaryMessenger) {
@@ -104,6 +140,57 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     } else {
       pendingOpenFiles.append(path)
     }
+  }
+
+  private func openNewWindow() -> Bool {
+    let referenceFrame = NSApp.keyWindow?.frame ?? mainFlutterWindow?.frame
+    let contentRect: NSRect
+    if let frame = referenceFrame {
+      contentRect = frame.offsetBy(dx: 28, dy: -28)
+    } else if let screenFrame = NSScreen.main?.visibleFrame {
+      let size = NSSize(width: 960, height: 600)
+      contentRect = NSRect(
+        x: screenFrame.midX - size.width / 2,
+        y: screenFrame.midY - size.height / 2,
+        width: size.width,
+        height: size.height
+      )
+    } else {
+      contentRect = NSRect(x: 0, y: 0, width: 960, height: 600)
+    }
+
+    let window = MainFlutterWindow(
+      contentRect: contentRect,
+      styleMask: [
+        .titled,
+        .closable,
+        .miniaturizable,
+        .resizable,
+        .fullSizeContentView,
+      ],
+      backing: .buffered,
+      defer: false
+    )
+    window.title = "Dacx"
+    window.isReleasedWhenClosed = false
+    window.configureFlutterContent()
+    auxiliaryWindows.append(window)
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    return true
+  }
+
+  @objc private func flutterWindowWillClose(_ notification: Notification) {
+    guard let closedWindow = notification.object as? MainFlutterWindow else {
+      return
+    }
+    NotificationCenter.default.removeObserver(
+      self,
+      name: NSWindow.willCloseNotification,
+      object: closedWindow
+    )
+    windowMethodChannels.removeValue(forKey: ObjectIdentifier(closedWindow))
+    auxiliaryWindows.removeAll { $0 === closedWindow }
   }
 
   override func application(_ application: NSApplication, open urls: [URL]) {

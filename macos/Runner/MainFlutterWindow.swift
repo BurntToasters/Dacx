@@ -4,6 +4,13 @@ import window_manager
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
+    configureFlutterContent()
+    super.awakeFromNib()
+  }
+
+  func configureFlutterContent() {
+    if contentViewController is FlutterViewController { return }
+
     titleVisibility = .hidden
     titlebarAppearsTransparent = true
     isMovableByWindowBackground = true
@@ -19,11 +26,10 @@ class MainFlutterWindow: NSWindow {
 
     if let appDelegate = NSApp.delegate as? AppDelegate {
       appDelegate.registerFlutterChannels(
-        messenger: flutterViewController.engine.binaryMessenger
+        messenger: flutterViewController.engine.binaryMessenger,
+        for: self
       )
     }
-
-    super.awakeFromNib()
   }
 
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {

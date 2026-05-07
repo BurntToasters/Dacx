@@ -1,0 +1,91 @@
+### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
+
+# ⬇️ Downloads
+
+| <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
+| :--- | :--- | :--- |
+| **EXE: [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-Windows-x64.exe) / MSI: [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.exe)** -->| **[Universal DMG](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-macOS.dmg)** | <!--**AppImage:** [x64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Linux-x64.AppImage)--> <!--/  [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.AppImage) --> |
+| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
+| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.2/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
+
+> [!IMPORTANT]
+The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
+⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
+*This app is currently unstable. Bugs, issues, and rough edges are expected.*
+
+## Changes in `v0.7.2:`
+* **New Window:** Addressed an issue where opening a new Dacx window would spawn a fully independent session of Dacx.
+* **PKG:** Updated packages.
+
+## Changes in `v0.7.0:`
+*`v0.7.0` is a quality and stability-focused release branch of DACX.*
+* **Window Behavior:** Changed default opening behavior of another file is DACX is already open.
+    * On all platforms, if a user opens a audio/video file with DACX via the `Open With` menu on their OS or sets DACX as a default player and double-clicks the file, DACX will now stop the current playing file and start playing the new one. This can be changed in settings.
+* **NEW - Window shortcut:** Added the `CTRL`/`CMD`+N which spawns a new DACX window.
+* **Settings:** Migrated settings to a new schema.
+* **NEW - Localization:** Dacx has moved *most* of its hard-coded English languages to `l10n`, making it easier for contributors in the future to add localization support for other languages.
+* **Logo:** Tweaked logo.
+* **PKG:** Updated packages.
+* **Misc:**
+  * Major behind-the-scenes fixes and improvements to the custom title bar UI for Windows.
+  * Major fixes to app launch time.
+  * Fixed multiple issues with `MKV` video containers.
+  * Other misc bug fixes and improvements to the codebase.
+
+<details>
+<summary>Full changelog</summary>
+
+## Changes in `v0.6.0:`
+### v0.6.0 is a large feature packed update :) I hope you enjoy this project getting close to my vision of 1.0!
+* **NEW - Resume from position:** Dacx will now remember the last area of a video a user was last on and will resume where they were last when they re-open it.
+* **NEW - Playback options::** A new menu (vertical 3 dots) has been added with a large amount of options for video and audio playback!
+* **NEW - Playlist / queue:** Dacx now supports playlist creation and queues!
+* **NEW - Mini-player / compact mode:** Dacx now has a mini player that can be activated via the playback options menu!
+  * The mini player behavior uses the always on top OS API to stay above all windows whilst giving the user a mini player experience.
+* **NEW - Now Playing:** Added Windows, Linux, and macOS operating system media API support so when something is playing via Dacx, the OS will show it in its media menu.
+* **NEW - Video thumbnail scrubbing support:** Dacx now supports a "YouTube-like" thumbnail preview when hovering over the play-head.
+  * This is disabled by default but can be enabled via the playback options.
+* **Metadata:** Improved the metadata extraction from media files.
+* **Testing:** Added more testing to the repo.
+* **PKG:** Updated packages.
+* **Misc:** Various bug fixes and UI improvements!
+
+## Changes in `v0.5.0:`
+### Dacx now is officially listed on the ROSI project site! Check it out! [https://rosie.run/dacx](https://rosie.run/dacx).
+* **Album Art:** Dacx now fully supports showing album art when playing audio files!
+* **UI:** Fixed issues with the Flutter UI on windows.
+* **Settings:** Added a support and help button to settings.
+* **PKG:** Updated packages.
+* **Codebase:**
+  - Update links forced validated HTTPS URLs.
+  - Redacted sensitive local path data from copied debug log exports.
+  - Added more env options to `.env.example` and improved Flatpak manifest.
+
+## Changes in `v0.4.0:`
+* **Windows:** Fixed race conditions with custom title bar UI that would cause graphical corruption.
+* **Codebase:** More fixes for cross-platform initialization and hardware acceleration.
+* **PKG:** Updated packages.
+
+## Changes in `v0.3.0:`
+Welcome to the first beta build of Dacx! I've pruned through the codebase enough to confidently call it `BETA` at the very least. See my long list of changes below :)
+* **NEW - Debug:** A hidden debug mode has now been added (easier for me and other techy people to look for issues).
+  * To show the debug mode, press the "About Dacx" text at the bottom of settings.
+* **UI:** Tweaked UI for better UI and UX :)
+* **NEW - Experimental Settings:** Added a new experimental settings toggle in settings so users can try out certain options I am playing with.
+  * **NOTE** These settings as per the name, are unstable and experimental. It is also very possible those options do *not* get fully implemented into Dacx and are silently removed later.
+* **Player:** Fixed multiple issues with playing audio files on Linux.
+* **Logo:** YALC (Yet Another Logo Change) Updated the logo :P 
+* **MISC:**
+  * Codebase improvements for scripting.
+  * Misc bug fixes and improvements to the flutter codebase.
+  * PKG updates.
+	
+
+</details>
+
+Hello everyone its me again releasing another app/tool I developed for my own niche but of course love to share :)
+This is intended to be a light-weight music and video player just meant to launch quick and play media without any extra nonsense!
+
+## Info
+More information about Dacx is available via the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md) and also via: [https://help.rosie.run/dacx/en-us/faq](https://help.rosie.run/dacx/en-us/faq).
