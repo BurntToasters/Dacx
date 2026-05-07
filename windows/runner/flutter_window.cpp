@@ -71,6 +71,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
   }
 
+  // On some Windows-on-ARM systems the engine can crash handling
+  // WM_PARENTNOTIFY/WM_DESTROY while processing child-window teardown.
+  // Let the default Win32 path handle this notification instead.
+  if (message == WM_PARENTNOTIFY && LOWORD(wparam) == WM_DESTROY) {
+    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

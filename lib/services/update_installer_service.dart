@@ -177,9 +177,11 @@ class UpdateInstallerService {
         'Dacx cannot self-update while running from a mounted disk image or App Translocation path.',
       );
     }
-    if (!_canWriteToDirectory(currentApp.parent)) {
-      throw UpdateInstallException(
-        'Dacx cannot self-update because ${currentApp.parent.path} is not writable.',
+    final requiresAdminPrivileges = !_canWriteToDirectory(currentApp.parent);
+    if (requiresAdminPrivileges) {
+      _log(
+        'macos_update_requires_admin_privileges',
+        detailsBuilder: () => {'parent_dir': currentApp.parent.path},
       );
     }
 
@@ -225,6 +227,7 @@ class UpdateInstallerService {
         p.join(zip.parent.path, 'Dacx-macos-update-helper.sh'),
       ),
       logFile: File(p.join(zip.parent.path, 'Dacx-macos-update.log')),
+      requiresAdminPrivileges: requiresAdminPrivileges,
     );
   }
 
@@ -250,19 +253,39 @@ class UpdateInstallerService {
       failureMessage: 'Could not make the macOS updater helper executable.',
     );
 
-    await _installerLauncher('/bin/sh', [
+    _log(
+      'macos_update_helper_launch_requested',
+      detailsBuilder: () => {
+        'current_app': prepared.currentApp.path,
+        'new_app': prepared.newApp.path,
+        'log': prepared.logFile.path,
+        'requires_admin': prepared.requiresAdminPrivileges,
+      },
+    );
+
+    final helperArguments = [
       prepared.helperScript.path,
       prepared.currentApp.path,
       prepared.newApp.path,
       pid.toString(),
       prepared.logFile.path,
-    ]);
+    ];
+    if (prepared.requiresAdminPrivileges) {
+      final shellCommand = _buildShellCommand('/bin/sh', helperArguments);
+      final script =
+          'do shell script "${_escapeAppleScriptString(shellCommand)}" '
+          'with administrator privileges';
+      await _installerLauncher('/usr/bin/osascript', ['-e', script]);
+    } else {
+      await _installerLauncher('/bin/sh', helperArguments);
+    }
     _log(
       'macos_update_helper_launch_succeeded',
       detailsBuilder: () => {
         'current_app': prepared.currentApp.path,
         'new_app': prepared.newApp.path,
         'log': prepared.logFile.path,
+        'requires_admin': prepared.requiresAdminPrivileges,
       },
     );
   }
@@ -473,6 +496,19 @@ class UpdateInstallerService {
     }
   }
 
+  static String _buildShellCommand(String executable, List<String> arguments) {
+    return <String>[executable, ...arguments].map(_shellQuote).join(' ');
+  }
+
+  static String _shellQuote(String value) {
+    if (value.isEmpty) return "''";
+    return "'${value.replaceAll("'", "'\"'\"'")}'";
+  }
+
+  static String _escapeAppleScriptString(String value) {
+    return value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  }
+
   static Directory? _defaultCurrentAppBundleProvider() {
     var dir = File(Platform.resolvedExecutable).parent;
     while (dir.path != dir.parent.path) {
@@ -495,12 +531,14 @@ class MacOsPreparedUpdate {
   final Directory newApp;
   final File helperScript;
   final File logFile;
+  final bool requiresAdminPrivileges;
 
   const MacOsPreparedUpdate({
     required this.currentApp,
     required this.newApp,
     required this.helperScript,
     required this.logFile,
+    this.requiresAdminPrivileges = false,
   });
 }
 

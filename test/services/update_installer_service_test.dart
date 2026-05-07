@@ -326,5 +326,40 @@ void main() {
       expect(arguments?[4], prepared.logFile.path);
       expect(prepared.helperScript.existsSync(), isTrue);
     });
+
+    test(
+      'launches osascript with admin privileges when update requires elevation',
+      () async {
+        String? executable;
+        List<String>? arguments;
+        final service = UpdateInstallerService(
+          isMacOS: () => true,
+          processRunner: fakeProcessRunner,
+          installerLauncher: (exe, args) async {
+            executable = exe;
+            arguments = args;
+          },
+        );
+        final newApp = Directory(
+          '${tempDir.path}${Platform.pathSeparator}new${Platform.pathSeparator}Dacx.app',
+        )..createSync(recursive: true);
+        final prepared = MacOsPreparedUpdate(
+          currentApp: currentApp,
+          newApp: newApp,
+          helperScript: File(
+            '${tempDir.path}${Platform.pathSeparator}Dacx-macos-update-helper.sh',
+          ),
+          logFile: File('${tempDir.path}${Platform.pathSeparator}update.log'),
+          requiresAdminPrivileges: true,
+        );
+
+        await service.launchMacOsUpdater(prepared);
+
+        expect(executable, '/usr/bin/osascript');
+        expect(arguments?[0], '-e');
+        expect(arguments?[1], contains('with administrator privileges'));
+        expect(arguments?[1], contains(prepared.helperScript.path));
+      },
+    );
   });
 }

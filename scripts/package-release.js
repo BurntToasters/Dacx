@@ -589,6 +589,46 @@ function renderWixV3FileAssociationComponent(audioIconFileName) {
   return lines.join("\n");
 }
 
+function renderWixV4StartMenuShortcutComponent() {
+  return [
+    '      <Component Id="CMP_START_MENU_SHORTCUT" Guid="*">',
+    '        <Shortcut',
+    '          Id="SCT_DACX_START_MENU"',
+    '          Name="Dacx"',
+    '          Target="[INSTALLFOLDER]dacx.exe"',
+    '          WorkingDirectory="INSTALLFOLDER" />',
+    '        <RemoveFolder Id="RM_DACX_START_MENU" On="uninstall" />',
+    '        <RegistryValue',
+    '          Root="HKLM"',
+    '          Key="Software\\\\run.rosie\\\\Dacx"',
+    '          Name="StartMenuShortcut"',
+    '          Type="integer"',
+    '          Value="1"',
+    '          KeyPath="yes" />',
+    '      </Component>',
+  ].join("\n");
+}
+
+function renderWixV3StartMenuShortcutComponent() {
+  return [
+    '          <Component Id="CMP_START_MENU_SHORTCUT" Guid="*" Win64="yes">',
+    '            <Shortcut',
+    '              Id="SCT_DACX_START_MENU"',
+    '              Name="Dacx"',
+    '              Target="[INSTALLFOLDER]dacx.exe"',
+    '              WorkingDirectory="INSTALLFOLDER" />',
+    '            <RemoveFolder Id="RM_DACX_START_MENU" On="uninstall" />',
+    '            <RegistryValue',
+    '              Root="HKLM"',
+    '              Key="Software\\run.rosie\\Dacx"',
+    '              Name="StartMenuShortcut"',
+    '              Type="integer"',
+    '              Value="1"',
+    '              KeyPath="yes" />',
+    '          </Component>',
+  ].join("\n");
+}
+
 function listFilesRecursive(baseDir) {
   const out = [];
 
@@ -935,6 +975,7 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   const componentRefs = [
     ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
     '      <ComponentRef Id="CMP_FILE_ASSOC" />',
+    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
   ].join("\n");
 
   // WiX v4+ schema: <Package> replaces the v3 <Product>+<Package> pair.
@@ -962,6 +1003,14 @@ ${componentRefs}
       <Directory Id="INSTALLFOLDER" Name="Dacx">
 ${renderWixV4FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "        ").join("\n")}
+      </Directory>
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="DIR_DACX_START_MENU" Name="Dacx">
+${renderWixV4StartMenuShortcutComponent()}
       </Directory>
     </StandardDirectory>
   </Fragment>
@@ -1078,6 +1127,7 @@ function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
   const componentRefs = [
     ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
     '      <ComponentRef Id="CMP_FILE_ASSOC" />',
+    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
   ].join("\n");
 
   const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1104,6 +1154,11 @@ ${componentRefs}
         <Directory Id="INSTALLFOLDER" Name="Dacx">
 ${renderWixV3FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "          ").join("\n")}
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="DIR_DACX_START_MENU" Name="Dacx">
+${renderWixV3StartMenuShortcutComponent()}
         </Directory>
       </Directory>
     </Directory>
