@@ -72,7 +72,7 @@ class InstanceModeService {
   }
 
   static Future<bool> openNewWindow() async {
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isLinux) {
       try {
         final opened = await _windowMethodChannel.invokeMethod<bool>(
           'openNewWindow',

@@ -14,6 +14,7 @@
 
 static const char kOpenFileMethodChannel[] = "run.rosie.dacx/open_file/methods";
 static const char kOpenFileEventChannel[] = "run.rosie.dacx/open_file/events";
+static const char kWindowMethodChannel[] = "run.rosie.dacx/window/methods";
 static const char kNewInstanceFlag[] = "--new-instance";
 
 struct _MyApplication {
@@ -23,6 +24,7 @@ struct _MyApplication {
   FlView* view;
   FlMethodChannel* open_file_method_channel;
   FlEventChannel* open_file_event_channel;
+  GHashTable* window_method_channels;
   GPtrArray* pending_open_files;
   gboolean event_listener_active;
 };
@@ -120,6 +122,31 @@ static void dacx_handle_open_path(MyApplication* self, const gchar* path) {
   }
 }
 
+static GtkWindow* my_application_create_window(MyApplication* self,
+                                               GApplication* application,
+                                               char** dart_entrypoint_arguments,
+                                               gboolean primary);
+
+static void dacx_window_method_call_cb(FlMethodChannel* channel,
+                                       FlMethodCall* call,
+                                       gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  const gchar* method = fl_method_call_get_name(call);
+  if (g_strcmp0(method, "openNewWindow") == 0) {
+    GtkWindow* window =
+        my_application_create_window(self, G_APPLICATION(self), nullptr, FALSE);
+    gtk_window_present(window);
+    g_autoptr(FlValue) value = fl_value_new_bool(TRUE);
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+    fl_method_call_respond(call, response, nullptr);
+    return;
+  }
+  g_autoptr(FlMethodResponse) not_implemented =
+      FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  fl_method_call_respond(call, not_implemented, nullptr);
+}
+
 static void dacx_method_call_cb(FlMethodChannel* channel, FlMethodCall* call,
                                 gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
@@ -142,6 +169,20 @@ static void dacx_method_call_cb(FlMethodChannel* channel, FlMethodCall* call,
   g_autoptr(FlMethodResponse) not_implemented =
       FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   fl_method_call_respond(call, not_implemented, nullptr);
+}
+
+static void dacx_window_destroy_cb(GtkWidget* widget, gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  if (self->window_method_channels != nullptr) {
+    g_hash_table_remove(self->window_method_channels, widget);
+  }
+  if (GTK_WINDOW(widget) == self->window) {
+    self->window = nullptr;
+    self->view = nullptr;
+    g_clear_object(&self->open_file_method_channel);
+    g_clear_object(&self->open_file_event_channel);
+    self->event_listener_active = FALSE;
+  }
 }
 
 static FlMethodErrorResponse* dacx_event_listen_cb(FlEventChannel* channel,
@@ -183,8 +224,28 @@ static void dacx_setup_channels(MyApplication* self) {
                                        dacx_event_cancel_cb, self, nullptr);
 }
 
+static void dacx_setup_window_channel(MyApplication* self, GtkWindow* window,
+                                      FlView* view) {
+  if (window == nullptr || view == nullptr) return;
+  if (self->window_method_channels == nullptr) return;
+  if (g_hash_table_contains(self->window_method_channels, window)) return;
+
+  FlEngine* engine = fl_view_get_engine(view);
+  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
+  g_autoptr(FlStandardMethodCodec) method_codec =
+      fl_standard_method_codec_new();
+  FlMethodChannel* channel = fl_method_channel_new(
+      messenger, kWindowMethodChannel, FL_METHOD_CODEC(method_codec));
+  fl_method_channel_set_method_call_handler(channel, dacx_window_method_call_cb,
+                                            self, nullptr);
+  g_hash_table_insert(self->window_method_channels, window, channel);
+  g_signal_connect(window, "destroy", G_CALLBACK(dacx_window_destroy_cb), self);
+}
+
 static GtkWindow* my_application_create_window(MyApplication* self,
-                                               GApplication* application) {
+                                               GApplication* application,
+                                               char** dart_entrypoint_arguments,
+                                               gboolean primary) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -211,8 +272,10 @@ static GtkWindow* my_application_create_window(MyApplication* self,
   gtk_window_set_default_size(window, 1280, 720);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
-  fl_dart_project_set_dart_entrypoint_arguments(
-      project, self->dart_entrypoint_arguments);
+  if (dart_entrypoint_arguments != nullptr) {
+    fl_dart_project_set_dart_entrypoint_arguments(project,
+                                                  dart_entrypoint_arguments);
+  }
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
@@ -227,9 +290,12 @@ static GtkWindow* my_application_create_window(MyApplication* self,
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 
-  self->window = window;
-  self->view = view;
-  dacx_setup_channels(self);
+  dacx_setup_window_channel(self, window, view);
+  if (primary) {
+    self->window = window;
+    self->view = view;
+    dacx_setup_channels(self);
+  }
   return window;
 }
 
@@ -239,7 +305,8 @@ static void my_application_activate(GApplication* application) {
     gtk_window_present(self->window);
     return;
   }
-  GtkWindow* window = my_application_create_window(self, application);
+  GtkWindow* window = my_application_create_window(
+      self, application, self->dart_entrypoint_arguments, TRUE);
   gtk_window_present(window);
 }
 
@@ -263,7 +330,8 @@ static void my_application_open(GApplication* application, GFile** files,
         g_strfreev(previous);
       }
     }
-    GtkWindow* window = my_application_create_window(self, application);
+    GtkWindow* window = my_application_create_window(
+        self, application, self->dart_entrypoint_arguments, TRUE);
     gtk_window_present(window);
     return;
   }
@@ -316,6 +384,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_pointer(&self->window_method_channels, g_hash_table_unref);
   g_clear_object(&self->open_file_method_channel);
   g_clear_object(&self->open_file_event_channel);
   if (self->pending_open_files != nullptr) {
@@ -336,6 +405,9 @@ static void my_application_class_init(MyApplicationClass* klass) {
 }
 
 static void my_application_init(MyApplication* self) {
+  self->window_method_channels =
+      g_hash_table_new_full(g_direct_hash, g_direct_equal, nullptr,
+                            (GDestroyNotify)g_object_unref);
   self->pending_open_files =
       g_ptr_array_new_with_free_func((GDestroyNotify)g_free);
 }
