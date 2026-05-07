@@ -265,6 +265,87 @@ void main() {
       );
     });
 
+    test(
+      'continues when spctl reports internal code-signing subsystem errors',
+      () async {
+        var spctlCalls = 0;
+        Future<ProcessResult> flakyProcessRunner(
+          String executable,
+          List<String> arguments,
+        ) async {
+          processCalls.add('$executable ${arguments.join(' ')}');
+          if (executable == 'ditto' && arguments.contains('-x')) {
+            final extractDir = Directory(arguments.last);
+            Directory(
+              '${extractDir.path}${Platform.pathSeparator}Dacx.app',
+            ).createSync(recursive: true);
+          }
+          if (executable == 'spctl') {
+            spctlCalls += 1;
+            return ProcessResult(
+              123,
+              1,
+              '',
+              '${arguments.last}: internal error in Code Signing subsystem',
+            );
+          }
+          return ProcessResult(123, 0, '', '');
+        }
+
+        final service = UpdateInstallerService(
+          isMacOS: () => true,
+          tempDirectoryProvider: () => tempDir,
+          currentAppBundleProvider: () => currentApp,
+          processRunner: flakyProcessRunner,
+          bundleInfoReader: bundleInfo,
+          httpGet: (uri, {headers}) async =>
+              http.Response.bytes([1, 2, 3], 200),
+        );
+
+        final prepared = await service.prepareMacOsZipUpdate(macUpdate());
+
+        expect(prepared.newApp.path, endsWith('Dacx.app'));
+        expect(spctlCalls, 2);
+        expect(
+          processCalls.any((call) => call.startsWith('xattr -cr')),
+          isTrue,
+        );
+      },
+    );
+
+    test('fails when spctl reports a real Gatekeeper rejection', () async {
+      Future<ProcessResult> rejectingProcessRunner(
+        String executable,
+        List<String> arguments,
+      ) async {
+        processCalls.add('$executable ${arguments.join(' ')}');
+        if (executable == 'ditto' && arguments.contains('-x')) {
+          final extractDir = Directory(arguments.last);
+          Directory(
+            '${extractDir.path}${Platform.pathSeparator}Dacx.app',
+          ).createSync(recursive: true);
+        }
+        if (executable == 'spctl') {
+          return ProcessResult(123, 1, '', '${arguments.last}: rejected');
+        }
+        return ProcessResult(123, 0, '', '');
+      }
+
+      final service = UpdateInstallerService(
+        isMacOS: () => true,
+        tempDirectoryProvider: () => tempDir,
+        currentAppBundleProvider: () => currentApp,
+        processRunner: rejectingProcessRunner,
+        bundleInfoReader: bundleInfo,
+        httpGet: (uri, {headers}) async => http.Response.bytes([1, 2, 3], 200),
+      );
+
+      expect(
+        service.prepareMacOsZipUpdate(macUpdate()),
+        throwsA(isA<UpdateInstallException>()),
+      );
+    });
+
     test('rejects a macOS update with a mismatched bundle id', () async {
       final service = UpdateInstallerService(
         isMacOS: () => true,

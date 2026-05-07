@@ -409,12 +409,65 @@ class UpdateInstallerService {
       ['--verify', '--deep', '--strict', appBundle.path],
       failureMessage: 'The macOS update failed code-signature verification.',
     );
-    await _runChecked('spctl', [
+    final gatekeeperArgs = [
       '--assess',
       '--type',
       'execute',
+      '--verbose=4',
       appBundle.path,
-    ], failureMessage: 'The macOS update failed Gatekeeper assessment.');
+    ];
+
+    ProcessResult result = await _processRunner('spctl', gatekeeperArgs);
+    if (result.exitCode == 0) {
+      return;
+    }
+
+    final firstError = _processResultDetail(result);
+    if (_isMacOsCodeSigningSubsystemError(firstError)) {
+      _log(
+        'macos_gatekeeper_assess_internal_error_retrying',
+        severity: DebugSeverity.warn,
+        message: firstError.isEmpty
+            ? 'spctl reported an internal code-signing error; retrying after normalizing extended attributes.'
+            : 'spctl reported an internal code-signing error; retrying after normalizing extended attributes. $firstError',
+        detailsBuilder: () => {'app': appBundle.path},
+      );
+      await _runChecked(
+        'xattr',
+        ['-cr', appBundle.path],
+        failureMessage:
+            'Could not normalize extended attributes on the macOS update bundle.',
+      );
+      result = await _processRunner('spctl', gatekeeperArgs);
+      if (result.exitCode == 0) {
+        return;
+      }
+
+      final secondError = _processResultDetail(result);
+      if (_isMacOsCodeSigningSubsystemError(secondError)) {
+        _log(
+          'macos_gatekeeper_assess_internal_error_ignored',
+          severity: DebugSeverity.warn,
+          message: secondError.isEmpty
+              ? 'spctl still reported an internal code-signing error after retry; continuing because code-signature verification succeeded.'
+              : 'spctl still reported an internal code-signing error after retry; continuing because code-signature verification succeeded. $secondError',
+          detailsBuilder: () => {'app': appBundle.path},
+        );
+        return;
+      }
+
+      throw UpdateInstallException(
+        secondError.isEmpty
+            ? 'The macOS update failed Gatekeeper assessment.'
+            : 'The macOS update failed Gatekeeper assessment. $secondError',
+      );
+    }
+
+    throw UpdateInstallException(
+      firstError.isEmpty
+          ? 'The macOS update failed Gatekeeper assessment.'
+          : 'The macOS update failed Gatekeeper assessment. $firstError',
+    );
   }
 
   Future<void> _runChecked(
@@ -424,10 +477,21 @@ class UpdateInstallerService {
   }) async {
     final result = await _processRunner(executable, arguments);
     if (result.exitCode == 0) return;
-    final detail = result.stderr.toString().trim();
+    final detail = _processResultDetail(result);
     throw UpdateInstallException(
       detail.isEmpty ? failureMessage : '$failureMessage $detail',
     );
+  }
+
+  static String _processResultDetail(ProcessResult result) {
+    final stderr = result.stderr.toString().trim();
+    if (stderr.isNotEmpty) return stderr;
+    return result.stdout.toString().trim();
+  }
+
+  static bool _isMacOsCodeSigningSubsystemError(String detail) {
+    final normalized = detail.toLowerCase();
+    return normalized.contains('internal error in code signing subsystem');
   }
 
   Directory? _findExtractedApp(Directory extractDir) {

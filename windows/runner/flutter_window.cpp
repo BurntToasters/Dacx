@@ -7,6 +7,55 @@
 #include "media_session.h"
 #include "window_bridge.h"
 
+namespace {
+
+#ifndef IMAGE_FILE_MACHINE_ARM64
+#define IMAGE_FILE_MACHINE_ARM64 0xAA64
+#endif
+
+using IsWow64Process2Fn = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
+
+bool IsRunningUnderArm64Emulation() {
+  HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+  if (kernel32 == nullptr) {
+    return false;
+  }
+  auto is_wow64_process2 = reinterpret_cast<IsWow64Process2Fn>(
+      GetProcAddress(kernel32, "IsWow64Process2"));
+  if (is_wow64_process2 == nullptr) {
+    return false;
+  }
+
+  USHORT process_machine = IMAGE_FILE_MACHINE_UNKNOWN;
+  USHORT native_machine = IMAGE_FILE_MACHINE_UNKNOWN;
+  if (!is_wow64_process2(GetCurrentProcess(), &process_machine,
+                         &native_machine)) {
+    return false;
+  }
+
+  return native_machine == IMAGE_FILE_MACHINE_ARM64 &&
+         process_machine != IMAGE_FILE_MACHINE_UNKNOWN;
+}
+
+bool IsImeMessage(UINT message) {
+  switch (message) {
+    case WM_IME_SETCONTEXT:
+    case WM_IME_NOTIFY:
+    case WM_IME_STARTCOMPOSITION:
+    case WM_IME_COMPOSITION:
+    case WM_IME_ENDCOMPOSITION:
+    case WM_IME_REQUEST:
+    case WM_IME_CHAR:
+    case WM_IME_KEYDOWN:
+    case WM_IME_KEYUP:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -17,7 +66,8 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
 
-  flutter_controller_ready_ = false;
+  running_under_arm64_emulation_ = IsRunningUnderArm64Emulation();
+  flutter_controller_ready_ = !running_under_arm64_emulation_;
   flutter_controller_tearing_down_ = false;
 
   RECT frame = GetClientArea();
@@ -38,13 +88,17 @@ bool FlutterWindow::OnCreate() {
                              project_);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {});
+  // On some WoA systems, forwarding early startup messages into Flutter can
+  // hit a null dereference before embedder internals are fully initialized.
+  // Delay forwarding until the first rendered frame in that environment.
+  flutter_controller_->engine()->SetNextFrameCallback([this]() {
+    flutter_controller_ready_ = true;
+  });
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the
   // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
-  flutter_controller_ready_ = true;
 
   return true;
 }
@@ -71,11 +125,19 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
   }
 
-  // On some Windows-on-ARM systems the engine can crash handling
-  // WM_PARENTNOTIFY/WM_DESTROY while processing child-window teardown.
-  // Let the default Win32 path handle this notification instead.
-  if (message == WM_PARENTNOTIFY && LOWORD(wparam) == WM_DESTROY) {
-    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  if (running_under_arm64_emulation_) {
+    // On some Windows-on-ARM systems the engine can crash handling
+    // WM_PARENTNOTIFY/WM_DESTROY while processing child-window teardown.
+    // Let the default Win32 path handle this notification instead.
+    if (message == WM_PARENTNOTIFY && LOWORD(wparam) == WM_DESTROY) {
+      return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+    }
+
+    // IME messages can also trigger the same null-deref during startup on
+    // WoA x64 emulation. Use the OS default IME handling path there.
+    if (IsImeMessage(message)) {
+      return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+    }
   }
 
   // Give Flutter, including plugins, an opportunity to handle window messages.
