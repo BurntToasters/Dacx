@@ -3,43 +3,74 @@ import FlutterMacOS
 import MediaPlayer
 
 /// Bridges the Dart `run.rosie.dacx/media_session` channel to
-/// `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`.
+/// `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` (both process
+/// singletons). Multiple Flutter engines may attach; the most recently
+/// active one (last `setEnabled(true)` or `update`) receives remote-command
+/// callbacks.
 final class MediaSessionBridge {
   private let channelName = "run.rosie.dacx/media_session"
-  private var channel: FlutterMethodChannel?
+  private var channels: [FlutterMethodChannel] = []
+  private weak var activeChannel: FlutterMethodChannel?
   private var enabled = false
   private var info: [String: Any] = [:]
   private var artworkRequestId: UInt64 = 0
   private var artworkTask: URLSessionDataTask?
+  private var commandsConfigured = false
 
   deinit {
     artworkTask?.cancel()
   }
 
-  func attach(messenger: FlutterBinaryMessenger) {
+  func attach(messenger: FlutterBinaryMessenger) -> FlutterMethodChannel {
     let ch = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
-    ch.setMethodCallHandler { [weak self] call, result in
-      self?.handle(call, result: result)
+    ch.setMethodCallHandler { [weak self, weak ch] call, result in
+      self?.handle(call, from: ch, result: result)
     }
-    channel = ch
-    configureRemoteCommands()
+    channels.append(ch)
+    if activeChannel == nil { activeChannel = ch }
+    if !commandsConfigured {
+      configureRemoteCommands()
+      commandsConfigured = true
+    }
+    return ch
   }
 
-  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  /// Drop a previously-attached channel when its window closes.
+  func detach(channel: FlutterMethodChannel) {
+    channel.setMethodCallHandler(nil)
+    channels.removeAll { $0 === channel }
+    if activeChannel === channel {
+      activeChannel = channels.last
+    }
+  }
+
+  private func handle(_ call: FlutterMethodCall, from channel: FlutterMethodChannel?, result: @escaping FlutterResult) {
     switch call.method {
     case "setEnabled":
       let args = call.arguments as? [String: Any]
-      enabled = (args?["enabled"] as? Bool) ?? false
-      if !enabled { clear() }
+      let want = (args?["enabled"] as? Bool) ?? false
+      if want {
+        enabled = true
+        if let channel { activeChannel = channel }
+      } else if activeChannel === channel {
+        // Only the active engine may disable globally.
+        enabled = false
+        clear()
+      }
       result(nil)
     case "update":
       guard enabled, let args = call.arguments as? [String: Any] else {
         result(nil); return
       }
+      // Latest writer wins.
+      if let channel { activeChannel = channel }
       apply(args)
       result(nil)
     case "clear":
-      clear()
+      // Only the active source may clear.
+      if activeChannel === channel || activeChannel == nil {
+        clear()
+      }
       result(nil)
     default:
       result(FlutterMethodNotImplemented)
@@ -78,8 +109,7 @@ final class MediaSessionBridge {
           info.removeValue(forKey: MPMediaItemPropertyArtwork)
         }
       } else {
-        // Remote URLs may stall on the main thread; fetch in the background
-        // and patch the artwork in once it loads.
+        // Remote URLs may stall on the main thread; fetch in the background.
         info.removeValue(forKey: MPMediaItemPropertyArtwork)
         loadRemoteArtworkAsync(artUri)
       }
@@ -163,7 +193,8 @@ final class MediaSessionBridge {
     var args: [String: Any] = ["action": action]
     if let pos = positionMs { args["positionMs"] = pos }
     DispatchQueue.main.async { [weak self] in
-      self?.channel?.invokeMethod("command", arguments: args)
+      let target = self?.activeChannel ?? self?.channels.first
+      target?.invokeMethod("command", arguments: args)
     }
   }
 }
@@ -176,9 +207,7 @@ private func loadLocalArtwork(_ uri: String) -> NSImage? {
     if let url = URL(string: uri), let image = NSImage(contentsOf: url) {
       return image
     }
-    // Fall back to decoding the percent-encoded path if URL(string:) parsed
-    // it but NSImage couldn't open it (e.g. paths with characters that need
-    // additional escaping).
+    // Fall back to manual percent-decoding for paths URL(string:) couldn't open.
     let path = String(uri.dropFirst("file://".count))
       .removingPercentEncoding ?? String(uri.dropFirst("file://".count))
     return NSImage(contentsOf: URL(fileURLWithPath: path))

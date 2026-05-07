@@ -1292,7 +1292,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return KeyEventResult.handled;
       case PlayerShortcutAction.newWindow:
         _log('shortcut_new_window', category: DebugLogCategory.ui);
-        unawaited(InstanceModeService.spawnNewInstance());
+        unawaited(InstanceModeService.openNewWindow());
         return KeyEventResult.handled;
       case null:
         return KeyEventResult.ignored;
