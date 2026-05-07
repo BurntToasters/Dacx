@@ -1,11 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 class InstanceModeService {
   static const String _flagFileName = 'allow_multi_instance';
   static const String newInstanceFlag = '--new-instance';
+  static const MethodChannel _windowMethodChannel = MethodChannel(
+    'run.rosie.dacx/window/methods',
+  );
 
   static String? _cachedFlagDir;
 
@@ -65,6 +69,35 @@ class InstanceModeService {
       debugPrint('Dacx: setAllowMultipleInstances failed: $e');
       return false;
     }
+  }
+
+  /// Opens a new Dacx window. With `allow_multi_instance` set, spawns a new
+  /// OS process; otherwise uses the in-process native bridge so OS
+  /// integrations (Now Playing, file associations) stay coherent.
+  static Future<bool> openNewWindow() async {
+    if (isAllowMultipleInstancesEnabled()) {
+      debugPrint(
+        'Dacx: openNewWindow → spawnNewInstance (allow_multi_instance flag set)',
+      );
+      return spawnNewInstance();
+    }
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      try {
+        final opened = await _windowMethodChannel.invokeMethod<bool>(
+          'openNewWindow',
+        );
+        if (opened == true) {
+          debugPrint('Dacx: openNewWindow → in-process native bridge');
+          return true;
+        }
+      } on MissingPluginException catch (e) {
+        debugPrint('Dacx: native openNewWindow bridge missing: $e');
+      } on PlatformException catch (e) {
+        debugPrint('Dacx: native openNewWindow failed: $e');
+      }
+    }
+    debugPrint('Dacx: openNewWindow → spawnNewInstance (fallback)');
+    return spawnNewInstance();
   }
 
   static Future<bool> spawnNewInstance({String? filePath}) async {

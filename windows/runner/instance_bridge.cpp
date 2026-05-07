@@ -11,6 +11,7 @@
 #include <sddl.h>
 
 #include <atomic>
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -38,7 +39,9 @@ HANDLE g_singleton_mutex = nullptr;
 
 std::mutex g_pending_mutex;
 std::vector<std::string> g_pending_paths;
-std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> g_event_sink;
+// Each Flutter engine registers an event sink. Most-recently-installed sink
+// drains the pending queue.
+std::vector<flutter::EventSink<flutter::EncodableValue>*> g_event_sinks;
 HWND g_dispatch_window = nullptr;
 
 constexpr UINT WM_DACX_DELIVER_PATH = WM_USER + 0x42;
@@ -82,16 +85,18 @@ void EnqueuePath(const std::string& path) {
   g_pending_paths.push_back(path);
 }
 
-// Must run on the platform thread (the same thread that hosts the engine).
+// Runs on the platform thread (driven by WM_DACX_DELIVER_PATH).
 void DispatchQueuedToSink() {
   std::vector<std::string> drained;
+  flutter::EventSink<flutter::EncodableValue>* target = nullptr;
   {
     std::lock_guard<std::mutex> lock(g_pending_mutex);
-    if (!g_event_sink) return;
+    if (g_event_sinks.empty()) return;
+    target = g_event_sinks.back();
     drained.swap(g_pending_paths);
   }
   for (const auto& path : drained) {
-    g_event_sink->Success(flutter::EncodableValue(path));
+    target->Success(flutter::EncodableValue(path));
   }
 }
 
@@ -158,10 +163,8 @@ void HandlePipeClient(HANDLE pipe) {
 void PipeServerLoop() {
   const std::wstring& name = PipeName();
   for (;;) {
-    // Build a SECURITY_ATTRIBUTES that restricts the named pipe to the
-    // current user only. Without this, the default DACL for named pipes
-    // permits other local users to connect and inject file paths into
-    // this process.
+    // Restrict named-pipe DACL to the current user; the default would let
+    // other local users connect and inject paths into this process.
     SECURITY_ATTRIBUTES sa{};
     PSECURITY_DESCRIPTOR sd = nullptr;
     PACL acl = nullptr;
@@ -295,17 +298,34 @@ bool AcquireSingletonMutex() {
 }
 
 void StartOpenFileServer(flutter::BinaryMessenger* messenger) {
-  static std::atomic_bool initialized{false};
+  // Pipe server is process-wide; start once.
+  static std::atomic_bool pipe_initialized{false};
   bool expected = false;
-  if (!initialized.compare_exchange_strong(expected, true)) {
-    return;
+  if (pipe_initialized.compare_exchange_strong(expected, true)) {
+    EnsureDispatchWindow();
+    std::thread(PipeServerLoop).detach();
+  } else {
+    EnsureDispatchWindow();
   }
 
-  EnsureDispatchWindow();
+  // Method/event channels register per engine. Dedupe by messenger pointer.
+  static std::mutex registry_mutex;
+  static std::vector<flutter::BinaryMessenger*> registered_messengers;
+  static std::vector<
+      std::shared_ptr<flutter::MethodChannel<flutter::EncodableValue>>>
+      method_channels;
+  static std::vector<
+      std::shared_ptr<flutter::EventChannel<flutter::EncodableValue>>>
+      event_channels;
+  {
+    std::lock_guard<std::mutex> lock(registry_mutex);
+    for (auto* m : registered_messengers) {
+      if (m == messenger) return;
+    }
+    registered_messengers.push_back(messenger);
+  }
 
-  static std::shared_ptr<flutter::MethodChannel<flutter::EncodableValue>>
-      method_channel;
-  method_channel =
+  auto method_channel =
       std::make_shared<flutter::MethodChannel<flutter::EncodableValue>>(
           messenger, kOpenFileMethodChannel,
           &flutter::StandardMethodCodec::GetInstance());
@@ -328,35 +348,54 @@ void StartOpenFileServer(flutter::BinaryMessenger* messenger) {
         }
       });
 
-  static std::shared_ptr<flutter::EventChannel<flutter::EncodableValue>>
-      event_channel;
-  event_channel =
+  auto event_channel =
       std::make_shared<flutter::EventChannel<flutter::EncodableValue>>(
           messenger, kOpenFileEventChannel,
           &flutter::StandardMethodCodec::GetInstance());
+
+  // Per-registration state so OnListen/OnCancel can identify which sink to
+  // add/remove.
+  struct RegistrationState {
+    std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> sink;
+  };
+  auto state = std::make_shared<RegistrationState>();
+
   auto handler = std::make_unique<
       flutter::StreamHandlerFunctions<flutter::EncodableValue>>(
-      [](const flutter::EncodableValue* /*arguments*/,
-         std::unique_ptr<flutter::EventSink<flutter::EncodableValue>>&& events)
+      [state](const flutter::EncodableValue* /*arguments*/,
+              std::unique_ptr<flutter::EventSink<flutter::EncodableValue>>&&
+                  events)
           -> std::unique_ptr<
               flutter::StreamHandlerError<flutter::EncodableValue>> {
+        state->sink = std::move(events);
+        auto* raw = state->sink.get();
         {
           std::lock_guard<std::mutex> lock(g_pending_mutex);
-          g_event_sink = std::move(events);
+          g_event_sinks.push_back(raw);
         }
         DispatchQueuedToSink();
         return nullptr;
       },
-      [](const flutter::EncodableValue* /*arguments*/)
+      [state](const flutter::EncodableValue* /*arguments*/)
           -> std::unique_ptr<
               flutter::StreamHandlerError<flutter::EncodableValue>> {
-        std::lock_guard<std::mutex> lock(g_pending_mutex);
-        g_event_sink.reset();
+        auto* raw = state->sink.get();
+        if (raw != nullptr) {
+          std::lock_guard<std::mutex> lock(g_pending_mutex);
+          g_event_sinks.erase(
+              std::remove(g_event_sinks.begin(), g_event_sinks.end(), raw),
+              g_event_sinks.end());
+        }
+        state->sink.reset();
         return nullptr;
       });
   event_channel->SetStreamHandler(std::move(handler));
 
-  std::thread(PipeServerLoop).detach();
+  {
+    std::lock_guard<std::mutex> lock(registry_mutex);
+    method_channels.push_back(method_channel);
+    event_channels.push_back(event_channel);
+  }
 }
 
 }  // namespace dacx
