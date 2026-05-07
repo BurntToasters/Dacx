@@ -83,8 +83,14 @@ void _installAsyncErrorHandler(DebugLogService debugLog) {
   };
 }
 
-void main(List<String> args) async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main(List<String> args) {
+  runZonedGuarded(() {
+    WidgetsFlutterBinding.ensureInitialized();
+    _dacxMainAsync(args).then((_) {}, onError: fatalStartupCapture);
+  }, fatalStartupCapture);
+}
+
+Future<void> _dacxMainAsync(List<String> args) async {
   // #region agent log
   agentDebugNdjson(
     location: 'main.dart:main',

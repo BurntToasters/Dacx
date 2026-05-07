@@ -48,3 +48,29 @@ Iterable<String> _ndjsonLogBases() sync* {
     yield p.join(la, 'Dacx');
   }
 }
+
+/// Plain-text crash breadcrumb for release builds (when stderr/console is easy to miss).
+void fatalStartupCapture(Object error, StackTrace stack) {
+  // #region agent log
+  agentDebugNdjson(
+    location: 'debug_agent_log.dart:fatalStartupCapture',
+    message: 'fatal_startup',
+    hypothesisId: 'H_FATAL',
+    data: {
+      'error': error.toString(),
+      'stack_head': stack.toString().split('\n').take(6).join(' | '),
+    },
+  );
+  // #endregion
+  try {
+    final la = Platform.environment['LOCALAPPDATA'];
+    if (la == null || la.isEmpty) return;
+    final dir = Directory(p.join(la, 'Dacx'));
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    File(p.join(dir.path, 'fatal-startup.txt')).writeAsStringSync(
+      '${DateTime.now().toUtc().toIso8601String()}Z\n$error\n$stack\n\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {}
+}
