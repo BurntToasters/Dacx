@@ -12,6 +12,8 @@
 
 namespace dacx {
 
+using ::FlutterWindow;
+
 namespace {
 
 constexpr const char kWindowMethodChannel[] = "run.rosie.dacx/window/methods";
