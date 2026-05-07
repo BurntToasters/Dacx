@@ -1,7 +1,4 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -13,15 +10,12 @@ typedef HttpGet =
     Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
 typedef LaunchUrlFn = Future<bool> Function(Uri uri, {LaunchMode mode});
-typedef IsWindowsFn = bool Function();
-typedef TempDirectoryProvider = Directory Function();
-typedef InstallerLauncher =
-    Future<void> Function(String executable, List<String> arguments);
 
 class UpdateService {
   static const String _owner = 'BurntToasters';
   static const String _repo = 'Dacx';
   static const String _windowsInstallerAssetName = 'Dacx-Windows-x64.msi';
+  static const String _macOsZipAssetName = 'Dacx-macOS.zip';
   static final RegExp _versionPattern = RegExp(
     r'^\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?$',
   );
@@ -31,9 +25,6 @@ class UpdateService {
   final HttpGet _httpGet;
   final CanLaunchUrlFn _canLaunch;
   final LaunchUrlFn _launch;
-  final IsWindowsFn _isWindows;
-  final TempDirectoryProvider _tempDirectoryProvider;
-  final InstallerLauncher _installerLauncher;
   bool _lastCheckSucceeded = false;
 
   UpdateService({
@@ -43,19 +34,12 @@ class UpdateService {
     HttpGet? httpGet,
     CanLaunchUrlFn? canLaunch,
     LaunchUrlFn? launch,
-    IsWindowsFn? isWindows,
-    TempDirectoryProvider? tempDirectoryProvider,
-    InstallerLauncher? installerLauncher,
   }) : _debugLog = debugLog,
        _debugSource = debugSource,
        _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
        _httpGet = httpGet ?? http.get,
        _canLaunch = canLaunch ?? canLaunchUrl,
-       _launch = launch ?? launchUrl,
-       _isWindows = isWindows ?? (() => Platform.isWindows),
-       _tempDirectoryProvider =
-           tempDirectoryProvider ?? (() => Directory.systemTemp),
-       _installerLauncher = installerLauncher ?? _defaultInstallerLauncher;
+       _launch = launch ?? launchUrl;
 
   bool get lastCheckSucceeded => _lastCheckSucceeded;
 
@@ -115,6 +99,7 @@ class UpdateService {
       final releaseUrl = data['html_url'] as String? ?? '';
       final notes = data['body'] as String? ?? '';
       final windowsInstaller = _parseWindowsInstallerAsset(data['assets']);
+      final macOsZip = _parseMacOsZipAsset(data['assets']);
 
       if (!_versionPattern.hasMatch(latestVersion) ||
           !_isLaunchableUrl(releaseUrl)) {
@@ -147,6 +132,10 @@ class UpdateService {
           windowsInstallerAssetName: windowsInstaller?.name,
           windowsInstallerSize: windowsInstaller?.size,
           windowsInstallerSha256: windowsInstaller?.sha256,
+          macOsZipUrl: macOsZip?.url,
+          macOsZipAssetName: macOsZip?.name,
+          macOsZipSize: macOsZip?.size,
+          macOsZipSha256: macOsZip?.sha256,
         );
       }
 
@@ -167,142 +156,6 @@ class UpdateService {
       );
       return null;
     }
-  }
-
-  Future<File> downloadWindowsInstaller(UpdateInfo update) async {
-    if (!_isWindows()) {
-      throw UnsupportedError(
-        'Windows MSI updates are only available on Windows.',
-      );
-    }
-    final installerUrl = update.windowsInstallerUrl;
-    if (installerUrl == null || !_isInstallerDownloadUrl(installerUrl)) {
-      throw ArgumentError(
-        'Update does not include a valid Windows installer URL.',
-      );
-    }
-
-    final assetName =
-        update.windowsInstallerAssetName ?? _windowsInstallerAssetName;
-    final tempRoot = _tempDirectoryProvider();
-    final updateDir = Directory(
-      '${tempRoot.path}${Platform.pathSeparator}Dacx-update-${update.version}',
-    );
-    await updateDir.create(recursive: true);
-    final destination = File(
-      '${updateDir.path}${Platform.pathSeparator}$assetName',
-    );
-    final partial = File('${destination.path}.download');
-
-    _log(
-      'windows_installer_download_started',
-      detailsBuilder: () => {
-        'version': update.version,
-        'url': installerUrl,
-        'destination': destination.path,
-      },
-    );
-
-    try {
-      final response = await _httpGet(
-        Uri.parse(installerUrl),
-        headers: {'Accept': 'application/octet-stream'},
-      ).timeout(const Duration(minutes: 3));
-      if (response.statusCode != 200) {
-        throw UpdateInstallException(
-          'Installer download failed with HTTP ${response.statusCode}.',
-        );
-      }
-
-      final bytes = response.bodyBytes;
-      final expectedSize = update.windowsInstallerSize;
-      if (expectedSize != null &&
-          expectedSize > 0 &&
-          bytes.length != expectedSize) {
-        throw UpdateInstallException(
-          'Installer download size mismatch: expected $expectedSize bytes, got ${bytes.length}.',
-        );
-      }
-
-      final expectedSha256 = update.windowsInstallerSha256;
-      if (expectedSha256 != null && expectedSha256.isNotEmpty) {
-        final actualSha256 = crypto.sha256.convert(bytes).toString();
-        if (actualSha256.toLowerCase() != expectedSha256.toLowerCase()) {
-          throw UpdateInstallException(
-            'Installer SHA-256 mismatch: expected $expectedSha256, got $actualSha256.',
-          );
-        }
-      }
-
-      if (partial.existsSync()) partial.deleteSync();
-      await partial.writeAsBytes(bytes, flush: true);
-      if (destination.existsSync()) destination.deleteSync();
-      await partial.rename(destination.path);
-
-      _log(
-        'windows_installer_download_completed',
-        detailsBuilder: () => {
-          'version': update.version,
-          'path': destination.path,
-          'bytes': bytes.length,
-        },
-      );
-      return destination;
-    } catch (e) {
-      if (partial.existsSync()) {
-        try {
-          partial.deleteSync();
-        } catch (_) {}
-      }
-      _log(
-        'windows_installer_download_failed',
-        severity: DebugSeverity.error,
-        message: e.toString(),
-        detailsBuilder: () => {'version': update.version},
-      );
-      rethrow;
-    }
-  }
-
-  Future<void> launchWindowsInstaller(File installer, UpdateInfo update) async {
-    if (!_isWindows()) {
-      throw UnsupportedError(
-        'Windows MSI updates are only available on Windows.',
-      );
-    }
-    if (!installer.existsSync()) {
-      throw ArgumentError('Installer file does not exist: ${installer.path}');
-    }
-
-    final logFile = File(
-      '${installer.parent.path}${Platform.pathSeparator}Dacx-update-${update.version}.log',
-    );
-    final arguments = [
-      '/i',
-      installer.path,
-      '/passive',
-      '/norestart',
-      '/l*vx',
-      logFile.path,
-    ];
-
-    _log(
-      'windows_installer_launch_requested',
-      detailsBuilder: () => {
-        'version': update.version,
-        'installer': installer.path,
-        'log': logFile.path,
-      },
-    );
-
-    await _installerLauncher('msiexec.exe', arguments);
-    _log(
-      'windows_installer_launch_succeeded',
-      detailsBuilder: () => {
-        'version': update.version,
-        'installer': installer.path,
-      },
-    );
   }
 
   Future<void> openReleasePage(String url) async {
@@ -342,6 +195,14 @@ class UpdateService {
   }
 
   bool _isInstallerDownloadUrl(String value) {
+    return _isReleaseAssetUrl(value, '.msi');
+  }
+
+  bool _isMacOsZipDownloadUrl(String value) {
+    return _isReleaseAssetUrl(value, '.zip');
+  }
+
+  bool _isReleaseAssetUrl(String value, String extension) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null) return false;
     if (!uri.hasScheme || uri.scheme != 'https') return false;
@@ -352,7 +213,7 @@ class UpdateService {
       'objects.githubusercontent.com',
     };
     if (!allowedHosts.contains(uri.host.toLowerCase())) return false;
-    return uri.path.toLowerCase().endsWith('.msi');
+    return uri.path.toLowerCase().endsWith(extension);
   }
 
   _WindowsInstallerAsset? _parseWindowsInstallerAsset(Object? value) {
@@ -377,11 +238,26 @@ class UpdateService {
     return null;
   }
 
-  static Future<void> _defaultInstallerLauncher(
-    String executable,
-    List<String> arguments,
-  ) async {
-    await Process.start(executable, arguments, mode: ProcessStartMode.detached);
+  _ReleaseAsset? _parseMacOsZipAsset(Object? value) {
+    if (value is! List) return null;
+    for (final rawAsset in value) {
+      if (rawAsset is! Map) continue;
+      final asset = rawAsset.cast<String, dynamic>();
+      final name = asset['name'] as String? ?? '';
+      if (name != _macOsZipAssetName) continue;
+      final url = asset['browser_download_url'] as String? ?? '';
+      if (!_isMacOsZipDownloadUrl(url)) return null;
+      final digest = asset['digest'] as String?;
+      return _ReleaseAsset(
+        name: name,
+        url: url,
+        size: asset['size'] is int ? asset['size'] as int : null,
+        sha256: digest != null && digest.startsWith('sha256:')
+            ? digest.substring('sha256:'.length)
+            : null,
+      );
+    }
+    return null;
   }
 
   static List<int> _numericParts(String version) {
@@ -427,6 +303,10 @@ class UpdateInfo {
   final String? windowsInstallerAssetName;
   final int? windowsInstallerSize;
   final String? windowsInstallerSha256;
+  final String? macOsZipUrl;
+  final String? macOsZipAssetName;
+  final int? macOsZipSize;
+  final String? macOsZipSha256;
 
   const UpdateInfo({
     required this.version,
@@ -436,30 +316,28 @@ class UpdateInfo {
     this.windowsInstallerAssetName,
     this.windowsInstallerSize,
     this.windowsInstallerSha256,
+    this.macOsZipUrl,
+    this.macOsZipAssetName,
+    this.macOsZipSize,
+    this.macOsZipSha256,
   });
 
   bool get hasWindowsInstaller => windowsInstallerUrl != null;
+  bool get hasMacOsZip => macOsZipUrl != null;
 }
 
-class UpdateInstallException implements Exception {
-  final String message;
-
-  const UpdateInstallException(this.message);
-
-  @override
-  String toString() => message;
-}
-
-class _WindowsInstallerAsset {
+class _ReleaseAsset {
   final String name;
   final String url;
   final int? size;
   final String? sha256;
 
-  const _WindowsInstallerAsset({
+  const _ReleaseAsset({
     required this.name,
     required this.url,
     this.size,
     this.sha256,
   });
 }
+
+typedef _WindowsInstallerAsset = _ReleaseAsset;

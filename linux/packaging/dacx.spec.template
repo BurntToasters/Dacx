@@ -1,5 +1,5 @@
 Name: dacx
-Version: 0.7.2
+Version: 0.7.77
 Release: 1%{?dist}
 Summary: Quick, lightweight cross-platform media player
 License: GPL-3.0-only

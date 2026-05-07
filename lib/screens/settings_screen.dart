@@ -11,6 +11,7 @@ import '../services/debug_log_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/settings_service.dart';
 import '../theme/window_visuals.dart';
+import '../services/update_installer_service.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
 
@@ -35,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   );
   static final Uri _supportProjectUri = Uri.parse('https://rosie.run/support');
   late final UpdateService _updateService;
+  late final UpdateInstallerService _updateInstallerService;
   bool _contentVisible = false;
   bool _isDisposed = false;
 
@@ -69,6 +71,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _updateService = UpdateService(
+      debugLog: widget.debugLog,
+      debugSource: 'settings_screen',
+    );
+    _updateInstallerService = UpdateInstallerService(
       debugLog: widget.debugLog,
       debugSource: 'settings_screen',
     );
@@ -883,28 +889,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showUpdateAvailableSnackBar(UpdateInfo update) {
-    final canInstall = Platform.isWindows && update.hasWindowsInstaller;
+    final canInstall = _updateInstallerService.canInstall(update);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Dacx v${update.version} is available!'),
         action: SnackBarAction(
           label: canInstall ? 'Install' : 'View',
           onPressed: canInstall
-              ? () => unawaited(_installWindowsUpdate(update))
+              ? () => unawaited(_installUpdate(update))
               : () => _updateService.openReleasePage(update.url),
         ),
       ),
     );
   }
 
-  Future<void> _installWindowsUpdate(UpdateInfo update) async {
+  Future<void> _installUpdate(UpdateInfo update) async {
     if (_installingUpdate) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Install Dacx v${update.version}?'),
         content: const Text(
-          'Dacx will download the installer, close, and Windows may ask for permission to continue.',
+          'Dacx will download the update, close, and your system may ask for permission to continue.',
         ),
         actions: [
           TextButton(
@@ -926,8 +932,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).showSnackBar(const SnackBar(content: Text('Downloading update...')));
 
     try {
-      final installer = await _updateService.downloadWindowsInstaller(update);
-      await _updateService.launchWindowsInstaller(installer, update);
+      await _updateInstallerService.prepareAndLaunch(update);
       _log(
         'manual_update_install_handoff_succeeded',
         category: DebugLogCategory.update,

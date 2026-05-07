@@ -23,6 +23,7 @@ import '../services/playlist_service.dart';
 import '../services/seek_preview_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
+import '../services/update_installer_service.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/osd_overlay.dart';
@@ -68,6 +69,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final PlayerService _playerService;
   late final VideoController _videoController;
   late final UpdateService _updateService;
+  late final UpdateInstallerService _updateInstallerService;
   late final SeekPreviewService _seekPreviewService;
 
   SettingsService get _settings => widget.settings;
@@ -154,6 +156,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _updateService = UpdateService(
+      debugLog: widget.debugLog,
+      debugSource: 'player_screen',
+    );
+    _updateInstallerService = UpdateInstallerService(
       debugLog: widget.debugLog,
       debugSource: 'player_screen',
     );
@@ -712,7 +718,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showUpdateSnackbar(UpdateInfo update) {
     if (!mounted) return;
-    final canInstall = Platform.isWindows && update.hasWindowsInstaller;
+    final canInstall = _updateInstallerService.canInstall(update);
     _log(
       'update_snackbar_shown',
       category: DebugLogCategory.update,
@@ -730,21 +736,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
         action: SnackBarAction(
           label: canInstall ? 'Install' : 'View',
           onPressed: canInstall
-              ? () => unawaited(_installWindowsUpdate(update))
+              ? () => unawaited(_installUpdate(update))
               : () => _updateService.openReleasePage(update.url),
         ),
       ),
     );
   }
 
-  Future<void> _installWindowsUpdate(UpdateInfo update) async {
+  Future<void> _installUpdate(UpdateInfo update) async {
     if (_installingUpdate) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Install Dacx v${update.version}?'),
         content: const Text(
-          'Dacx will download the installer, close, and Windows may ask for permission to continue.',
+          'Dacx will download the update, close, and your system may ask for permission to continue.',
         ),
         actions: [
           TextButton(
@@ -766,8 +772,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ).showSnackBar(const SnackBar(content: Text('Downloading update...')));
 
     try {
-      final installer = await _updateService.downloadWindowsInstaller(update);
-      await _updateService.launchWindowsInstaller(installer, update);
+      await _updateInstallerService.prepareAndLaunch(update);
       _log(
         'launch_update_install_handoff_succeeded',
         category: DebugLogCategory.update,
