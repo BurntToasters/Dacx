@@ -4,6 +4,8 @@
 #include <flutter/binary_messenger.h>
 #include <flutter/dart_project.h>
 
+class FlutterWindow;
+
 namespace dacx {
 
 // Per-engine `run.rosie.dacx/window/methods` channel. Must be called for
