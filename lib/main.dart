@@ -16,6 +16,7 @@ import 'services/debug_log_service.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
+import 'services/shared_preferences_bootstrap.dart';
 import 'theme/window_visuals.dart';
 
 const _safeStartupArg = '--safe-startup';
@@ -135,6 +136,10 @@ Future<void> _dacxMainAsync(List<String> args) async {
       data: {'error': e.toString()},
     );
     // #endregion
+  }
+
+  if (Platform.isWindows) {
+    await dacxRepairSharedPreferencesFileBestEffort();
   }
 
   // #region agent log
