@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -817,11 +818,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   bool _checkingUpdate = false;
+  bool _installingUpdate = false;
 
   Widget _checkForUpdatesTile() {
     return ListTile(
       title: const Text('Check for updates'),
-      trailing: _checkingUpdate
+      trailing: _checkingUpdate || _installingUpdate
           ? const SizedBox(
               width: 24,
               height: 24,
@@ -857,15 +859,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           category: DebugLogCategory.update,
           detailsBuilder: () => {'version': update.version},
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Dacx v${update.version} is available!'),
-            action: SnackBarAction(
-              label: 'View',
-              onPressed: () => _updateService.openReleasePage(update.url),
-            ),
-          ),
-        );
+        _showUpdateAvailableSnackBar(update);
       } else {
         _log('manual_update_not_available', category: DebugLogCategory.update);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -885,6 +879,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
+    }
+  }
+
+  void _showUpdateAvailableSnackBar(UpdateInfo update) {
+    final canInstall = Platform.isWindows && update.hasWindowsInstaller;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Dacx v${update.version} is available!'),
+        action: SnackBarAction(
+          label: canInstall ? 'Install' : 'View',
+          onPressed: canInstall
+              ? () => unawaited(_installWindowsUpdate(update))
+              : () => _updateService.openReleasePage(update.url),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _installWindowsUpdate(UpdateInfo update) async {
+    if (_installingUpdate) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Install Dacx v${update.version}?'),
+        content: const Text(
+          'Dacx will download the installer, close, and Windows may ask for permission to continue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Install'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _installingUpdate = true);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Downloading update...')));
+
+    try {
+      final installer = await _updateService.downloadWindowsInstaller(update);
+      await _updateService.launchWindowsInstaller(installer, update);
+      _log(
+        'manual_update_install_handoff_succeeded',
+        category: DebugLogCategory.update,
+        detailsBuilder: () => {'version': update.version},
+      );
+      exit(0);
+    } catch (e) {
+      _log(
+        'manual_update_install_failed',
+        category: DebugLogCategory.update,
+        message: e.toString(),
+        detailsBuilder: () => {'version': update.version},
+        severity: DebugSeverity.error,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not start the installer.'),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: () => _updateService.openReleasePage(update.url),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _installingUpdate = false);
     }
   }
 

@@ -105,6 +105,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final List<StreamSubscription> _subscriptions = [];
   Future<void> _loadQueue = Future<void>.value();
   bool _isDisposed = false;
+  bool _installingUpdate = false;
 
   // Tracks / chapters / OSD state
   Tracks? _currentTracks;
@@ -711,10 +712,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showUpdateSnackbar(UpdateInfo update) {
     if (!mounted) return;
+    final canInstall = Platform.isWindows && update.hasWindowsInstaller;
     _log(
       'update_snackbar_shown',
       category: DebugLogCategory.update,
-      detailsBuilder: () => {'version': update.version},
+      detailsBuilder: () => {
+        'version': update.version,
+        'can_install': canInstall,
+      },
     );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -723,11 +728,73 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
         duration: const Duration(seconds: 10),
         action: SnackBarAction(
-          label: 'View',
-          onPressed: () => _updateService.openReleasePage(update.url),
+          label: canInstall ? 'Install' : 'View',
+          onPressed: canInstall
+              ? () => unawaited(_installWindowsUpdate(update))
+              : () => _updateService.openReleasePage(update.url),
         ),
       ),
     );
+  }
+
+  Future<void> _installWindowsUpdate(UpdateInfo update) async {
+    if (_installingUpdate) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Install Dacx v${update.version}?'),
+        content: const Text(
+          'Dacx will download the installer, close, and Windows may ask for permission to continue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Install'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _installingUpdate = true);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Downloading update...')));
+
+    try {
+      final installer = await _updateService.downloadWindowsInstaller(update);
+      await _updateService.launchWindowsInstaller(installer, update);
+      _log(
+        'launch_update_install_handoff_succeeded',
+        category: DebugLogCategory.update,
+        detailsBuilder: () => {'version': update.version},
+      );
+      exit(0);
+    } catch (e) {
+      _log(
+        'launch_update_install_failed',
+        category: DebugLogCategory.update,
+        message: e.toString(),
+        detailsBuilder: () => {'version': update.version},
+        severity: DebugSeverity.error,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not start the installer.'),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: () => _updateService.openReleasePage(update.url),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _installingUpdate = false);
+    }
   }
 
   // ── File handling ─────────────────────────────────────────

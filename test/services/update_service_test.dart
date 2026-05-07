@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -28,6 +30,76 @@ void main() {
       expect(update, isNotNull);
       expect(update!.version, '0.6.0');
       expect(update.url, contains('https://github.com/BurntToasters/Dacx'));
+      expect(service.lastCheckSucceeded, isTrue);
+    });
+
+    test('includes Windows MSI asset metadata when present', () async {
+      final service = UpdateService(
+        packageInfoLoader: () async => PackageInfo(
+          appName: 'Dacx',
+          packageName: 'run.rosie.dacx',
+          version: '0.5.0',
+          buildNumber: '1',
+          buildSignature: '',
+          installerStore: null,
+        ),
+        httpGet: (uri, {headers}) async => http.Response('''
+          {
+            "tag_name": "v0.6.0",
+            "html_url": "https://github.com/BurntToasters/Dacx/releases/tag/v0.6.0",
+            "body": "notes",
+            "assets": [
+              {
+                "name": "Dacx-Windows-x64.msi",
+                "browser_download_url": "https://github.com/BurntToasters/Dacx/releases/download/v0.6.0/Dacx-Windows-x64.msi",
+                "size": 123,
+                "digest": "sha256:abc123"
+              }
+            ]
+          }
+          ''', 200),
+      );
+
+      final update = await service.checkForUpdate();
+
+      expect(update, isNotNull);
+      expect(update!.hasWindowsInstaller, isTrue);
+      expect(update.windowsInstallerAssetName, 'Dacx-Windows-x64.msi');
+      expect(update.windowsInstallerSize, 123);
+      expect(update.windowsInstallerSha256, 'abc123');
+      expect(update.windowsInstallerUrl, endsWith('Dacx-Windows-x64.msi'));
+    });
+
+    test('ignores invalid Windows MSI asset urls but keeps update', () async {
+      final service = UpdateService(
+        packageInfoLoader: () async => PackageInfo(
+          appName: 'Dacx',
+          packageName: 'run.rosie.dacx',
+          version: '0.5.0',
+          buildNumber: '1',
+          buildSignature: '',
+          installerStore: null,
+        ),
+        httpGet: (uri, {headers}) async => http.Response('''
+          {
+            "tag_name": "v0.6.0",
+            "html_url": "https://github.com/BurntToasters/Dacx/releases/tag/v0.6.0",
+            "body": "notes",
+            "assets": [
+              {
+                "name": "Dacx-Windows-x64.msi",
+                "browser_download_url": "https://evil.example.com/Dacx-Windows-x64.msi",
+                "size": 123
+              }
+            ]
+          }
+          ''', 200),
+      );
+
+      final update = await service.checkForUpdate();
+
+      expect(update, isNotNull);
+      expect(update!.hasWindowsInstaller, isFalse);
       expect(service.lastCheckSucceeded, isTrue);
     });
 
@@ -263,6 +335,184 @@ void main() {
       expect(svc2.lastCheckSucceeded, isFalse);
       // Reference [svc] so the analyzer doesn't complain about unused locals.
       expect(svc, isNotNull);
+    });
+  });
+
+  group('UpdateService.downloadWindowsInstaller', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('dacx_update_test_');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    UpdateInfo updateWithInstaller({
+      int? size = 3,
+      String? url,
+      String? sha256,
+    }) => UpdateInfo(
+      version: '0.6.0',
+      url: 'https://github.com/BurntToasters/Dacx/releases/tag/v0.6.0',
+      notes: '',
+      windowsInstallerUrl:
+          url ??
+          'https://github.com/BurntToasters/Dacx/releases/download/v0.6.0/Dacx-Windows-x64.msi',
+      windowsInstallerAssetName: 'Dacx-Windows-x64.msi',
+      windowsInstallerSize: size,
+      windowsInstallerSha256: sha256,
+    );
+
+    test('downloads the MSI to a versioned temp directory', () async {
+      final service = UpdateService(
+        isWindows: () => true,
+        tempDirectoryProvider: () => tempDir,
+        httpGet: (uri, {headers}) async => http.Response.bytes([1, 2, 3], 200),
+      );
+
+      final file = await service.downloadWindowsInstaller(
+        updateWithInstaller(),
+      );
+
+      expect(file.path, contains('Dacx-update-0.6.0'));
+      expect(file.path, endsWith('Dacx-Windows-x64.msi'));
+      expect(await file.readAsBytes(), [1, 2, 3]);
+    });
+
+    test('accepts a download when SHA-256 matches release metadata', () async {
+      final service = UpdateService(
+        isWindows: () => true,
+        tempDirectoryProvider: () => tempDir,
+        httpGet: (uri, {headers}) async => http.Response.bytes([1, 2, 3], 200),
+      );
+
+      final file = await service.downloadWindowsInstaller(
+        updateWithInstaller(
+          sha256:
+              '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+        ),
+      );
+
+      expect(await file.readAsBytes(), [1, 2, 3]);
+    });
+
+    test('throws when SHA-256 does not match release metadata', () async {
+      final service = UpdateService(
+        isWindows: () => true,
+        tempDirectoryProvider: () => tempDir,
+        httpGet: (uri, {headers}) async => http.Response.bytes([1, 2, 3], 200),
+      );
+
+      expect(
+        service.downloadWindowsInstaller(
+          updateWithInstaller(
+            sha256:
+                '0000000000000000000000000000000000000000000000000000000000000000',
+          ),
+        ),
+        throwsA(isA<UpdateInstallException>()),
+      );
+    });
+
+    test('throws on non-200 download response', () async {
+      final service = UpdateService(
+        isWindows: () => true,
+        tempDirectoryProvider: () => tempDir,
+        httpGet: (uri, {headers}) async => http.Response('nope', 404),
+      );
+
+      expect(
+        service.downloadWindowsInstaller(updateWithInstaller()),
+        throwsA(isA<UpdateInstallException>()),
+      );
+    });
+
+    test('throws when downloaded size does not match asset metadata', () async {
+      final service = UpdateService(
+        isWindows: () => true,
+        tempDirectoryProvider: () => tempDir,
+        httpGet: (uri, {headers}) async => http.Response.bytes([1, 2], 200),
+      );
+
+      expect(
+        service.downloadWindowsInstaller(updateWithInstaller()),
+        throwsA(isA<UpdateInstallException>()),
+      );
+    });
+
+    test('rejects invalid installer urls before download', () async {
+      var requested = false;
+      final service = UpdateService(
+        isWindows: () => true,
+        tempDirectoryProvider: () => tempDir,
+        httpGet: (uri, {headers}) async {
+          requested = true;
+          return http.Response.bytes([1, 2, 3], 200);
+        },
+      );
+
+      expect(
+        service.downloadWindowsInstaller(
+          updateWithInstaller(url: 'https://evil.example.com/update.msi'),
+        ),
+        throwsArgumentError,
+      );
+      expect(requested, isFalse);
+    });
+  });
+
+  group('UpdateService.launchWindowsInstaller', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('dacx_launch_test_');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    test('launches msiexec with passive no-restart install arguments', () async {
+      String? executable;
+      List<String>? arguments;
+      final service = UpdateService(
+        isWindows: () => true,
+        installerLauncher: (exe, args) async {
+          executable = exe;
+          arguments = args;
+        },
+      );
+      final installer = File(
+        '${tempDir.path}${Platform.pathSeparator}Dacx-Windows-x64.msi',
+      );
+      await installer.writeAsBytes([1, 2, 3]);
+      const update = UpdateInfo(
+        version: '0.6.0',
+        url: 'https://github.com/BurntToasters/Dacx/releases/tag/v0.6.0',
+        notes: '',
+        windowsInstallerUrl:
+            'https://github.com/BurntToasters/Dacx/releases/download/v0.6.0/Dacx-Windows-x64.msi',
+        windowsInstallerAssetName: 'Dacx-Windows-x64.msi',
+        windowsInstallerSize: 3,
+      );
+
+      await service.launchWindowsInstaller(installer, update);
+
+      expect(executable, 'msiexec.exe');
+      expect(arguments, [
+        '/i',
+        installer.path,
+        '/passive',
+        '/norestart',
+        '/l*vx',
+        '${tempDir.path}${Platform.pathSeparator}Dacx-update-0.6.0.log',
+      ]);
     });
   });
 }
