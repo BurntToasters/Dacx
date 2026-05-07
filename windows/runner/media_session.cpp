@@ -85,10 +85,15 @@ class MediaSession {
 
   void Attach(std::unique_ptr<MethodChannel> channel) {
     std::lock_guard<std::mutex> lock(mutex_);
-    channel_ = std::move(channel);
+    // Multi-window: keep every engine's channel; most-recently-active is
+    // routed to for SMTC button events.
+    auto* raw = channel.get();
+    channels_.push_back(std::move(channel));
+    active_channel_ = raw;
   }
 
-  void HandleCall(const MethodCall& call,
+  void HandleCall(MethodChannel* invoking_channel,
+                  const MethodCall& call,
                   std::unique_ptr<MethodResult> result) {
     const auto& method = call.method_name();
     const auto* args =
@@ -97,17 +102,35 @@ class MediaSession {
     try {
       if (method == "setEnabled") {
         bool enabled = args ? GetOr<bool>(*args, "enabled", false) : false;
+        if (enabled) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          active_channel_ = invoking_channel;
+        }
         SetEnabled(enabled);
         result->Success();
         return;
       }
       if (method == "update") {
-        if (args) Update(*args);
+        if (args) {
+          // Latest writer wins.
+          {
+            std::lock_guard<std::mutex> lock(mutex_);
+            active_channel_ = invoking_channel;
+          }
+          Update(*args);
+        }
         result->Success();
         return;
       }
       if (method == "clear") {
-        Clear();
+        // Only the active source may clear.
+        bool allow = false;
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          allow = (active_channel_ == nullptr ||
+                   active_channel_ == invoking_channel);
+        }
+        if (allow) Clear();
         result->Success();
         return;
       }
@@ -288,27 +311,36 @@ class MediaSession {
       default: return;
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!channel_) return;
+    MethodChannel* target = active_channel_;
+    if (target == nullptr && !channels_.empty()) {
+      target = channels_.back().get();
+    }
+    if (target == nullptr) return;
     EncodableMap args{{EncodableValue("action"), EncodableValue(action)}};
-    channel_->InvokeMethod(
+    target->InvokeMethod(
         "command",
         std::make_unique<EncodableValue>(EncodableValue(args)));
   }
 
   void DispatchPosition(int positionMs) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!channel_) return;
+    MethodChannel* target = active_channel_;
+    if (target == nullptr && !channels_.empty()) {
+      target = channels_.back().get();
+    }
+    if (target == nullptr) return;
     EncodableMap args{
         {EncodableValue("action"), EncodableValue("seek")},
         {EncodableValue("positionMs"), EncodableValue(positionMs)},
     };
-    channel_->InvokeMethod(
+    target->InvokeMethod(
         "command",
         std::make_unique<EncodableValue>(EncodableValue(args)));
   }
 
   std::mutex mutex_;
-  std::unique_ptr<MethodChannel> channel_;
+  std::vector<std::unique_ptr<MethodChannel>> channels_;
+  MethodChannel* active_channel_{nullptr};  // non-owning, into channels_
   winrt::Windows::Media::SystemMediaTransportControls smtc_{nullptr};
   winrt::Windows::Media::SystemMediaTransportControlsDisplayUpdater updater_{
       nullptr};
@@ -324,9 +356,11 @@ void RegisterMediaSession(flutter::BinaryMessenger* messenger) {
   auto channel = std::make_unique<MethodChannel>(
       messenger, "run.rosie.dacx/media_session",
       &flutter::StandardMethodCodec::GetInstance());
+  auto* raw_channel = channel.get();
   channel->SetMethodCallHandler(
-      [](const MethodCall& call, std::unique_ptr<MethodResult> result) {
-        MediaSession::Get().HandleCall(call, std::move(result));
+      [raw_channel](const MethodCall& call,
+                    std::unique_ptr<MethodResult> result) {
+        MediaSession::Get().HandleCall(raw_channel, call, std::move(result));
       });
   MediaSession::Get().Attach(std::move(channel));
 }

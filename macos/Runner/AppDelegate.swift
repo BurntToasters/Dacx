@@ -3,24 +3,73 @@ import CoreServices
 import FlutterMacOS
 import os.log
 
-// Subsystem identifies our binary in unified logging; category groups the
-// open-file/Launch-Services bridge messages. Paths are passed via
-// %{private}@ so Console.app redacts them unless explicitly enabled.
 private let dacxLog = OSLog(subsystem: "run.rosie.dacx", category: "open-file")
 
+// Per-window engine bookkeeping so each Flutter view participates in OS
+// integrations (open-file, media session) like the primary window.
+private final class EngineRegistration {
+  weak var window: MainFlutterWindow?
+  let messenger: FlutterBinaryMessenger
+  let openFileMethodChannel: FlutterMethodChannel
+  let openFileEventChannel: FlutterEventChannel
+  let openFileStreamHandler: OpenFileStreamHandler
+  let windowMethodChannel: FlutterMethodChannel
+  let mediaSessionChannel: FlutterMethodChannel
+
+  init(window: MainFlutterWindow,
+       messenger: FlutterBinaryMessenger,
+       openFileMethodChannel: FlutterMethodChannel,
+       openFileEventChannel: FlutterEventChannel,
+       openFileStreamHandler: OpenFileStreamHandler,
+       windowMethodChannel: FlutterMethodChannel,
+       mediaSessionChannel: FlutterMethodChannel) {
+    self.window = window
+    self.messenger = messenger
+    self.openFileMethodChannel = openFileMethodChannel
+    self.openFileEventChannel = openFileEventChannel
+    self.openFileStreamHandler = openFileStreamHandler
+    self.windowMethodChannel = windowMethodChannel
+    self.mediaSessionChannel = mediaSessionChannel
+  }
+}
+
+/// Per-engine `FlutterStreamHandler` that forwards onListen/onCancel to
+/// closures.
+final class OpenFileStreamHandler: NSObject, FlutterStreamHandler {
+  private let onListenCallback: (FlutterEventSink) -> Void
+  private let onCancelCallback: () -> Void
+  private(set) var sink: FlutterEventSink?
+
+  init(onListen: @escaping (FlutterEventSink) -> Void,
+       onCancel: @escaping () -> Void) {
+    self.onListenCallback = onListen
+    self.onCancelCallback = onCancel
+  }
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    sink = events
+    onListenCallback(events)
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    sink = nil
+    onCancelCallback()
+    return nil
+  }
+}
+
 @main
-class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
+class AppDelegate: FlutterAppDelegate {
   private let openFileMethodChannelName = "run.rosie.dacx/open_file/methods"
   private let openFileEventChannelName = "run.rosie.dacx/open_file/events"
   private let windowMethodChannelName = "run.rosie.dacx/window/methods"
 
-  private var openFileMethodChannel: FlutterMethodChannel?
-  private var openFileEventChannel: FlutterEventChannel?
-  private var windowMethodChannels: [ObjectIdentifier: FlutterMethodChannel] = [:]
-  private var openFileEventSink: FlutterEventSink?
+  private var registrations: [ObjectIdentifier: EngineRegistration] = [:]
   private var pendingOpenFiles: [String] = []
-  private var channelsConfigured = false
   private var auxiliaryWindows: [MainFlutterWindow] = []
+  // MPNowPlayingInfoCenter / MPRemoteCommandCenter are process singletons;
+  // one bridge attached to every engine's messenger.
   private let mediaSessionBridge = MediaSessionBridge()
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
@@ -42,63 +91,33 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     }
   }
 
+  /// Called by `MainFlutterWindow.configureFlutterContent()` for both the
+  /// primary window and any auxiliary window from `openNewWindow`.
   func registerFlutterChannels(messenger: FlutterBinaryMessenger, for window: MainFlutterWindow) {
-    setupWindowChannel(messenger: messenger, for: window)
-    if channelsConfigured { return }
-    os_log("registering Flutter channels eagerly from MainFlutterWindow", log: dacxLog, type: .debug)
-    setupChannels(messenger: messenger)
+    setupChannels(messenger: messenger, for: window)
   }
 
   private func configureOpenFileChannelsIfNeeded() {
-    if channelsConfigured { return }
-    guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else {
+    if !registrations.isEmpty { return }
+    guard let window = mainFlutterWindow as? MainFlutterWindow,
+          let controller = window.contentViewController as? FlutterViewController else {
       DispatchQueue.main.async { [weak self] in
         self?.configureOpenFileChannelsIfNeeded()
       }
       return
     }
-    if let window = mainFlutterWindow as? MainFlutterWindow {
-      setupWindowChannel(messenger: controller.engine.binaryMessenger, for: window)
-    }
-    setupChannels(messenger: controller.engine.binaryMessenger)
+    setupChannels(messenger: controller.engine.binaryMessenger, for: window)
   }
 
-  private func setupWindowChannel(messenger: FlutterBinaryMessenger, for window: MainFlutterWindow) {
+  private func setupChannels(messenger: FlutterBinaryMessenger, for window: MainFlutterWindow) {
     let windowId = ObjectIdentifier(window)
-    if windowMethodChannels[windowId] != nil { return }
+    if registrations[windowId] != nil { return }
 
-    let methodChannel = FlutterMethodChannel(
-      name: windowMethodChannelName,
-      binaryMessenger: messenger
-    )
-    methodChannel.setMethodCallHandler { [weak self] call, result in
-      guard let self else {
-        result(false)
-        return
-      }
-      switch call.method {
-      case "openNewWindow":
-        result(self.openNewWindow())
-      default:
-        result(FlutterMethodNotImplemented)
-      }
-    }
-    windowMethodChannels[windowId] = methodChannel
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(flutterWindowWillClose(_:)),
-      name: NSWindow.willCloseNotification,
-      object: window
-    )
-  }
-
-  private func setupChannels(messenger: FlutterBinaryMessenger) {
-    if channelsConfigured { return }
-    let methodChannel = FlutterMethodChannel(
+    let openFileMethodChannel = FlutterMethodChannel(
       name: openFileMethodChannelName,
       binaryMessenger: messenger
     )
-    methodChannel.setMethodCallHandler { [weak self] call, result in
+    openFileMethodChannel.setMethodCallHandler { [weak self] call, result in
       guard let self else {
         result([])
         return
@@ -111,17 +130,59 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
       }
     }
 
-    let eventChannel = FlutterEventChannel(
+    let openFileEventChannel = FlutterEventChannel(
       name: openFileEventChannelName,
       binaryMessenger: messenger
     )
-    eventChannel.setStreamHandler(self)
+    let streamHandler = OpenFileStreamHandler(
+      onListen: { [weak self] sink in
+        guard let self else { return }
+        // Drain queued paths into the first sink that comes online.
+        let pending = self.drainPendingOpenFiles()
+        for path in pending { sink(path) }
+      },
+      onCancel: {}
+    )
+    openFileEventChannel.setStreamHandler(streamHandler)
 
-    openFileMethodChannel = methodChannel
-    openFileEventChannel = eventChannel
-    mediaSessionBridge.attach(messenger: messenger)
-    channelsConfigured = true
-    os_log("Flutter channels configured (pending=%d)", log: dacxLog, type: .debug, pendingOpenFiles.count)
+    let windowMethodChannel = FlutterMethodChannel(
+      name: windowMethodChannelName,
+      binaryMessenger: messenger
+    )
+    windowMethodChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(false)
+        return
+      }
+      switch call.method {
+      case "openNewWindow":
+        result(self.openNewWindow())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    let mediaSessionChannel = mediaSessionBridge.attach(messenger: messenger)
+
+    let registration = EngineRegistration(
+      window: window,
+      messenger: messenger,
+      openFileMethodChannel: openFileMethodChannel,
+      openFileEventChannel: openFileEventChannel,
+      openFileStreamHandler: streamHandler,
+      windowMethodChannel: windowMethodChannel,
+      mediaSessionChannel: mediaSessionChannel
+    )
+    registrations[windowId] = registration
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(flutterWindowWillClose(_:)),
+      name: NSWindow.willCloseNotification,
+      object: window
+    )
+    os_log("Flutter channels configured for window (engines=%d, pending=%d)",
+           log: dacxLog, type: .debug, registrations.count, pendingOpenFiles.count)
   }
 
   private func drainPendingOpenFiles() -> [String] {
@@ -135,32 +196,51 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     if path.isEmpty { return }
 
     configureOpenFileChannelsIfNeeded()
-    if let sink = openFileEventSink {
-      sink(path)
-    } else {
-      pendingOpenFiles.append(path)
+
+    // Prefer the key/main window's sink; fall back to any active sink, else queue.
+    if let preferred = preferredActiveSink() {
+      preferred(path)
+      return
     }
+    pendingOpenFiles.append(path)
+  }
+
+  private func preferredActiveSink() -> FlutterEventSink? {
+    let preferredWindow = (NSApp.keyWindow as? MainFlutterWindow)
+        ?? (NSApp.mainWindow as? MainFlutterWindow)
+        ?? (mainFlutterWindow as? MainFlutterWindow)
+    if let win = preferredWindow,
+       let reg = registrations[ObjectIdentifier(win)],
+       let sink = reg.openFileStreamHandler.sink {
+      return sink
+    }
+    for reg in registrations.values {
+      if let sink = reg.openFileStreamHandler.sink { return sink }
+    }
+    return nil
   }
 
   private func openNewWindow() -> Bool {
-    let referenceFrame = NSApp.keyWindow?.frame ?? mainFlutterWindow?.frame
-    let contentRect: NSRect
-    if let frame = referenceFrame {
-      contentRect = frame.offsetBy(dx: 28, dy: -28)
+    let referenceWindow = NSApp.keyWindow ?? mainFlutterWindow
+    let baseContentRect: NSRect
+    if let refWin = referenceWindow {
+      // Use content rect (not frame) so the new window doesn't grow by the
+      // title bar height each spawn.
+      baseContentRect = refWin.contentRect(forFrameRect: refWin.frame)
     } else if let screenFrame = NSScreen.main?.visibleFrame {
       let size = NSSize(width: 960, height: 600)
-      contentRect = NSRect(
+      baseContentRect = NSRect(
         x: screenFrame.midX - size.width / 2,
         y: screenFrame.midY - size.height / 2,
         width: size.width,
         height: size.height
       )
     } else {
-      contentRect = NSRect(x: 0, y: 0, width: 960, height: 600)
+      baseContentRect = NSRect(x: 0, y: 0, width: 960, height: 600)
     }
 
     let window = MainFlutterWindow(
-      contentRect: contentRect,
+      contentRect: baseContentRect,
       styleMask: [
         .titled,
         .closable,
@@ -175,6 +255,9 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
     window.isReleasedWhenClosed = false
     window.configureFlutterContent()
     auxiliaryWindows.append(window)
+    if let refWin = referenceWindow {
+      _ = window.cascadeTopLeft(from: NSPoint(x: refWin.frame.minX, y: refWin.frame.maxY))
+    }
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     return true
@@ -189,7 +272,13 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
       name: NSWindow.willCloseNotification,
       object: closedWindow
     )
-    windowMethodChannels.removeValue(forKey: ObjectIdentifier(closedWindow))
+    let windowId = ObjectIdentifier(closedWindow)
+    if let reg = registrations.removeValue(forKey: windowId) {
+      reg.openFileMethodChannel.setMethodCallHandler(nil)
+      reg.openFileEventChannel.setStreamHandler(nil)
+      reg.windowMethodChannel.setMethodCallHandler(nil)
+      mediaSessionBridge.detach(channel: reg.mediaSessionChannel)
+    }
     auxiliaryWindows.removeAll { $0 === closedWindow }
   }
 
@@ -224,19 +313,5 @@ class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
-  }
-
-  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-    openFileEventSink = events
-    let pending = drainPendingOpenFiles()
-    for path in pending {
-      events(path)
-    }
-    return nil
-  }
-
-  func onCancel(withArguments arguments: Any?) -> FlutterError? {
-    openFileEventSink = nil
-    return nil
   }
 }

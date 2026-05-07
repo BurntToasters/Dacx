@@ -5,6 +5,7 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "instance_bridge.h"
 #include "media_session.h"
+#include "window_bridge.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -30,6 +31,8 @@ bool FlutterWindow::OnCreate() {
   dacx::RegisterMediaSession(
       flutter_controller_->engine()->messenger());
   dacx::StartOpenFileServer(flutter_controller_->engine()->messenger());
+  dacx::RegisterWindowBridge(flutter_controller_->engine()->messenger(),
+                             project_);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {});
@@ -46,6 +49,8 @@ void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
+  // Aux windows: ask the registry to drop us. No-op for primary.
+  dacx::NotifyWindowDestroyed(this);
 
   Win32Window::OnDestroy();
 }
