@@ -432,12 +432,21 @@ class UpdateInstallerService {
             : 'spctl reported an internal code-signing error; retrying after normalizing extended attributes. $firstError',
         detailsBuilder: () => {'app': appBundle.path},
       );
-      await _runChecked(
-        'xattr',
-        ['-cr', appBundle.path],
-        failureMessage:
-            'Could not normalize extended attributes on the macOS update bundle.',
-      );
+      final xattrResult = await _processRunner('xattr', [
+        '-cr',
+        appBundle.path,
+      ]);
+      if (xattrResult.exitCode != 0) {
+        final xattrError = _processResultDetail(xattrResult);
+        _log(
+          'macos_xattr_normalization_failed',
+          severity: DebugSeverity.warn,
+          message: xattrError.isEmpty
+              ? 'Could not normalize extended attributes on the macOS update bundle; continuing with Gatekeeper retry.'
+              : 'Could not normalize extended attributes on the macOS update bundle; continuing with Gatekeeper retry. $xattrError',
+          detailsBuilder: () => {'app': appBundle.path},
+        );
+      }
       result = await _processRunner('spctl', gatekeeperArgs);
       if (result.exitCode == 0) {
         return;

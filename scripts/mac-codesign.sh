@@ -63,8 +63,36 @@ codesign --force --options runtime --timestamp \
   --sign "$APPLE_SIGNING_IDENTITY" \
   "$APP_BUNDLE"
 
-echo "Verifying codesign..."
-codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+verify_app_codesign() {
+  local app_path="$1"
+  echo "Verifying codesign (all architectures): $app_path"
+  codesign --verify --deep --strict --verbose=2 --all-architectures "$app_path"
+
+  # Be explicit so Intel release hosts still fail fast if the arm64 slice is bad.
+  for arch in x86_64 arm64; do
+    echo "Verifying codesign ($arch): $app_path"
+    codesign --verify --deep --strict --verbose=2 -a "$arch" "$app_path"
+  done
+}
+
+verify_zip_payload() {
+  local zip_path="$1"
+  local tmp_extract
+  tmp_extract="$(mktemp -d)"
+
+  echo "Validating zip payload: $zip_path"
+  ditto -x -k "$zip_path" "$tmp_extract"
+  local extracted_app="$tmp_extract/${APP_NAME}.app"
+  if [[ ! -d "$extracted_app" ]]; then
+    rm -rf "$tmp_extract"
+    echo "ERROR: Zip payload did not contain ${APP_NAME}.app"
+    exit 1
+  fi
+  verify_app_codesign "$extracted_app"
+  rm -rf "$tmp_extract"
+}
+
+verify_app_codesign "$APP_BUNDLE"
 
 echo "Verifying entitlements..."
 if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.apple.security.files.user-selected.read-only'; then
@@ -132,6 +160,9 @@ if ! spctl --assess --type execute --verbose=4 "$APP_BUNDLE"; then
   echo "       The signed/stapled .app would be rejected by Gatekeeper."
   exit 1
 fi
+
+verify_zip_payload "$ZIP_PATH"
+
 echo "Verifying Gatekeeper acceptance of DMG..."
 if ! spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"; then
   echo "ERROR: spctl assessment failed for $DMG_PATH"

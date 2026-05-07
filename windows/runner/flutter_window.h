@@ -33,9 +33,6 @@ class FlutterWindow : public Win32Window {
   // while the controller is being created or torn down.
   bool flutter_controller_ready_ = false;
   bool flutter_controller_tearing_down_ = false;
-
-  // True when this x64 process is running under Windows-on-ARM emulation.
-  bool running_under_arm64_emulation_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
