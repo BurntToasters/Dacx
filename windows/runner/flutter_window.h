@@ -28,6 +28,11 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // Tracks lifecycle state so we do not dispatch window messages to Flutter
+  // while the controller is being created or torn down.
+  bool flutter_controller_ready_ = false;
+  bool flutter_controller_tearing_down_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

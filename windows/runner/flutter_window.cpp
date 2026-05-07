@@ -17,6 +17,9 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
 
+  flutter_controller_ready_ = false;
+  flutter_controller_tearing_down_ = false;
+
   RECT frame = GetClientArea();
 
   // The size here must match the window dimensions to avoid unnecessary surface
@@ -41,11 +44,14 @@ bool FlutterWindow::OnCreate() {
   // registered. The following call ensures a frame is pending to ensure the
   // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
+  flutter_controller_ready_ = true;
 
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
+  flutter_controller_ready_ = false;
+  flutter_controller_tearing_down_ = true;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -59,6 +65,12 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // During creation/teardown, skip forwarding messages to the Flutter view.
+  // This avoids dereferencing stale/null controller internals in the engine.
+  if (flutter_controller_tearing_down_ || !flutter_controller_ready_) {
+    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -71,7 +83,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      if (flutter_controller_ && flutter_controller_->engine()) {
+        flutter_controller_->engine()->ReloadSystemFonts();
+      }
       break;
   }
 

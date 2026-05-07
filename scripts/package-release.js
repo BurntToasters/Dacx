@@ -58,6 +58,11 @@ const SUPPORTED_MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
 const MUSIC_FILE_ICON_SOURCE_PNG = path.join(root, "assets", "dacx_music_icon.png");
 const WINDOWS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.ico";
 const MACOS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.icns";
+const WINDOWS_REQUIRED_RUNTIME_DLLS = [
+  "msvcp140.dll",
+  "vcruntime140.dll",
+  "vcruntime140_1.dll",
+];
 
 const platform = process.argv[2];
 if (!platform) {
@@ -191,6 +196,91 @@ function copyDirSync(src, dest) {
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
+  }
+}
+
+function listImmediateSubdirectories(baseDir) {
+  if (!baseDir || !fs.existsSync(baseDir)) return [];
+  try {
+    return fs
+      .readdirSync(baseDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(baseDir, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+function resolveWindowsRuntimeDllSource(dllName) {
+  const dllFileName = String(dllName).toLowerCase();
+
+  if (process.env.WINDOWS_VC_REDIST_DIR) {
+    const candidate = path.join(process.env.WINDOWS_VC_REDIST_DIR, dllFileName);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  const directCandidates = [];
+  if (process.env.SystemRoot) {
+    directCandidates.push(path.join(process.env.SystemRoot, "System32", dllFileName));
+    directCandidates.push(path.join(process.env.SystemRoot, "SysWOW64", dllFileName));
+  }
+  if (process.env.windir) {
+    directCandidates.push(path.join(process.env.windir, "System32", dllFileName));
+    directCandidates.push(path.join(process.env.windir, "SysWOW64", dllFileName));
+  }
+  for (const candidate of directCandidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  const programFilesRoots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]]
+    .filter(Boolean);
+  const vsRoots = [];
+  for (const programFilesRoot of programFilesRoots) {
+    const vsBase = path.join(programFilesRoot, "Microsoft Visual Studio");
+    for (const yearDir of listImmediateSubdirectories(vsBase)) {
+      for (const editionDir of listImmediateSubdirectories(yearDir)) {
+        const redistBase = path.join(editionDir, "VC", "Redist", "MSVC");
+        for (const msvcVersionDir of listImmediateSubdirectories(redistBase)) {
+          vsRoots.push(path.join(msvcVersionDir, "x64", "Microsoft.VC143.CRT"));
+          vsRoots.push(path.join(msvcVersionDir, "x64", "Microsoft.VC142.CRT"));
+          vsRoots.push(path.join(msvcVersionDir, "x64", "Microsoft.VC141.CRT"));
+        }
+      }
+    }
+  }
+  for (const crtDir of vsRoots) {
+    const candidate = path.join(crtDir, dllFileName);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function ensureWindowsRuntimeDlls(buildDir) {
+  if (process.platform !== "win32") return;
+
+  const copied = [];
+  for (const dllName of WINDOWS_REQUIRED_RUNTIME_DLLS) {
+    const targetPath = path.join(buildDir, dllName);
+    if (fs.existsSync(targetPath)) continue;
+
+    const sourcePath = resolveWindowsRuntimeDllSource(dllName);
+    if (!sourcePath) {
+      console.error(`Missing required runtime DLL "${dllName}" in ${buildDir}.`);
+      console.error(
+        "Install Microsoft Visual C++ 2015-2022 Redistributable (x64) " +
+        "(https://aka.ms/vs/17/release/vc_redist.x64.exe), " +
+        "or set WINDOWS_VC_REDIST_DIR to a folder containing the runtime DLLs.",
+      );
+      process.exit(1);
+    }
+
+    fs.copyFileSync(sourcePath, targetPath);
+    copied.push(dllName);
+  }
+
+  if (copied.length > 0) {
+    console.log(`  ✓ bundled VC++ runtime DLLs: ${copied.join(", ")}`);
   }
 }
 
@@ -536,6 +626,8 @@ function packageWindows() {
     console.error("Run 'npm run build:win' first.");
     process.exit(1);
   }
+
+  ensureWindowsRuntimeDlls(buildDir);
 
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
 
