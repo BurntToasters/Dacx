@@ -11,13 +11,12 @@ namespace dacx {
 void RegisterWindowBridge(flutter::BinaryMessenger* messenger,
                           const flutter::DartProject& project);
 
-class FlutterWindow;
 // Track the primary FlutterWindow so the registry can post WM_QUIT once it
 // and all aux windows are gone.
-void RegisterPrimaryWindow(FlutterWindow* window);
+void RegisterPrimaryWindow(::FlutterWindow* window);
 
 // Called from FlutterWindow::OnDestroy to schedule registry cleanup.
-void NotifyWindowDestroyed(FlutterWindow* window);
+void NotifyWindowDestroyed(::FlutterWindow* window);
 
 }  // namespace dacx
 
