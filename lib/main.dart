@@ -17,6 +17,8 @@ import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
 import 'theme/window_visuals.dart';
 
+const _safeStartupArg = '--safe-startup';
+
 class _NoBounceScrollBehavior extends MaterialScrollBehavior {
   const _NoBounceScrollBehavior();
 
@@ -56,9 +58,14 @@ void _installAsyncErrorHandler(DebugLogService debugLog) {
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  final startupSafeMode = args.contains(_safeStartupArg);
   _installKeyboardStateRecovery();
   MediaKit.ensureInitialized();
-  await Window.initialize();
+  try {
+    await Window.initialize();
+  } catch (e) {
+    debugPrint('Dacx: Window.initialize failed: $e');
+  }
 
   final prefs = await SharedPreferences.getInstance();
   final settings = SettingsService(prefs);
@@ -70,7 +77,11 @@ void main(List<String> args) async {
   // elsewhere.
   unawaited(HardwareAccelerationService.prime());
 
-  await windowManager.ensureInitialized();
+  try {
+    await windowManager.ensureInitialized();
+  } catch (e) {
+    debugPrint('Dacx: windowManager.ensureInitialized failed: $e');
+  }
 
   // Restore saved window geometry or use defaults.
   final savedSize = settings.rememberWindow ? settings.windowSize : null;
@@ -82,7 +93,7 @@ void main(List<String> args) async {
     center: savedPos == null,
     title: 'Dacx',
     backgroundColor: Colors.transparent,
-    titleBarStyle: Platform.isWindows || Platform.isMacOS
+    titleBarStyle: !startupSafeMode && (Platform.isWindows || Platform.isMacOS)
         ? TitleBarStyle.hidden
         : TitleBarStyle.normal,
   );
@@ -92,6 +103,7 @@ void main(List<String> args) async {
   var windowShown = false;
 
   Future<void> applyHiddenTitleBarBestEffort() async {
+    if (startupSafeMode) return;
     if (!Platform.isWindows && !Platform.isMacOS) return;
     try {
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
@@ -131,8 +143,14 @@ void main(List<String> args) async {
   );
   final cliFile = _parseCliFilePath(args);
 
-  runApp(DacxApp(settings: settings, debugLog: debugLog, initialFile: cliFile));
-
+  runApp(
+    DacxApp(
+      settings: settings,
+      debugLog: debugLog,
+      initialFile: cliFile,
+      startupSafeMode: startupSafeMode,
+    ),
+  );
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (!firstFrameReady.isCompleted) {
       firstFrameReady.complete();
@@ -207,12 +225,14 @@ class DacxApp extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
   final String? initialFile;
+  final bool startupSafeMode;
 
   const DacxApp({
     super.key,
     required this.settings,
     required this.debugLog,
     this.initialFile,
+    required this.startupSafeMode,
   });
 
   @override
@@ -228,6 +248,7 @@ class _DacxAppState extends State<DacxApp>
   _ThemeInputs? _cachedThemeInputs;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
+    if (widget.startupSafeMode) return false;
     if (!settings.experimentalFeaturesEnabled) return false;
     if (!settings.windowBlurEnabled) return false;
     if (Platform.isWindows || Platform.isMacOS) return true;
@@ -244,6 +265,7 @@ class _DacxAppState extends State<DacxApp>
       detailsBuilder: () => {
         'platform': Platform.operatingSystem,
         'initial_file_present': widget.initialFile != null,
+        'startup_safe_mode': widget.startupSafeMode,
       },
     );
     WidgetsBinding.instance.addObserver(this);
@@ -483,6 +505,7 @@ class _DacxAppState extends State<DacxApp>
         settings: s,
         debugLog: widget.debugLog,
         initialFile: widget.initialFile,
+        startupSafeMode: widget.startupSafeMode,
       ),
     );
   }

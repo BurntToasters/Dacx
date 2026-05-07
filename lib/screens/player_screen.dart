@@ -53,12 +53,14 @@ class PlayerScreen extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
   final String? initialFile;
+  final bool startupSafeMode;
 
   const PlayerScreen({
     super.key,
     required this.settings,
     required this.debugLog,
     this.initialFile,
+    this.startupSafeMode = false,
   });
 
   @override
@@ -73,6 +75,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final SeekPreviewService _seekPreviewService;
 
   SettingsService get _settings => widget.settings;
+  String get _effectiveHwDec => widget.startupSafeMode ? 'no' : _settings.hwDec;
 
   String? _currentFile;
   bool _isDragging = false;
@@ -167,7 +170,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _seekPreviewService = SeekPreviewService();
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     _settings.pruneRecentFiles(notifyListeners: false);
-    final hwDec = _settings.hwDec;
+    final hwDec = _effectiveHwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
     final hwReason = HardwareAccelerationService.debugStatusReason(hwDec);
     _log(
@@ -177,6 +180,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'hwdec': hwDec,
         'enabled': hwEnabled,
         'reason': hwReason,
+        'startup_safe_mode': widget.startupSafeMode,
       },
     );
     _videoController = VideoController(
@@ -223,7 +227,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
-    _applyHwDec(_settings.hwDec);
+    _applyHwDec(hwDec);
 
     _subscriptions.addAll([
       _playerService.positionStream.listen((pos) {
@@ -424,6 +428,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onSettingsChanged() {
+    final hwDec = _effectiveHwDec;
     _log(
       'settings_applied_to_player',
       category: DebugLogCategory.settings,
@@ -431,11 +436,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'speed': _settings.speed.toStringAsFixed(2),
         'loop_mode': _settings.loopMode.name,
         'always_on_top': _settings.alwaysOnTop,
-        'hwdec': _settings.hwDec,
+        'hwdec': hwDec,
       },
     );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
+    _applyHwDec(hwDec);
     unawaited(_applyEqualizer());
     unawaited(_applyMultiAudioMix());
     unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
