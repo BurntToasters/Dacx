@@ -120,13 +120,8 @@ class UpdateService {
             'current_version': currentVersion,
           },
         );
-        final viewUrl =
-            'https://rosie.run/dacx/update?from=v$currentVersion';
-        return UpdateInfo(
-          version: latestVersion,
-          url: viewUrl,
-          notes: notes,
-        );
+        final viewUrl = 'https://rosie.run/dacx/update?from=v$currentVersion';
+        return UpdateInfo(version: latestVersion, url: viewUrl, notes: notes);
       }
 
       _lastCheckSucceeded = true;

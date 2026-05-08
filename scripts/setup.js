@@ -137,7 +137,7 @@ function setupWindows() {
   commonSetup();
 
   header('Windows setup complete');
-  console.log('Run "flutter doctor" to verify everything is configured.');
+  console.log('Run "fvm flutter doctor" to verify everything is configured.');
   console.log('Run "npm run dev:win" to start the app.\n');
 }
 
@@ -199,7 +199,7 @@ function setupMac() {
   commonSetup();
 
   header('macOS setup complete');
-  console.log('Run "flutter doctor" to verify everything is configured.');
+  console.log('Run "fvm flutter doctor" to verify everything is configured.');
   console.log('Run "npm run dev:mac" to start the app.\n');
 }
 
@@ -247,7 +247,7 @@ function setupLinux() {
   commonSetup();
 
   header('Linux setup complete');
-  console.log('Run "flutter doctor" to verify everything is configured.');
+  console.log('Run "fvm flutter doctor" to verify everything is configured.');
   console.log('Run "npm run dev:linux" to start the app.\n');
 }
 
@@ -258,14 +258,14 @@ function commonSetup() {
 
   // Flutter desktop support
   const desktopDevice = target === 'win' ? 'windows' : target === 'mac' ? 'macos' : 'linux';
-  run(`flutter config --enable-${desktopDevice}-desktop`, { allowFail: true });
+  run(`fvm flutter config --enable-${desktopDevice}-desktop`, { allowFail: true });
 
   // doctor
-  run('flutter doctor -v', { allowFail: true });
+  run('fvm flutter doctor -v', { allowFail: true });
 
   // Dart/Flutter
   console.log('\nInstalling Dart/Flutter packages...');
-  run('flutter pub get');
+  run('fvm flutter pub get');
 
   // npm
   console.log('\nInstalling npm packages...');
