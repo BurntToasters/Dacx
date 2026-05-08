@@ -32,7 +32,7 @@ function getPubCacheDir() {
 
 function getDependencies() {
   // flutter pub deps --json gives structured output
-  const raw = execSync("flutter pub deps --style=list", {
+  const raw = execSync("fvm flutter pub deps --style=list", {
     cwd: root,
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],

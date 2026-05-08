@@ -10,21 +10,21 @@ import { spawnSync } from "node:child_process";
 
 const which = spawnSync(
   process.platform === "win32" ? "where" : "which",
-  ["flutter"],
+  ["fvm"],
   { encoding: "utf8", windowsHide: true },
 );
 if (which.status !== 0) {
-  console.log("flutter not on PATH; skipping outdated advisory.");
+  console.log("fvm not on PATH; skipping outdated advisory.");
   process.exit(0);
 }
 
 const r = spawnSync(
-  "flutter",
-  ["pub", "outdated", "--no-dev-dependencies", "--up-to-date"],
+  "fvm",
+  ["flutter", "pub", "outdated", "--no-dev-dependencies", "--up-to-date"],
   {
     encoding: "utf8",
     windowsHide: true,
-    shell: process.platform === "win32",
+    shell: true,
   },
 );
 

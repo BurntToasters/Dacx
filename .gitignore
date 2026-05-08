@@ -40,3 +40,6 @@ flatpak-build*/
 **/.*/
 !.vscode/
 !.github/
+
+# FVM Version Cache
+.fvm/

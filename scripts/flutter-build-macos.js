@@ -44,10 +44,10 @@ if (effectiveDeveloperDir) {
   console.log('Using active xcode-select developer directory.');
 }
 
-const result = spawnSync('flutter', ['build', 'macos', '--release'], {
+const result = spawnSync('fvm', ['flutter', 'build', 'macos', '--release'], {
   stdio: 'inherit',
   env,
-  shell: false,
+  shell: true,
 });
 
 if (result.error) {

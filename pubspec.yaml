@@ -5,6 +5,7 @@ version: 0.7.2+702
 
 environment:
   sdk: ^3.10.7
+  flutter: ">=3.41.0 <4.0.0"
 
 dependencies:
   anni_mpris_service: ^0.1.0
