@@ -14,11 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,8 +22,28 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Read pinned Flutter version from .fvmrc
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Dart (for fvm bootstrap)
+        uses: dart-lang/setup-dart@v1
+
+      - name: Cache fvm versions
+        uses: actions/cache@v4
+        with:
+          path: ~/fvm/versions
+          key: fvm-${{ runner.os }}-${{ steps.fvm.outputs.version }}
+
+      - name: Install fvm and pinned Flutter
+        run: |
+          dart pub global activate fvm
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.pub-cache/bin:$PATH"
+          npm run setup:flutter
+
       - name: Install Flutter dependencies
-        run: flutter pub get
+        run: fvm flutter pub get
 
       - name: Check formatting
         run: npm run format:check

@@ -27,7 +27,7 @@ void main() {
 
       expect(update, isNotNull);
       expect(update!.version, '0.6.0');
-      expect(update.url, contains('https://github.com/BurntToasters/Dacx'));
+      expect(update.url, 'https://rosie.run/dacx/update?from=v0.5.0');
       expect(service.lastCheckSucceeded, isTrue);
     });
 

@@ -120,11 +120,8 @@ class UpdateService {
             'current_version': currentVersion,
           },
         );
-        return UpdateInfo(
-          version: latestVersion,
-          url: releaseUrl,
-          notes: notes,
-        );
+        final viewUrl = 'https://rosie.run/dacx/update?from=v$currentVersion';
+        return UpdateInfo(version: latestVersion, url: viewUrl, notes: notes);
       }
 
       _lastCheckSucceeded = true;
@@ -178,6 +175,8 @@ class UpdateService {
       'github.com',
       'www.github.com',
       'objects.githubusercontent.com',
+      'rosie.run',
+      'www.rosie.run',
     };
     return allowedHosts.contains(uri.host.toLowerCase());
   }

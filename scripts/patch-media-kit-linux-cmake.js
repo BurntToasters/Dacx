@@ -31,7 +31,7 @@ function patchCmakeFile(filePath) {
   if (!fs.existsSync(filePath)) {
     console.warn(
       "media_kit_video Linux CMakeLists.txt not found. " +
-        "Run `flutter pub get` first, then run this script again.",
+        "Run `fvm flutter pub get` first, then run this script again.",
     );
     return false;
   }

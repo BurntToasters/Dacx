@@ -1,10 +1,11 @@
 name: dacx
 description: "Quick, lightweight cross-platform media player."
 publish_to: 'none'
-version: 0.7.2+702
+version: 0.7.3+703
 
 environment:
   sdk: ^3.10.7
+  flutter: ">=3.41.0 <4.0.0"
 
 dependencies:
   anni_mpris_service: ^0.1.0

@@ -17,24 +17,24 @@ if (process.env.DACX_SKIP_BUILD_SMOKE === "1") {
 
 const which = spawnSync(
   process.platform === "win32" ? "where" : "which",
-  ["flutter"],
+  ["fvm"],
   { encoding: "utf8", windowsHide: true },
 );
 if (which.status !== 0) {
   if (process.env.CI) {
-    console.error("flutter not on PATH; refusing to skip build smoke under CI.");
+    console.error("fvm not on PATH; refusing to skip build smoke under CI.");
     process.exit(1);
   }
-  console.warn("WARN: flutter not on PATH; skipping build smoke.");
+  console.warn("WARN: fvm not on PATH; skipping build smoke.");
   process.exit(0);
 }
 
 const start = Date.now();
-const r = spawnSync("flutter", ["build", "bundle", "--release"], {
+const r = spawnSync("fvm", ["flutter", "build", "bundle", "--release"], {
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,
-  shell: process.platform === "win32",
+  shell: true,
 });
 const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 const combinedOutput = `${r.stdout ?? ""}${r.stderr ?? ""}`;
