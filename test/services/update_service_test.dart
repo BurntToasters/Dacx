@@ -373,10 +373,7 @@ void main() {
           200,
         ),
       );
-      expect(
-        await svc.checkForUpdate(channel: UpdateChannel.beta),
-        isNull,
-      );
+      expect(await svc.checkForUpdate(channel: UpdateChannel.beta), isNull);
     });
 
     test('beta returns null when payload is not a list', () async {
@@ -385,10 +382,7 @@ void main() {
         httpGet: (uri, {headers}) async =>
             http.Response('{"unexpected":"object"}', 200),
       );
-      expect(
-        await svc.checkForUpdate(channel: UpdateChannel.beta),
-        isNull,
-      );
+      expect(await svc.checkForUpdate(channel: UpdateChannel.beta), isNull);
     });
 
     test('beta picks highest version, not list order', () async {
@@ -433,20 +427,23 @@ void main() {
   });
 
   group('UpdateService.compareVersions (semver §11)', () {
-    test('numeric prerelease identifiers compare numerically, not lexically', () {
-      expect(
-        UpdateService.compareVersions('0.7.4-beta.10', '0.7.4-beta.9'),
-        greaterThan(0),
-      );
-      expect(
-        UpdateService.compareVersions('0.7.4-beta.2', '0.7.4-beta.10'),
-        lessThan(0),
-      );
-      expect(
-        UpdateService.compareVersions('0.7.4-beta.10', '0.7.4-beta.10'),
-        0,
-      );
-    });
+    test(
+      'numeric prerelease identifiers compare numerically, not lexically',
+      () {
+        expect(
+          UpdateService.compareVersions('0.7.4-beta.10', '0.7.4-beta.9'),
+          greaterThan(0),
+        );
+        expect(
+          UpdateService.compareVersions('0.7.4-beta.2', '0.7.4-beta.10'),
+          lessThan(0),
+        );
+        expect(
+          UpdateService.compareVersions('0.7.4-beta.10', '0.7.4-beta.10'),
+          0,
+        );
+      },
+    );
 
     test('numeric identifier is lower than alpha identifier', () {
       expect(
@@ -476,24 +473,27 @@ void main() {
       );
     });
 
-    test('prerelease offered to user on older prerelease (regression test)', () async {
-      PackageInfo info(String v) => PackageInfo(
-        appName: 'Dacx',
-        packageName: 'run.rosie.dacx',
-        version: v,
-        buildNumber: '1',
-        buildSignature: '',
-        installerStore: null,
-      );
-      final svc = UpdateService(
-        packageInfoLoader: () async => info('0.7.4-beta.9'),
-        httpGet: (uri, {headers}) async => http.Response(
-          '[{"tag_name":"v0.7.4-beta.10","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.7.4-beta.10","body":"","prerelease":true,"draft":false}]',
-          200,
-        ),
-      );
-      final update = await svc.checkForUpdate(channel: UpdateChannel.beta);
-      expect(update?.version, '0.7.4-beta.10');
-    });
+    test(
+      'prerelease offered to user on older prerelease (regression test)',
+      () async {
+        PackageInfo info(String v) => PackageInfo(
+          appName: 'Dacx',
+          packageName: 'run.rosie.dacx',
+          version: v,
+          buildNumber: '1',
+          buildSignature: '',
+          installerStore: null,
+        );
+        final svc = UpdateService(
+          packageInfoLoader: () async => info('0.7.4-beta.9'),
+          httpGet: (uri, {headers}) async => http.Response(
+            '[{"tag_name":"v0.7.4-beta.10","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.7.4-beta.10","body":"","prerelease":true,"draft":false}]',
+            200,
+          ),
+        );
+        final update = await svc.checkForUpdate(channel: UpdateChannel.beta);
+        expect(update?.version, '0.7.4-beta.10');
+      },
+    );
   });
 }

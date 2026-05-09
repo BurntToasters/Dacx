@@ -112,7 +112,8 @@ class SeekPreviewService {
       try {
         await platform.setProperty(name, value);
       } catch (e) {
-        if (kDebugMode) debugPrint('Dacx: seek-preview setProperty $name failed: $e');
+        if (kDebugMode)
+          debugPrint('Dacx: seek-preview setProperty $name failed: $e');
       }
     }
 
@@ -279,7 +280,8 @@ class SeekPreviewService {
       try {
         await p.dispose();
       } catch (e) {
-        if (kDebugMode) debugPrint('Dacx: seek-preview teardown dispose failed: $e');
+        if (kDebugMode)
+          debugPrint('Dacx: seek-preview teardown dispose failed: $e');
       }
     }
   }

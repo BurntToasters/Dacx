@@ -98,7 +98,9 @@ class UpdateService {
           : await _fetchLatestStable();
       if (release == null) return null;
 
-      final latestVersion = release.tagName.replaceFirst(RegExp(r'^v'), '').trim();
+      final latestVersion = release.tagName
+          .replaceFirst(RegExp(r'^v'), '')
+          .trim();
 
       if (!_versionPattern.hasMatch(latestVersion) ||
           !_isLaunchableUrl(release.htmlUrl)) {

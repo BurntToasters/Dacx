@@ -121,7 +121,8 @@ void main(List<String> args) async {
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
         await applyHiddenTitleBarBestEffort();
       } catch (e) {
-        if (kDebugMode) debugPrint('Dacx: startup window operations failed: $e');
+        if (kDebugMode)
+          debugPrint('Dacx: startup window operations failed: $e');
       } finally {
         if (!windowReady.isCompleted) {
           windowReady.complete();
@@ -183,7 +184,8 @@ String? _normalizeCliPath(String value) {
     try {
       return uri.toFilePath(windows: Platform.isWindows);
     } catch (e) {
-      if (kDebugMode) debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
+      if (kDebugMode)
+        debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
       return null;
     }
   }
@@ -198,7 +200,8 @@ String? _normalizeCliPath(String value) {
       return trimmed;
     }
   } catch (e) {
-    if (kDebugMode) debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
+    if (kDebugMode)
+      debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
   }
 
   return null;
@@ -345,7 +348,8 @@ class _DacxAppState extends State<DacxApp>
             await Window.enableFullSizeContentView();
             await Window.hideTitle();
           } catch (e) {
-            if (kDebugMode) debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
+            if (kDebugMode)
+              debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
           }
         }
 
