@@ -1,6 +1,6 @@
 Name: dacx
-Version: 0.8.0-beta.1
-Release: 1%{?dist}
+Version: {{VERSION}}
+Release: {{RELEASE}}%{?dist}
 Summary: Quick, lightweight cross-platform media player
 License: GPL-3.0-only
 URL: https://github.com/BurntToasters/Dacx
