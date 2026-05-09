@@ -9,6 +9,7 @@ environment:
 
 dependencies:
   anni_mpris_service: ^0.1.0
+  crypto: ^3.0.7
   desktop_drop: ^0.7.1
   file_picker: ^11.0.2
   flutter:

@@ -133,6 +133,7 @@ class UpdateService {
           version: latestVersion,
           url: viewUrl,
           notes: release.body,
+          assets: release.assets,
         );
       }
 
@@ -318,28 +319,53 @@ class _Release {
   final String tagName;
   final String htmlUrl;
   final String body;
+  final List<UpdateAsset> assets;
 
   const _Release({
     required this.tagName,
     required this.htmlUrl,
     required this.body,
+    this.assets = const [],
   });
 
-  factory _Release.fromJson(Map<String, dynamic> data) => _Release(
-    tagName: data['tag_name'] as String? ?? '',
-    htmlUrl: data['html_url'] as String? ?? '',
-    body: data['body'] as String? ?? '',
-  );
+  factory _Release.fromJson(Map<String, dynamic> data) {
+    final rawAssets = data['assets'];
+    final parsedAssets = <UpdateAsset>[];
+    if (rawAssets is List) {
+      for (final entry in rawAssets) {
+        if (entry is! Map<String, dynamic>) continue;
+        final name = entry['name'] as String? ?? '';
+        final url = entry['browser_download_url'] as String? ?? '';
+        if (name.isEmpty || url.isEmpty) continue;
+        parsedAssets.add(UpdateAsset(name: name, downloadUrl: url));
+      }
+    }
+    return _Release(
+      tagName: data['tag_name'] as String? ?? '',
+      htmlUrl: data['html_url'] as String? ?? '',
+      body: data['body'] as String? ?? '',
+      assets: parsedAssets,
+    );
+  }
+}
+
+class UpdateAsset {
+  final String name;
+  final String downloadUrl;
+
+  const UpdateAsset({required this.name, required this.downloadUrl});
 }
 
 class UpdateInfo {
   final String version;
   final String url;
   final String notes;
+  final List<UpdateAsset> assets;
 
   const UpdateInfo({
     required this.version,
     required this.url,
     required this.notes,
+    this.assets = const [],
   });
 }

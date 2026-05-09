@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
@@ -21,12 +22,14 @@ import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
 import '../services/seek_preview_service.dart';
+import '../services/self_update_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/osd_overlay.dart';
+import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
@@ -403,6 +406,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _initializePlatformFileOpenBridge();
 
     _checkForUpdates();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showPendingUpdateNotice());
+    });
 
     // Auto-open CLI file.
     if (widget.initialFile != null) {
@@ -693,6 +699,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _log('loop_mode_applied', detailsBuilder: () => {'loop_mode': mode.name});
   }
 
+  Future<void> _showPendingUpdateNotice() async {
+    final marker = UpdatePendingMarker.readAndClear();
+    if (marker == null) return;
+    if (!mounted) return;
+    final targetVersion = marker['target_version'] as String?;
+    final startedAt = marker['started_at_ms'] as int?;
+    if (targetVersion == null) return;
+    // Drop stale markers older than 7 days.
+    if (startedAt != null) {
+      final ageMs = DateTime.now().millisecondsSinceEpoch - startedAt;
+      if (ageMs > const Duration(days: 7).inMilliseconds) return;
+    }
+    final pkg = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (pkg.version == targetVersion) {
+      _log(
+        'launch_update_succeeded_notice',
+        category: DebugLogCategory.update,
+        detailsBuilder: () => {'version': targetVersion},
+      );
+      messenger.showSnackBar(
+        SnackBar(content: Text('Updated to v$targetVersion')),
+      );
+    } else {
+      _log(
+        'launch_update_failed_notice',
+        category: DebugLogCategory.update,
+        severity: DebugSeverity.warn,
+        detailsBuilder: () =>
+            {'target': targetVersion, 'actual': pkg.version},
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Update to v$targetVersion may have failed.'),
+        ),
+      );
+    }
+  }
+
   // ── Update check with cooldown ────────────────────────────
 
   Future<void> _checkForUpdates() async {
@@ -743,8 +789,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
         duration: _updateSnackbarDuration,
         action: SnackBarAction(
-          label: 'View',
-          onPressed: () => _updateService.openReleasePage(update.url),
+          label: updateActionLabel(),
+          onPressed: () => triggerUpdateAction(
+            context: context,
+            info: update,
+            updateService: _updateService,
+            channelName: _settings.updateChannel.name,
+            debugLog: widget.debugLog,
+          ),
         ),
       ),
     );

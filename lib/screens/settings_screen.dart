@@ -12,6 +12,7 @@ import '../services/settings_service.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/update_progress_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   final SettingsService settings;
@@ -890,8 +891,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(
             content: Text('Dacx v${update.version} is available!'),
             action: SnackBarAction(
-              label: 'View',
-              onPressed: () => _updateService.openReleasePage(update.url),
+              label: updateActionLabel(),
+              onPressed: () => triggerUpdateAction(
+                context: context,
+                info: update,
+                updateService: _updateService,
+                channelName: _s.updateChannel.name,
+                debugLog: widget.debugLog,
+              ),
             ),
           ),
         );

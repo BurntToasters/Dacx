@@ -43,6 +43,11 @@ else
   echo "WARN: Missing $MUSIC_ICON_SOURCE; audio files will use the default document icon."
 fi
 
+# Build self-update helper directly into the bundle (signed below).
+HELPER_OUT="$APP_BUNDLE/Contents/MacOS/dacx-update-helper"
+echo "Building update helper → $HELPER_OUT"
+bash "$ROOT/macos/Helper/build-helper.sh" --output "$HELPER_OUT"
+
 # Signing
 echo "Codesigning ${APP_BUNDLE}..."
 
@@ -57,6 +62,13 @@ find "$APP_BUNDLE" -type d -name "*.framework" -print0 | while IFS= read -r -d '
   codesign --force --options runtime --timestamp \
     --sign "$APPLE_SIGNING_IDENTITY" "$fw"
 done
+
+# Sign the update helper before the parent bundle (codesign rules require
+# nested executables to be signed inside-out).
+if [[ -f "$HELPER_OUT" ]]; then
+  codesign --force --options runtime --timestamp \
+    --sign "$APPLE_SIGNING_IDENTITY" "$HELPER_OUT"
+fi
 
 codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS_FILE" \
