@@ -228,6 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             );
                           }),
                         ),
+                        _updateChannelTile(),
                         _recentFilesTile(),
                         _checkForUpdatesTile(),
                         _keyboardShortcutsTile(),
@@ -818,6 +819,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _checkingUpdate = false;
 
+  Widget _updateChannelTile() {
+    return ListTile(
+      title: const Text('Update channel'),
+      subtitle: const Text(
+        'Auto matches your current version (stable or beta).',
+      ),
+      trailing: SegmentedButton<UpdateChannel>(
+        segments: const [
+          ButtonSegment(value: UpdateChannel.auto, label: Text('Auto')),
+          ButtonSegment(value: UpdateChannel.stable, label: Text('Stable')),
+          ButtonSegment(value: UpdateChannel.beta, label: Text('Beta')),
+        ],
+        selected: {_s.updateChannel},
+        onSelectionChanged: (s) => setState(() {
+          _s.updateChannel = s.first;
+          _s.lastUpdateCheck = 0;
+          _log(
+            'update_channel_changed',
+            category: DebugLogCategory.update,
+            detailsBuilder: () => {'value': s.first.name},
+          );
+        }),
+      ),
+    );
+  }
+
   Widget _checkForUpdatesTile() {
     return ListTile(
       title: const Text('Check for updates'),
@@ -838,7 +865,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _log('manual_update_check_requested', category: DebugLogCategory.update);
     setState(() => _checkingUpdate = true);
     try {
-      final update = await _updateService.checkForUpdate();
+      final update = await _updateService.checkForUpdate(
+        channel: _s.updateChannel,
+      );
       if (!mounted) return;
       if (!_updateService.lastCheckSucceeded) {
         _log(

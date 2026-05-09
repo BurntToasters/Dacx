@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
@@ -96,7 +97,7 @@ void main(List<String> args) async {
     try {
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     } catch (e) {
-      debugPrint('Dacx: setTitleBarStyle failed: $e');
+      if (kDebugMode) debugPrint('Dacx: setTitleBarStyle failed: $e');
     }
   }
 
@@ -120,7 +121,7 @@ void main(List<String> args) async {
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
         await applyHiddenTitleBarBestEffort();
       } catch (e) {
-        debugPrint('Dacx: startup window operations failed: $e');
+        if (kDebugMode) debugPrint('Dacx: startup window operations failed: $e');
       } finally {
         if (!windowReady.isCompleted) {
           windowReady.complete();
@@ -182,7 +183,7 @@ String? _normalizeCliPath(String value) {
     try {
       return uri.toFilePath(windows: Platform.isWindows);
     } catch (e) {
-      debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
+      if (kDebugMode) debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
       return null;
     }
   }
@@ -197,7 +198,7 @@ String? _normalizeCliPath(String value) {
       return trimmed;
     }
   } catch (e) {
-    debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
+    if (kDebugMode) debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
   }
 
   return null;
@@ -283,7 +284,7 @@ class _DacxAppState extends State<DacxApp>
     try {
       await HardwareKeyboard.instance.syncKeyboardState();
     } catch (e) {
-      debugPrint('Dacx: syncKeyboardState failed: $e');
+      if (kDebugMode) debugPrint('Dacx: syncKeyboardState failed: $e');
     }
   }
 
@@ -333,7 +334,7 @@ class _DacxAppState extends State<DacxApp>
           await windowManager.setOpacity(effectiveOpacity);
         }
       } catch (e) {
-        debugPrint('Dacx: window opacity apply failed: $e');
+        if (kDebugMode) debugPrint('Dacx: window opacity apply failed: $e');
       }
 
       try {
@@ -344,7 +345,7 @@ class _DacxAppState extends State<DacxApp>
             await Window.enableFullSizeContentView();
             await Window.hideTitle();
           } catch (e) {
-            debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
+            if (kDebugMode) debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
           }
         }
 
@@ -397,7 +398,7 @@ class _DacxAppState extends State<DacxApp>
           );
         }
       } catch (e) {
-        debugPrint('Dacx: window blur effect apply failed: $e');
+        if (kDebugMode) debugPrint('Dacx: window blur effect apply failed: $e');
       }
       if (widget.debugLog.isEnabled) {
         widget.debugLog.logLazy(

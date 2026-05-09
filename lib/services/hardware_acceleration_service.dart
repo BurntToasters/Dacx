@@ -31,7 +31,7 @@ class HardwareAccelerationService {
           }
         })
         .catchError((Object e) {
-          debugPrint('Dacx: HardwareAccelerationService.prime failed: $e');
+          if (kDebugMode) debugPrint('Dacx: HardwareAccelerationService.prime failed: $e');
         });
   }
 
@@ -161,7 +161,7 @@ class HardwareAccelerationService {
       if (explicitMetalUnsupported) return _MacMetalSupport.unsupported;
       if (sawMetalSignal) return _MacMetalSupport.supported;
     } catch (e) {
-      debugPrint('Dacx: detectMacMetalSupport parse failed: $e');
+      if (kDebugMode) debugPrint('Dacx: detectMacMetalSupport parse failed: $e');
     }
 
     return _MacMetalSupport.unknown;

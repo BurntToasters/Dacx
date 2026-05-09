@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -104,7 +105,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         setState(() => _nativeCaptionVisible = nativeCaptionVisible);
       }
     } catch (e) {
-      debugPrint('Dacx: refreshNativeCaptionVisibility failed: $e');
+      if (kDebugMode) debugPrint('Dacx: refreshNativeCaptionVisibility failed: $e');
     }
   }
 

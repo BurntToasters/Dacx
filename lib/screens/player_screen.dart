@@ -24,6 +24,7 @@ import '../services/seek_preview_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
+import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/osd_overlay.dart';
 import '../widgets/seek_slider.dart';
@@ -47,6 +48,23 @@ const _openFileMethodChannel = MethodChannel(
   'run.rosie.dacx/open_file/methods',
 );
 const _openFileEventChannel = EventChannel('run.rosie.dacx/open_file/events');
+
+const _resumeSaveInterval = Duration(seconds: 5);
+const _seekStep = Duration(seconds: 5);
+const _seekStepBack = Duration(seconds: -5);
+const _osdHideDuration = Duration(seconds: 3);
+const _updateSnackbarDuration = Duration(seconds: 10);
+const _snackbarShortDuration = Duration(seconds: 2);
+const _resumeStartThreshold = Duration(seconds: 1);
+const _bridgeRetryDelay = Duration(milliseconds: 250);
+const _settingsFwdTransition = Duration(milliseconds: 340);
+const _settingsRevTransition = Duration(milliseconds: 280);
+const _sheetTransitionDuration = Duration(milliseconds: 180);
+const _contentSwitchDuration = Duration(milliseconds: 240);
+const _animFastDuration = Duration(milliseconds: 140);
+const _seekBarSizeDuration = Duration(milliseconds: 190);
+const _mixReloadDelay = Duration(milliseconds: 200);
+const _durationPollInterval = Duration(milliseconds: 50);
 
 class PlayerScreen extends StatefulWidget {
   final SettingsService settings;
@@ -376,7 +394,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Periodic resume-position saver (every 5s while playing).
     _resumeSaveTimer = Timer.periodic(
-      const Duration(seconds: 5),
+      _resumeSaveInterval,
       (_) => _persistResumePosition(),
     );
 
@@ -535,7 +553,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     if (!bridgeReady) {
-      Future<void>.delayed(const Duration(milliseconds: 250), () async {
+      Future<void>.delayed(_bridgeRetryDelay, () async {
         if (_isDisposed || !mounted) return;
         try {
           final pending = await _openFileMethodChannel
@@ -684,7 +702,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       category: DebugLogCategory.update,
       detailsBuilder: () => {'last_check_epoch': _settings.lastUpdateCheck},
     );
-    final update = await _updateService.checkForUpdate();
+    final update = await _updateService.checkForUpdate(
+      channel: _settings.updateChannel,
+    );
     final checkSucceeded = _updateService.lastCheckSucceeded;
     if (checkSucceeded) {
       _settings.lastUpdateCheck = DateTime.now().millisecondsSinceEpoch;
@@ -721,7 +741,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         content: Text(
           AppLocalizations.of(context).snackUpdateAvailable(update.version),
         ),
-        duration: const Duration(seconds: 10),
+        duration: _updateSnackbarDuration,
         action: SnackBarAction(
           label: 'View',
           onPressed: () => _updateService.openReleasePage(update.url),
@@ -1127,8 +1147,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _log('open_settings_requested', category: DebugLogCategory.ui);
     Navigator.of(context).push(
       PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 340),
-        reverseTransitionDuration: const Duration(milliseconds: 280),
+        transitionDuration: _settingsFwdTransition,
+        reverseTransitionDuration: _settingsRevTransition,
         pageBuilder: (_, _, _) =>
             SettingsScreen(settings: _settings, debugLog: widget.debugLog),
         opaque: false,
@@ -1224,11 +1244,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekForward:
         _log('shortcut_seek_forward', category: DebugLogCategory.ui);
-        _seekRelative(const Duration(seconds: 5));
+        _seekRelative(_seekStep);
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekBack:
         _log('shortcut_seek_back', category: DebugLogCategory.ui);
-        _seekRelative(const Duration(seconds: -5));
+        _seekRelative(_seekStepBack);
         return KeyEventResult.handled;
       case PlayerShortcutAction.volumeUp:
         _log('shortcut_volume_up', category: DebugLogCategory.ui);
@@ -1388,7 +1408,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context).snackFullscreenRejected),
-            duration: const Duration(seconds: 2),
+            duration: _snackbarShortDuration,
           ),
         );
       }
@@ -1468,7 +1488,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           fit: StackFit.expand,
                           children: [
                             AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 240),
+                              duration: _contentSwitchDuration,
                               switchInCurve: Curves.easeOutCubic,
                               switchOutCurve: Curves.easeInCubic,
                               layoutBuilder: (currentChild, previousChildren) {
@@ -1535,7 +1555,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                         Positioned(
                                           top: 8,
                                           left: 8,
-                                          child: _CompactExitButton(
+                                          child: CompactExitButton(
                                             onPressed: () =>
                                                 unawaited(_toggleCompactMode()),
                                           ),
@@ -1547,7 +1567,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                             IgnorePointer(
                               child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 140),
+                                duration: _animFastDuration,
                                 curve: Curves.easeOutCubic,
                                 opacity: _isDragging ? 1 : 0,
                                 child: ColoredBox(
@@ -1589,7 +1609,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           AnimatedSize(
-            duration: const Duration(milliseconds: 190),
+            duration: _seekBarSizeDuration,
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
             child: _duration.inMilliseconds > 0
@@ -1961,7 +1981,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     if (!_osdVisible) setState(() => _osdVisible = true);
     _osdHideTimer?.cancel();
-    _osdHideTimer = Timer(const Duration(seconds: 3), () {
+    _osdHideTimer = Timer(_osdHideDuration, () {
       if (mounted) setState(() => _osdVisible = false);
     });
   }
@@ -2253,8 +2273,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final savedPos = _position;
       await _loadFile(path);
       if (savedPos > Duration.zero) {
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        if (mounted && _position < const Duration(seconds: 1)) {
+        await Future<void>.delayed(_mixReloadDelay);
+        if (mounted && _position < _resumeStartThreshold) {
           unawaited(_playerService.seek(savedPos));
         }
       }
@@ -2351,7 +2371,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Wait briefly until duration is known so we don't seek beyond end.
     for (var i = 0; i < 20; i++) {
       if (_duration.inMilliseconds > 0) break;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(_durationPollInterval);
       if (_isDisposed || _currentFile != path) return;
     }
     if (_duration.inMilliseconds > 0 &&
@@ -2471,7 +2491,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withValues(alpha: 0.20),
-      transitionDuration: const Duration(milliseconds: 180),
+      transitionDuration: _sheetTransitionDuration,
       pageBuilder: (ctx, _, _) {
         final cs = Theme.of(ctx).colorScheme;
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
@@ -3257,57 +3277,4 @@ class _ChapterInfo {
   final int index;
   final String title;
   final Duration time;
-}
-
-class _CompactExitButton extends StatefulWidget {
-  const _CompactExitButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  State<_CompactExitButton> createState() => _CompactExitButtonState();
-}
-
-class _CompactExitButtonState extends State<_CompactExitButton> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Exit mini-player',
-      child: Semantics(
-        button: true,
-        label: 'Exit mini-player',
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovering = true),
-          onExit: (_) => setState(() => _hovering = false),
-          child: GestureDetector(
-            onTap: widget.onPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: _hovering ? 0.72 : 0.48),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(
-                    alpha: _hovering ? 0.85 : 0.55,
-                  ),
-                  width: 1,
-                ),
-              ),
-              child: const Icon(
-                Icons.close_fullscreen,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
