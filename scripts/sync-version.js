@@ -84,13 +84,6 @@ syncFile(
     syncLinuxPackageTemplateVersion("linux/packaging/control.template", text),
 );
 
-syncFile(
-  "linux/packaging/dacx.spec.template",
-  path.join(root, "linux", "packaging", "dacx.spec.template"),
-  (text) =>
-    syncLinuxPackageTemplateVersion("linux/packaging/dacx.spec.template", text),
-);
-
 if (failures.length) {
   console.error("sync-version: failures:\n  " + failures.join("\n  "));
 }

@@ -1205,17 +1205,36 @@ function buildDeb(buildDir, desktopFile, iconFile) {
   console.log(`  ✓ ${debName}`);
 }
 
+function semverToRpmVersionRelease(semver) {
+  // Strip semver build metadata (after '+') — RPM disallows '+' in Version.
+  const stripped = semver.split("+")[0];
+  const dashIdx = stripped.indexOf("-");
+  if (dashIdx < 0) {
+    return { version: stripped, release: "1" };
+  }
+  const ver = stripped.substring(0, dashIdx);
+  const pre = stripped.substring(dashIdx + 1).replace(/[^A-Za-z0-9.]/g, ".");
+  return { version: ver, release: `0.${pre}` };
+}
+
 function buildRpm(buildDir, desktopFile, iconFile) {
   if (!hasCommand("rpmbuild")) {
     console.warn("  ⚠ rpmbuild not found — skipping .rpm");
     return;
   }
 
+  const { version: rpmVersion, release: rpmRelease } =
+    semverToRpmVersionRelease(VERSION);
+
   const rpmRoot = path.join(root, "build", "rpm-stage");
   if (fs.existsSync(rpmRoot)) fs.rmSync(rpmRoot, { recursive: true });
 
   // rpmbuild directory structure
-  const buildroot = path.join(rpmRoot, "BUILDROOT", `dacx-${VERSION}-1.x86_64`);
+  const buildroot = path.join(
+    rpmRoot,
+    "BUILDROOT",
+    `dacx-${rpmVersion}-${rpmRelease}.x86_64`,
+  );
   const specsDir = path.join(rpmRoot, "SPECS");
   const rpmsDir = path.join(rpmRoot, "RPMS");
 
@@ -1257,7 +1276,8 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   const specTemplate = path.join(root, "linux", "packaging", "dacx.spec.template");
   if (fs.existsSync(specTemplate)) {
     let spec = fs.readFileSync(specTemplate, "utf-8");
-    spec = spec.replace(/\{\{VERSION\}\}/g, VERSION);
+    spec = spec.replace(/\{\{VERSION\}\}/g, rpmVersion);
+    spec = spec.replace(/\{\{RELEASE\}\}/g, rpmRelease);
     fs.writeFileSync(path.join(specsDir, "dacx.spec"), spec);
   }
 

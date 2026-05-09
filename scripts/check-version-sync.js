@@ -76,7 +76,6 @@ function checkLinuxPackageTemplate(rel) {
 }
 
 checkLinuxPackageTemplate("linux/packaging/control.template");
-checkLinuxPackageTemplate("linux/packaging/dacx.spec.template");
 
 if (failures.length) {
   console.error("Version sync FAILED:");
