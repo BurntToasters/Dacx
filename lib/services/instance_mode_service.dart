@@ -71,32 +71,40 @@ class InstanceModeService {
     }
   }
 
-  /// Opens a new Dacx window. With `allow_multi_instance` set, spawns a new
-  /// OS process; otherwise uses the in-process native bridge so OS
-  /// integrations (Now Playing, file associations) stay coherent.
   static Future<bool> openNewWindow() async {
     if (isAllowMultipleInstancesEnabled()) {
-      debugPrint(
-        'Dacx: openNewWindow → spawnNewInstance (allow_multi_instance flag set)',
-      );
+      if (kDebugMode)
+        debugPrint(
+          'Dacx: openNewWindow → spawnNewInstance (allow_multi_instance flag set)',
+        );
       return spawnNewInstance();
     }
-    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
+      if (kDebugMode)
+        debugPrint(
+          'Dacx: openNewWindow → spawnNewInstance (separate process on ${Platform.operatingSystem})',
+        );
+      return spawnNewInstance();
+    }
+    if (Platform.isMacOS) {
       try {
         final opened = await _windowMethodChannel.invokeMethod<bool>(
           'openNewWindow',
         );
         if (opened == true) {
-          debugPrint('Dacx: openNewWindow → in-process native bridge');
+          if (kDebugMode)
+            debugPrint('Dacx: openNewWindow → in-process native bridge');
           return true;
         }
       } on MissingPluginException catch (e) {
-        debugPrint('Dacx: native openNewWindow bridge missing: $e');
+        if (kDebugMode)
+          debugPrint('Dacx: native openNewWindow bridge missing: $e');
       } on PlatformException catch (e) {
-        debugPrint('Dacx: native openNewWindow failed: $e');
+        if (kDebugMode) debugPrint('Dacx: native openNewWindow failed: $e');
       }
     }
-    debugPrint('Dacx: openNewWindow → spawnNewInstance (fallback)');
+    if (kDebugMode)
+      debugPrint('Dacx: openNewWindow → spawnNewInstance (fallback)');
     return spawnNewInstance();
   }
 

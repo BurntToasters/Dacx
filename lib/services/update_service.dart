@@ -11,6 +11,8 @@ typedef HttpGet =
 typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
 typedef LaunchUrlFn = Future<bool> Function(Uri uri, {LaunchMode mode});
 
+enum UpdateChannel { auto, stable, beta }
+
 class UpdateService {
   static const String _owner = 'BurntToasters';
   static const String _repo = 'Dacx';
@@ -64,48 +66,51 @@ class UpdateService {
     );
   }
 
-  Future<UpdateInfo?> checkForUpdate() async {
+  static UpdateChannel resolveChannel(
+    UpdateChannel choice,
+    String currentVersion,
+  ) {
+    if (choice != UpdateChannel.auto) return choice;
+    return currentVersion.contains('-')
+        ? UpdateChannel.beta
+        : UpdateChannel.stable;
+  }
+
+  Future<UpdateInfo?> checkForUpdate({
+    UpdateChannel channel = UpdateChannel.auto,
+  }) async {
     _lastCheckSucceeded = false;
     try {
       final packageInfo = await _packageInfoLoader();
       final currentVersion = packageInfo.version;
+      final resolved = resolveChannel(channel, currentVersion);
       _log(
         'check_started',
-        detailsBuilder: () => {'current_version': currentVersion},
+        detailsBuilder: () => {
+          'current_version': currentVersion,
+          'channel': channel.name,
+          'resolved_channel': resolved.name,
+        },
       );
 
-      final uri = Uri.parse(
-        'https://api.github.com/repos/$_owner/$_repo/releases/latest',
-      );
-      final response = await _httpGet(
-        uri,
-        headers: {'Accept': 'application/vnd.github.v3+json'},
-      ).timeout(const Duration(seconds: 10));
+      final release = resolved == UpdateChannel.beta
+          ? await _fetchLatestPrerelease()
+          : await _fetchLatestStable();
+      if (release == null) return null;
 
-      if (response.statusCode != 200) {
-        _log(
-          'check_http_non_200',
-          severity: DebugSeverity.warn,
-          detailsBuilder: () => {'status_code': response.statusCode},
-        );
-        return null;
-      }
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final tagName = data['tag_name'] as String? ?? '';
-      final latestVersion = tagName.replaceFirst(RegExp(r'^v'), '').trim();
-      final releaseUrl = data['html_url'] as String? ?? '';
-      final notes = data['body'] as String? ?? '';
+      final latestVersion = release.tagName
+          .replaceFirst(RegExp(r'^v'), '')
+          .trim();
 
       if (!_versionPattern.hasMatch(latestVersion) ||
-          !_isLaunchableUrl(releaseUrl)) {
+          !_isLaunchableUrl(release.htmlUrl)) {
         _log(
           'check_invalid_payload',
           severity: DebugSeverity.warn,
           detailsBuilder: () => {
-            'tag_name': tagName,
+            'tag_name': release.tagName,
             'latest_version': latestVersion,
-            'url': releaseUrl,
+            'url': release.htmlUrl,
           },
         );
         return null;
@@ -118,10 +123,17 @@ class UpdateService {
           detailsBuilder: () => {
             'latest_version': latestVersion,
             'current_version': currentVersion,
+            'resolved_channel': resolved.name,
           },
         );
-        final viewUrl = 'https://rosie.run/dacx/update?from=v$currentVersion';
-        return UpdateInfo(version: latestVersion, url: viewUrl, notes: notes);
+        final viewUrl = resolved == UpdateChannel.beta
+            ? release.htmlUrl
+            : 'https://rosie.run/dacx/update?from=v$currentVersion';
+        return UpdateInfo(
+          version: latestVersion,
+          url: viewUrl,
+          notes: release.body,
+        );
       }
 
       _lastCheckSucceeded = true;
@@ -130,6 +142,7 @@ class UpdateService {
         detailsBuilder: () => {
           'latest_version': latestVersion,
           'current_version': currentVersion,
+          'resolved_channel': resolved.name,
         },
       );
       return null;
@@ -141,6 +154,73 @@ class UpdateService {
       );
       return null;
     }
+  }
+
+  Future<_Release?> _fetchLatestStable() async {
+    final uri = Uri.parse(
+      'https://api.github.com/repos/$_owner/$_repo/releases/latest',
+    );
+    final response = await _httpGet(
+      uri,
+      headers: {'Accept': 'application/vnd.github.v3+json'},
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      _log(
+        'check_http_non_200',
+        severity: DebugSeverity.warn,
+        detailsBuilder: () => {'status_code': response.statusCode},
+      );
+      return null;
+    }
+    final data = jsonDecode(response.body);
+    if (data is! Map<String, dynamic>) {
+      _log('check_invalid_payload', severity: DebugSeverity.warn);
+      return null;
+    }
+    return _Release.fromJson(data);
+  }
+
+  Future<_Release?> _fetchLatestPrerelease() async {
+    final uri = Uri.parse(
+      'https://api.github.com/repos/$_owner/$_repo/releases',
+    );
+    final response = await _httpGet(
+      uri,
+      headers: {'Accept': 'application/vnd.github.v3+json'},
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      _log(
+        'check_http_non_200',
+        severity: DebugSeverity.warn,
+        detailsBuilder: () => {'status_code': response.statusCode},
+      );
+      return null;
+    }
+    final data = jsonDecode(response.body);
+    if (data is! List) {
+      _log('check_invalid_payload', severity: DebugSeverity.warn);
+      return null;
+    }
+    final candidates = <_Release>[];
+    for (final entry in data) {
+      if (entry is! Map<String, dynamic>) continue;
+      if (entry['draft'] == true) continue;
+      if (entry['prerelease'] != true) continue;
+      final release = _Release.fromJson(entry);
+      final version = release.tagName.replaceFirst(RegExp(r'^v'), '').trim();
+      if (!_versionPattern.hasMatch(version)) continue;
+      if (!_isLaunchableUrl(release.htmlUrl)) continue;
+      candidates.add(release);
+    }
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final av = a.tagName.replaceFirst(RegExp(r'^v'), '').trim();
+      final bv = b.tagName.replaceFirst(RegExp(r'^v'), '').trim();
+      return compareVersions(bv, av);
+    });
+    return candidates.first;
   }
 
   Future<void> openReleasePage(String url) async {
@@ -190,23 +270,41 @@ class UpdateService {
   static String _stripPreRelease(String v) =>
       v.split('-').first.split('+').first;
 
-  bool _isNewer(String latest, String current) {
-    final latestParts = _numericParts(latest);
-    final currentParts = _numericParts(current);
+  bool _isNewer(String latest, String current) =>
+      compareVersions(latest, current) > 0;
 
+  static int compareVersions(String a, String b) {
+    final aParts = _numericParts(a);
+    final bParts = _numericParts(b);
     for (var i = 0; i < 3; i++) {
-      final l = i < latestParts.length ? latestParts[i] : 0;
-      final c = i < currentParts.length ? currentParts[i] : 0;
-      if (l > c) return true;
-      if (l < c) return false;
+      final av = i < aParts.length ? aParts[i] : 0;
+      final bv = i < bParts.length ? bParts[i] : 0;
+      if (av != bv) return av.compareTo(bv);
     }
-    // Numeric components equal — compare pre-release tags. Per semver, a
-    // version without pre-release is considered greater than one with.
-    final latestPre = _preReleaseTag(latest);
-    final currentPre = _preReleaseTag(current);
-    if (latestPre.isEmpty && currentPre.isNotEmpty) return true;
-    if (latestPre.isNotEmpty && currentPre.isEmpty) return false;
-    return latestPre.compareTo(currentPre) > 0;
+    return _comparePreRelease(_preReleaseTag(a), _preReleaseTag(b));
+  }
+
+  static int _comparePreRelease(String a, String b) {
+    if (a.isEmpty && b.isEmpty) return 0;
+    if (a.isEmpty) return 1;
+    if (b.isEmpty) return -1;
+    final aParts = a.split('.');
+    final bParts = b.split('.');
+    final n = aParts.length < bParts.length ? aParts.length : bParts.length;
+    for (var i = 0; i < n; i++) {
+      final cmp = _comparePreReleaseIdentifier(aParts[i], bParts[i]);
+      if (cmp != 0) return cmp;
+    }
+    return aParts.length.compareTo(bParts.length);
+  }
+
+  static int _comparePreReleaseIdentifier(String a, String b) {
+    final aNum = int.tryParse(a);
+    final bNum = int.tryParse(b);
+    if (aNum != null && bNum != null) return aNum.compareTo(bNum);
+    if (aNum != null) return -1;
+    if (bNum != null) return 1;
+    return a.compareTo(b);
   }
 
   static String _preReleaseTag(String v) {
@@ -214,6 +312,24 @@ class UpdateService {
     if (dashIdx < 0) return '';
     return v.substring(dashIdx + 1).split('+').first;
   }
+}
+
+class _Release {
+  final String tagName;
+  final String htmlUrl;
+  final String body;
+
+  const _Release({
+    required this.tagName,
+    required this.htmlUrl,
+    required this.body,
+  });
+
+  factory _Release.fromJson(Map<String, dynamic> data) => _Release(
+    tagName: data['tag_name'] as String? ?? '',
+    htmlUrl: data['html_url'] as String? ?? '',
+    body: data['body'] as String? ?? '',
+  );
 }
 
 class UpdateInfo {

@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'instance_mode_service.dart';
+import 'update_service.dart';
 
 enum AccentColor {
   blueGrey(Colors.blueGrey, 'Blue Grey'),
@@ -118,6 +120,7 @@ class SettingsService extends ChangeNotifier {
   static const _kVolume = 'playback_volume';
   static const _kSpeed = 'playback_speed';
   static const _kLoopMode = 'playback_loop_mode';
+  static const _kUpdateChannel = 'update_channel';
   static const _kAutoPlay = 'playback_auto_play';
   static const _kTheme = 'appearance_theme';
   static const _kAccent = 'appearance_accent';
@@ -199,6 +202,19 @@ class SettingsService extends ChangeNotifier {
       (m) => m.name == s,
       orElse: () => LoopMode.none,
     );
+  }
+
+  UpdateChannel get updateChannel {
+    final s = _prefs.getString(_kUpdateChannel);
+    return UpdateChannel.values.firstWhere(
+      (c) => c.name == s,
+      orElse: () => UpdateChannel.auto,
+    );
+  }
+
+  set updateChannel(UpdateChannel c) {
+    _prefs.setString(_kUpdateChannel, c.name);
+    notifyListeners();
   }
 
   set loopMode(LoopMode m) {
@@ -650,7 +666,7 @@ class SettingsService extends ChangeNotifier {
           });
         }
       } catch (e) {
-        debugPrint('Dacx: resume positions decode failed: $e');
+        if (kDebugMode) debugPrint('Dacx: resume positions decode failed: $e');
         result = <String, _ResumeEntry>{};
       }
     }
@@ -743,7 +759,7 @@ class SettingsService extends ChangeNotifier {
           .where((entry) => entry.isNotEmpty)
           .toList(growable: false);
     } catch (e) {
-      debugPrint('Dacx: recent files decode failed: $e');
+      if (kDebugMode) debugPrint('Dacx: recent files decode failed: $e');
       return [];
     }
   }

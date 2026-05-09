@@ -169,27 +169,9 @@ static void dacx_handle_open_path(MyApplication* self, const gchar* path) {
   }
 }
 
-static GtkWindow* my_application_create_window(MyApplication* self,
-                                               GApplication* application,
-                                               char** dart_entrypoint_arguments,
-                                               gboolean primary);
-
 static void dacx_window_method_call_cb(FlMethodChannel* channel,
                                        FlMethodCall* call,
                                        gpointer user_data) {
-  DacxWindowReg* reg = (DacxWindowReg*)user_data;
-  MyApplication* self = reg->app;
-  const gchar* method = fl_method_call_get_name(call);
-  if (g_strcmp0(method, "openNewWindow") == 0) {
-    GtkWindow* window =
-        my_application_create_window(self, G_APPLICATION(self), nullptr, FALSE);
-    gtk_window_present(window);
-    g_autoptr(FlValue) value = fl_value_new_bool(TRUE);
-    g_autoptr(FlMethodResponse) response =
-        FL_METHOD_RESPONSE(fl_method_success_response_new(value));
-    fl_method_call_respond(call, response, nullptr);
-    return;
-  }
   g_autoptr(FlMethodResponse) not_implemented =
       FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   fl_method_call_respond(call, not_implemented, nullptr);
