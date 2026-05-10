@@ -28,8 +28,11 @@ import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
+import { loadLocalDotEnv } from "./xcode-env.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+loadLocalDotEnv();
+
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
 const VERSION = pkg.version;
 const AUDIO_EXTENSIONS = [
@@ -328,6 +331,76 @@ function resolveWixV3ToolPaths() {
 
 function toWindowsPath(inputPath) {
   return path.resolve(inputPath).replace(/\//g, "\\");
+}
+
+function normalizeWindowsThumbprint(value) {
+  return String(value || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+}
+
+function windowsSigningThumbprint() {
+  return normalizeWindowsThumbprint(
+    process.env.WINDOWS_SIGNING_CERT_THUMBPRINT ||
+      process.env.DACX_WINDOWS_SIGNER_THUMBPRINT ||
+      "",
+  );
+}
+
+function resolveSignToolPath() {
+  const envPath = process.env.WINDOWS_SIGNTOOL_PATH || process.env.SIGNTOOL_PATH;
+  if (envPath && fs.existsSync(envPath)) return envPath;
+
+  const pathHit = resolveCommandFromPath("signtool");
+  if (pathHit) return pathHit;
+
+  const kitsRoot = process.env["ProgramFiles(x86)"]
+    ? path.join(process.env["ProgramFiles(x86)"], "Windows Kits", "10", "bin")
+    : null;
+  if (!kitsRoot || !fs.existsSync(kitsRoot)) return null;
+
+  const candidates = fs
+    .readdirSync(kitsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(kitsRoot, entry.name, "x64", "signtool.exe"))
+    .filter((candidate) => fs.existsSync(candidate))
+    .sort((a, b) => b.localeCompare(a));
+  return candidates[0] || null;
+}
+
+function verifyWindowsAuthenticode(filePath, expectedThumbprint) {
+  const psPath = escapePowerShellSingleQuoted(toWindowsPath(filePath));
+  const ps = [
+    `$sig = Get-AuthenticodeSignature -LiteralPath '${psPath}'`,
+    `$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' }`,
+    `if ($sig.Status -ne 'Valid') { throw ('Authenticode status ' + $sig.Status + ': ' + $sig.StatusMessage) }`,
+    `$normalized = ($thumb -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()`,
+    `if ($normalized -ne '${expectedThumbprint}') { throw ('Signer thumbprint ' + $normalized + ' does not match expected ${expectedThumbprint}') }`,
+  ].join("; ");
+  run(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${ps}"`);
+}
+
+function signWindowsArtifact(filePath) {
+  const thumbprint = windowsSigningThumbprint();
+  if (!thumbprint) {
+    console.warn(
+      "  ⚠ WINDOWS_SIGNING_CERT_THUMBPRINT not set; Windows installer will not be Authenticode-signed.",
+    );
+    return;
+  }
+
+  const signtoolPath = resolveSignToolPath();
+  if (!signtoolPath) {
+    console.error("signtool.exe was not found, but WINDOWS_SIGNING_CERT_THUMBPRINT is set.");
+    console.error("Set WINDOWS_SIGNTOOL_PATH to signtool.exe or install the Windows SDK.");
+    process.exit(1);
+  }
+
+  const timestampUrl =
+    process.env.WINDOWS_TIMESTAMP_URL || "http://timestamp.digicert.com";
+  run(
+    `"${signtoolPath}" sign /fd SHA256 /tr "${timestampUrl}" /td SHA256 ` +
+      `/sha ${thumbprint} "${toWindowsPath(filePath)}"`,
+  );
+  verifyWindowsAuthenticode(filePath, thumbprint);
 }
 
 function escapeXmlAttr(value) {
@@ -651,6 +724,7 @@ ${renderInnoOpenWithRegistryLines(audioIconFileName)}
     console.error(`Inno Setup did not produce expected output: ${outPath}`);
     process.exit(1);
   }
+  signWindowsArtifact(outPath);
   console.log(`  ✓ ${outName}`);
 }
 
@@ -710,6 +784,7 @@ function buildWindowsMsiInstallerV4(buildDir, wixPath, audioIconFileName) {
     removeIfExists(stale);
   }
 
+  signWindowsArtifact(outPath);
   console.log(`  ✓ ${outName}`);
 }
 
@@ -732,6 +807,7 @@ function buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName) {
     console.error(`WiX did not produce expected output: ${outPath}`);
     process.exit(1);
   }
+  signWindowsArtifact(outPath);
   console.log(`  ✓ ${outName}`);
 }
 

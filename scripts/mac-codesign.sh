@@ -105,6 +105,43 @@ xcrun stapler staple "$APP_BUNDLE"
 rm -f "$ZIP_PATH"
 ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
+echo "Verifying final zip payload..."
+ZIP_VERIFY_DIR="$(mktemp -d)"
+cleanup_zip_verify() {
+  rm -rf "$ZIP_VERIFY_DIR"
+}
+trap cleanup_zip_verify EXIT
+
+ditto -x -k --sequesterRsrc "$ZIP_PATH" "$ZIP_VERIFY_DIR"
+ZIP_VERIFY_APP="$ZIP_VERIFY_DIR/${APP_NAME}.app"
+ZIP_VERIFY_INFO="$ZIP_VERIFY_APP/Contents/Info.plist"
+
+if [[ ! -d "$ZIP_VERIFY_APP" ]]; then
+  echo "ERROR: Final zip did not extract ${APP_NAME}.app"
+  exit 1
+fi
+
+ZIP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$ZIP_VERIFY_INFO")"
+if [[ "$ZIP_BUNDLE_ID" != "run.rosie.dacx" ]]; then
+  echo "ERROR: Final zip app bundle id is $ZIP_BUNDLE_ID, expected run.rosie.dacx"
+  exit 1
+fi
+
+ZIP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ZIP_VERIFY_INFO")"
+if [[ "$ZIP_VERSION" != "$PKG_VERSION" ]]; then
+  echo "ERROR: Final zip app version is $ZIP_VERSION, expected $PKG_VERSION"
+  exit 1
+fi
+
+codesign --verify --deep --strict --verbose=2 "$ZIP_VERIFY_APP"
+if ! spctl --assess --type execute --verbose=4 "$ZIP_VERIFY_APP"; then
+  echo "ERROR: spctl assessment failed for app extracted from final zip"
+  exit 1
+fi
+
+cleanup_zip_verify
+trap - EXIT
+
 # DMG
 DMG_NAME="Dacx-macOS.dmg"
 DMG_PATH="$ROOT/release/$DMG_NAME"

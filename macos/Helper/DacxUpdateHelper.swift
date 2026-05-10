@@ -1,6 +1,9 @@
 import Foundation
 import Darwin
 
+let installPath = "/Applications/Dacx.app"
+let bundleIdentifier = "run.rosie.dacx"
+
 // Bundled signed update helper for Dacx.
 // Waits for the parent (Dacx) process to exit, validates the new .app bundle
 // against Gatekeeper, atomically swaps it into /Applications/Dacx.app with a
@@ -9,8 +12,8 @@ import Darwin
 struct Args {
     var waitPid: pid_t = 0
     var newApp: String = ""
-    var installPath: String = ""
     var expectedTeamId: String = ""
+    var expectedVersion: String = ""
     var relaunch: Bool = false
 }
 
@@ -28,11 +31,11 @@ func parseArgs() -> Args? {
         case "--new-app":
             a.newApp = value
             i += 2
-        case "--install-path":
-            a.installPath = value
-            i += 2
         case "--expected-team-id":
             a.expectedTeamId = value
+            i += 2
+        case "--expected-version":
+            a.expectedVersion = value
             i += 2
         case "--relaunch":
             a.relaunch = true
@@ -42,7 +45,7 @@ func parseArgs() -> Args? {
             return nil
         }
     }
-    if a.waitPid == 0 || a.newApp.isEmpty || a.installPath.isEmpty || a.expectedTeamId.isEmpty {
+    if a.waitPid == 0 || a.newApp.isEmpty || a.expectedTeamId.isEmpty || a.expectedVersion.isEmpty {
         FileHandle.standardError.write("missing required args\n".data(using: .utf8)!)
         return nil
     }
@@ -106,47 +109,93 @@ func runCommand(_ executable: String, _ args: [String]) -> (Int32, String) {
     return (task.terminationStatus, combined)
 }
 
-func teamId(of appPath: String) -> String? {
+func codesignDetails(of appPath: String) -> [String: String]? {
     let (code, output) = runCommand("/usr/bin/codesign", ["-dv", "--verbose=4", appPath])
     if code != 0 { return nil }
+    var result: [String: String] = [:]
     for line in output.split(separator: "\n") {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        if trimmed.hasPrefix("TeamIdentifier=") {
-            return String(trimmed.dropFirst("TeamIdentifier=".count))
+        if let idx = trimmed.firstIndex(of: "="), idx != trimmed.startIndex {
+            let key = String(trimmed[..<idx])
+            let value = String(trimmed[trimmed.index(after: idx)...])
+            if !value.isEmpty {
+                result[key] = value
+            }
         }
     }
-    return nil
+    return result
+}
+
+func teamId(of appPath: String) -> String? {
+    return codesignDetails(of: appPath)?["TeamIdentifier"]
+}
+
+func shortVersion(of appPath: String) -> String? {
+    let infoPath = appPath + "/Contents/Info.plist"
+    guard let plist = NSDictionary(contentsOfFile: infoPath) else { return nil }
+    return plist["CFBundleShortVersionString"] as? String
 }
 
 enum ValidationFailure: Error {
-    case stapler(String)
     case codesign(String)
+    case bundleIdentifierMismatch(String)
     case teamMismatch(String)
+    case versionMismatch(String)
     case spctl(String)
 }
 
-func validateBundle(_ appPath: String, expectedTeamId: String) -> ValidationFailure? {
-    let stapler = runCommand("/usr/bin/xcrun", ["stapler", "validate", appPath])
-    if stapler.0 != 0 {
-        return .stapler(stapler.1)
-    }
+func validateBundle(_ appPath: String, expectedTeamId: String, expectedVersion: String) -> ValidationFailure? {
     let verify = runCommand("/usr/bin/codesign", [
         "--verify", "--deep", "--strict", "--verbose=2", appPath,
     ])
     if verify.0 != 0 {
         return .codesign(verify.1)
     }
-    guard let actual = teamId(of: appPath) else {
+    guard let details = codesignDetails(of: appPath) else {
+        return .codesign("could not read codesign details")
+    }
+    let actualIdentifier = details["Identifier"] ?? ""
+    if actualIdentifier != bundleIdentifier {
+        return .bundleIdentifierMismatch("expected \(bundleIdentifier), got \(actualIdentifier)")
+    }
+    guard let actual = details["TeamIdentifier"] else {
         return .teamMismatch("could not read team id")
     }
     if actual != expectedTeamId {
         return .teamMismatch("expected \(expectedTeamId), got \(actual)")
+    }
+    let actualVersion = shortVersion(of: appPath) ?? ""
+    if actualVersion != expectedVersion {
+        return .versionMismatch("expected \(expectedVersion), got \(actualVersion)")
     }
     let spctl = runCommand("/usr/sbin/spctl", [
         "--assess", "--type", "execute", "--verbose=2", appPath,
     ])
     if spctl.0 != 0 {
         return .spctl(spctl.1)
+    }
+    return nil
+}
+
+func validateInstalledBundle(_ appPath: String, expectedTeamId: String) -> ValidationFailure? {
+    let verify = runCommand("/usr/bin/codesign", [
+        "--verify", "--deep", "--strict", "--verbose=2", appPath,
+    ])
+    if verify.0 != 0 {
+        return .codesign(verify.1)
+    }
+    guard let details = codesignDetails(of: appPath) else {
+        return .codesign("could not read codesign details")
+    }
+    let actualIdentifier = details["Identifier"] ?? ""
+    if actualIdentifier != bundleIdentifier {
+        return .bundleIdentifierMismatch("expected \(bundleIdentifier), got \(actualIdentifier)")
+    }
+    guard let actual = details["TeamIdentifier"] else {
+        return .teamMismatch("could not read team id")
+    }
+    if actual != expectedTeamId {
+        return .teamMismatch("expected \(expectedTeamId), got \(actual)")
     }
     return nil
 }
@@ -168,43 +217,53 @@ logLine("parent exited, beginning swap")
 
 // Pre-swap sanity: install path must exist and be a Dacx app signed by us.
 // (This catches "user uninstalled Dacx mid-update" and anti-swap.)
-guard bundleExists(args.installPath) else {
-    logLine("install-path \(args.installPath) is missing; refusing to swap")
+guard bundleExists(installPath) else {
+    logLine("install-path \(installPath) is missing; refusing to swap")
     exit(3)
 }
-if let installedTeam = teamId(of: args.installPath) {
-    if installedTeam != args.expectedTeamId {
-        logLine("install-path team \(installedTeam) != expected \(args.expectedTeamId); refusing")
-        exit(4)
-    }
-} else {
-    logLine("could not read team id of currently-installed bundle; refusing")
+if let failure = validateInstalledBundle(installPath, expectedTeamId: args.expectedTeamId) {
+    logLine("installed app validation failed: \(failure)")
     exit(5)
 }
 
+// Validate the candidate again inside the helper immediately before moving it.
+// This closes the window between the app's preflight checks and replacement.
+guard bundleExists(args.newApp) else {
+    logLine("new-app \(args.newApp) is missing; refusing to swap")
+    exit(6)
+}
+if let failure = validateBundle(
+    args.newApp,
+    expectedTeamId: args.expectedTeamId,
+    expectedVersion: args.expectedVersion
+) {
+    logLine("pre-move validation failed: \(failure)")
+    exit(6)
+}
+
 // Swap with rollback
-let backupPath = args.installPath + ".bak"
+let backupPath = installPath + ".bak"
 if fm.fileExists(atPath: backupPath) {
     try? fm.removeItem(atPath: backupPath)
 }
 do {
-    try fm.moveItem(atPath: args.installPath, toPath: backupPath)
+    try fm.moveItem(atPath: installPath, toPath: backupPath)
 } catch {
     logLine("rename to .bak failed: \(error)")
     exit(6)
 }
 
 func restoreBackup() {
-    try? fm.removeItem(atPath: args.installPath)
+    try? fm.removeItem(atPath: installPath)
     do {
-        try fm.moveItem(atPath: backupPath, toPath: args.installPath)
+        try fm.moveItem(atPath: backupPath, toPath: installPath)
     } catch {
         logLine("rollback failed: \(error)")
     }
 }
 
 do {
-    try fm.moveItem(atPath: args.newApp, toPath: args.installPath)
+    try fm.moveItem(atPath: args.newApp, toPath: installPath)
 } catch {
     logLine("move new app to install-path failed: \(error)")
     restoreBackup()
@@ -212,7 +271,11 @@ do {
 }
 
 // Post-swap validation at install-path. If any check fails, roll back.
-if let failure = validateBundle(args.installPath, expectedTeamId: args.expectedTeamId) {
+if let failure = validateBundle(
+    installPath,
+    expectedTeamId: args.expectedTeamId,
+    expectedVersion: args.expectedVersion
+) {
     logLine("post-move validation failed: \(failure)")
     restoreBackup()
     exit(8)
@@ -222,7 +285,7 @@ if let failure = validateBundle(args.installPath, expectedTeamId: args.expectedT
 try? fm.removeItem(atPath: backupPath)
 
 if args.relaunch {
-    let openResult = runCommand("/usr/bin/open", [args.installPath])
+    let openResult = runCommand("/usr/bin/open", [installPath])
     if openResult.0 != 0 {
         logLine("open failed (\(openResult.0)): \(openResult.1)")
     }

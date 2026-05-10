@@ -6,7 +6,7 @@ import path from "path";
 const FLATPAK_BUILD_DIR_PREFIX = "flatpak-build";
 
 const CLEAN_TARGETS = {
-  clean: ["dist", "build"],
+  clean: ["dist", "build", "release"],
   "clean-flatpak": ["flatpak-repo"],
   "clean-all": ["dist", "build", "release", "flatpak-repo"],
 };

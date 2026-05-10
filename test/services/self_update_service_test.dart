@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+import 'dart:convert';
 
 import 'package:dacx/services/self_update_service.dart';
 import 'package:dacx/services/update_service.dart';
@@ -7,17 +9,32 @@ void main() {
   group('SelfUpdateService.pickAsset', () {
     test('picks asset by suffix (case-insensitive)', () {
       final assets = [
-        const UpdateAsset(name: 'Dacx-Linux-amd64.deb', downloadUrl: 'https://x/a'),
-        const UpdateAsset(name: 'Dacx-Windows-x64.MSI', downloadUrl: 'https://x/b'),
+        const UpdateAsset(
+          name: 'Dacx-Linux-amd64.deb',
+          downloadUrl: 'https://x/a',
+        ),
+        const UpdateAsset(
+          name: 'Dacx-Windows-x64.MSI',
+          downloadUrl: 'https://x/b',
+        ),
         const UpdateAsset(name: 'Dacx-macOS.zip', downloadUrl: 'https://x/c'),
       ];
-      expect(SelfUpdateService.pickAsset(assets, '.msi')?.downloadUrl, 'https://x/b');
-      expect(SelfUpdateService.pickAsset(assets, '.zip')?.downloadUrl, 'https://x/c');
+      expect(
+        SelfUpdateService.pickAsset(assets, '.msi')?.downloadUrl,
+        'https://x/b',
+      );
+      expect(
+        SelfUpdateService.pickAsset(assets, '.zip')?.downloadUrl,
+        'https://x/c',
+      );
     });
 
     test('returns null when no asset matches suffix', () {
       final assets = [
-        const UpdateAsset(name: 'Dacx-Linux-amd64.deb', downloadUrl: 'https://x/a'),
+        const UpdateAsset(
+          name: 'Dacx-Linux-amd64.deb',
+          downloadUrl: 'https://x/a',
+        ),
       ];
       expect(SelfUpdateService.pickAsset(assets, '.msi'), isNull);
     });
@@ -45,7 +62,10 @@ void main() {
 
     test('returns null when no asset matches', () {
       final assets = [
-        const UpdateAsset(name: 'Dacx-Linux-amd64.deb', downloadUrl: 'https://x/a'),
+        const UpdateAsset(
+          name: 'Dacx-Linux-amd64.deb',
+          downloadUrl: 'https://x/a',
+        ),
       ];
       expect(
         SelfUpdateService.pickAssetByPattern(assets, RegExp(r'\.msi$')),
@@ -103,9 +123,11 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
     });
 
     test('rejects malformed hash lengths', () {
-      const tooShort =
-          'abcd1234  Dacx.msi\n';
-      expect(SelfUpdateService.parseChecksumsFile(tooShort, 'Dacx.msi'), isNull);
+      const tooShort = 'abcd1234  Dacx.msi\n';
+      expect(
+        SelfUpdateService.parseChecksumsFile(tooShort, 'Dacx.msi'),
+        isNull,
+      );
     });
 
     test('rejects non-hex hashes', () {
@@ -142,6 +164,143 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
     });
   });
 
+  group('SelfUpdateService.parseCodesignDetails', () {
+    test('extracts codesign key/value metadata from stderr-style output', () {
+      const output = '''
+Executable=/Applications/Dacx.app/Contents/MacOS/Dacx
+Identifier=run.rosie.dacx
+Format=app bundle with Mach-O universal (x86_64 arm64)
+TeamIdentifier=ABCDE12345
+Runtime Version=15.0.0
+''';
+
+      expect(SelfUpdateService.parseCodesignDetails(output), {
+        'Executable': '/Applications/Dacx.app/Contents/MacOS/Dacx',
+        'Identifier': 'run.rosie.dacx',
+        'Format': 'app bundle with Mach-O universal (x86_64 arm64)',
+        'TeamIdentifier': 'ABCDE12345',
+        'Runtime Version': '15.0.0',
+      });
+    });
+
+    test('ignores malformed metadata lines', () {
+      const output = '''
+not a key value line
+=missing-key
+Identifier=run.rosie.dacx
+empty=
+TeamIdentifier=ABCDE12345
+''';
+
+      expect(SelfUpdateService.parseCodesignDetails(output), {
+        'Identifier': 'run.rosie.dacx',
+        'TeamIdentifier': 'ABCDE12345',
+      });
+    });
+  });
+
+  group('SelfUpdateService Authenticode helpers', () {
+    test('normalizes certificate thumbprints', () {
+      expect(
+        SelfUpdateService.normalizeCertificateThumbprint(' ab cd 12:34-ef '),
+        'ABCD1234EF',
+      );
+    });
+
+    test('parses PowerShell Authenticode status output', () {
+      final parsed = SelfUpdateService.parseAuthenticodeStatus(
+        'Valid| ab cd 12 34 |Signature verified\n',
+      );
+
+      expect(parsed.status, 'Valid');
+      expect(parsed.thumbprint, 'ABCD1234');
+      expect(parsed.message, 'Signature verified');
+    });
+
+    test('preserves pipes in Authenticode status messages', () {
+      final parsed = SelfUpdateService.parseAuthenticodeStatus(
+        'NotSigned||No signature | present\n',
+      );
+
+      expect(parsed.status, 'NotSigned');
+      expect(parsed.thumbprint, '');
+      expect(parsed.message, 'No signature | present');
+    });
+  });
+
+  group('SelfUpdateService Ed25519 helpers', () {
+    test('verifies a known RFC 8032 signature vector', () async {
+      final publicKey = base64Encode(
+        _hexBytes(
+          'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+        ),
+      );
+      final signature = _hexBytes(
+        'e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155'
+        '5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b',
+      );
+
+      expect(
+        await SelfUpdateService.verifyEd25519Signature(
+          message: const [],
+          signature: signature,
+          publicKeyBase64: publicKey,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects a tampered Ed25519 signature message', () async {
+      final publicKey = base64Encode(
+        _hexBytes(
+          'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+        ),
+      );
+      final signature = _hexBytes(
+        'e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155'
+        '5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b',
+      );
+
+      expect(
+        await SelfUpdateService.verifyEd25519Signature(
+          message: utf8.encode('tampered'),
+          signature: signature,
+          publicKeyBase64: publicKey,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('SelfUpdateService.macInstallNeedsElevation', () {
+    test('returns false when install parent is writable', () async {
+      final dir = await Directory.systemTemp.createTemp('dacx-updater-test-');
+      try {
+        final needsElevation = await SelfUpdateService.macInstallNeedsElevation(
+          installPath: '${dir.path}/Dacx.app',
+        );
+
+        expect(needsElevation, isFalse);
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('returns true when install parent is missing', () async {
+      final dir = await Directory.systemTemp.createTemp('dacx-updater-test-');
+      final missingParent = Directory('${dir.path}/missing');
+      try {
+        final needsElevation = await SelfUpdateService.macInstallNeedsElevation(
+          installPath: '${missingParent.path}/Dacx.app',
+        );
+
+        expect(needsElevation, isTrue);
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    });
+  });
+
   group('SelfUpdateService.isSupported', () {
     test('matches host platform expectations', () {
       // Windows or macOS hosts → true; Linux/other → false. Just check the
@@ -167,4 +326,12 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
       expect(p.fraction, 0.25);
     });
   });
+}
+
+List<int> _hexBytes(String value) {
+  final bytes = <int>[];
+  for (var i = 0; i < value.length; i += 2) {
+    bytes.add(int.parse(value.substring(i, i + 2), radix: 16));
+  }
+  return bytes;
 }

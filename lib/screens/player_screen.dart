@@ -728,13 +728,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'launch_update_failed_notice',
         category: DebugLogCategory.update,
         severity: DebugSeverity.warn,
-        detailsBuilder: () =>
-            {'target': targetVersion, 'actual': pkg.version},
+        detailsBuilder: () => {'target': targetVersion, 'actual': pkg.version},
       );
       messenger.showSnackBar(
-        SnackBar(
-          content: Text('Update to v$targetVersion may have failed.'),
-        ),
+        SnackBar(content: Text('Update to v$targetVersion may have failed.')),
       );
     }
   }

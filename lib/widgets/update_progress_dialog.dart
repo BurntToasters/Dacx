@@ -43,7 +43,8 @@ Future<void> triggerUpdateAction({
 }
 
 /// Returns the right snackbar action label for the current platform.
-String updateActionLabel() => SelfUpdateService.isSupported() ? 'Install' : 'View';
+String updateActionLabel() =>
+    SelfUpdateService.isSupported() ? 'Install' : 'View';
 
 class UpdateProgressDialog extends StatefulWidget {
   const UpdateProgressDialog({
@@ -90,7 +91,8 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
     setState(() => _result = result);
   }
 
-  String _formatMb(int bytes) => '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  String _formatMb(int bytes) =>
+      '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
 
   String _outcomeLabel(SelfUpdateOutcome o) {
     switch (o) {
@@ -100,6 +102,8 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
         return 'The release does not include an installer for this platform.';
       case SelfUpdateOutcome.missingChecksums:
         return 'The release does not include a checksums file. Cannot verify download.';
+      case SelfUpdateOutcome.missingSignature:
+        return 'The release does not include a signed update manifest. Cannot verify update authenticity.';
       case SelfUpdateOutcome.downloadFailed:
         return 'Download failed.';
       case SelfUpdateOutcome.checksumMismatch:
@@ -108,8 +112,10 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
         return 'Could not extract the update package.';
       case SelfUpdateOutcome.signatureInvalid:
         return 'Downloaded app failed code-signature verification.';
-      case SelfUpdateOutcome.notarizationInvalid:
-        return 'Downloaded app failed notarization verification.';
+      case SelfUpdateOutcome.bundleIdentifierMismatch:
+        return 'Downloaded app has an unexpected bundle identifier. Refusing to install.';
+      case SelfUpdateOutcome.versionMismatch:
+        return 'Downloaded app version does not match the selected update. Refusing to install.';
       case SelfUpdateOutcome.teamIdMismatch:
         return 'Downloaded app is signed by an unexpected developer. Refusing to install.';
       case SelfUpdateOutcome.gatekeeperRejected:
@@ -174,10 +180,7 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
           Text(_outcomeLabel(result.outcome)),
           if (result.message != null && result.message!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              result.message!,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(result.message!, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
       ),

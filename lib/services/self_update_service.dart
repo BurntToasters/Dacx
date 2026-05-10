@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'debug_log_service.dart';
+import 'update_trust_config.dart';
 import 'update_service.dart';
 
 typedef HttpStreamFn =
@@ -27,11 +29,13 @@ enum SelfUpdateOutcome {
   unsupportedPlatform,
   missingAsset,
   missingChecksums,
+  missingSignature,
   downloadFailed,
   checksumMismatch,
   extractionFailed,
   signatureInvalid,
-  notarizationInvalid,
+  bundleIdentifierMismatch,
+  versionMismatch,
   teamIdMismatch,
   gatekeeperRejected,
   spawnFailed,
@@ -48,8 +52,9 @@ class SelfUpdateProgress {
   final int downloadedBytes;
   final int? totalBytes;
   const SelfUpdateProgress(this.downloadedBytes, this.totalBytes);
-  double? get fraction =>
-      totalBytes != null && totalBytes! > 0 ? downloadedBytes / totalBytes! : null;
+  double? get fraction => totalBytes != null && totalBytes! > 0
+      ? downloadedBytes / totalBytes!
+      : null;
 }
 
 class SelfUpdateService {
@@ -62,7 +67,16 @@ class SelfUpdateService {
     'DACX_APPLE_TEAM_ID',
     defaultValue: '',
   );
+  static const String expectedWindowsSignerThumbprint = String.fromEnvironment(
+    'DACX_WINDOWS_SIGNER_THUMBPRINT',
+    defaultValue: '',
+  );
   static const String _macInstallPath = '/Applications/Dacx.app';
+  static const String _macBundleIdentifier = 'run.rosie.dacx';
+  static const String _windowsManifestName =
+      'Dacx-update-manifest-Windows-x64.json';
+  static const String _windowsManifestSignatureName =
+      'Dacx-update-manifest-Windows-x64.json.sig';
 
   static const Set<String> _allowedHosts = {
     'github.com',
@@ -163,6 +177,56 @@ class SelfUpdateService {
     return _allowedHosts.contains(uri.host.toLowerCase());
   }
 
+  static Map<String, String> parseCodesignDetails(String text) {
+    final result = <String, String>{};
+    for (final rawLine in const LineSplitter().convert(text)) {
+      final line = rawLine.trim();
+      final idx = line.indexOf('=');
+      if (idx <= 0 || idx == line.length - 1) continue;
+      result[line.substring(0, idx)] = line.substring(idx + 1);
+    }
+    return result;
+  }
+
+  static String normalizeCertificateThumbprint(String value) {
+    return value.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
+  }
+
+  static ({String status, String thumbprint, String message})
+  parseAuthenticodeStatus(String text) {
+    final line = const LineSplitter()
+        .convert(text)
+        .map((s) => s.trim())
+        .firstWhere((s) => s.isNotEmpty, orElse: () => '');
+    final parts = line.split('|');
+    return (
+      status: parts.isNotEmpty ? parts[0].trim() : '',
+      thumbprint: parts.length > 1
+          ? normalizeCertificateThumbprint(parts[1])
+          : '',
+      message: parts.length > 2 ? parts.sublist(2).join('|').trim() : '',
+    );
+  }
+
+  static Future<bool> verifyEd25519Signature({
+    required List<int> message,
+    required List<int> signature,
+    required String publicKeyBase64,
+  }) async {
+    final publicKeyBytes = base64Decode(publicKeyBase64.trim());
+    final algorithm = cryptography.Ed25519();
+    return algorithm.verify(
+      message,
+      signature: cryptography.Signature(
+        signature,
+        publicKey: cryptography.SimplePublicKey(
+          publicKeyBytes,
+          type: cryptography.KeyPairType.ed25519,
+        ),
+      ),
+    );
+  }
+
   /// Cross-platform "Dacx update cache" dir. Mirrors the env-var pattern used
   /// by [InstanceModeService] rather than pulling in path_provider.
   static Directory updateCacheDir() {
@@ -211,13 +275,11 @@ class SelfUpdateService {
     var downloaded = 0;
     final sink = outFile.openWrite();
     try {
-      await resp.stream.listen(
-        (chunk) {
-          sink.add(chunk);
-          downloaded += chunk.length;
-          onProgress?.call(SelfUpdateProgress(downloaded, total));
-        },
-      ).asFuture<void>();
+      await resp.stream.listen((chunk) {
+        sink.add(chunk);
+        downloaded += chunk.length;
+        onProgress?.call(SelfUpdateProgress(downloaded, total));
+      }).asFuture<void>();
     } finally {
       await sink.flush();
       await sink.close();
@@ -235,13 +297,26 @@ class SelfUpdateService {
     if (!_isAllowedHost(url)) {
       throw StateError('Refusing to fetch from non-allowlisted host: $url');
     }
-    final resp = await _httpGet(Uri.parse(url)).timeout(
-      const Duration(seconds: 30),
-    );
+    final resp = await _httpGet(
+      Uri.parse(url),
+    ).timeout(const Duration(seconds: 30));
     if (resp.statusCode != 200) {
       throw StateError('HTTP ${resp.statusCode} from $url');
     }
     return resp.body;
+  }
+
+  Future<List<int>> _fetchBytes(String url) async {
+    if (!_isAllowedHost(url)) {
+      throw StateError('Refusing to fetch from non-allowlisted host: $url');
+    }
+    final resp = await _httpGet(
+      Uri.parse(url),
+    ).timeout(const Duration(seconds: 30));
+    if (resp.statusCode != 200) {
+      throw StateError('HTTP ${resp.statusCode} from $url');
+    }
+    return resp.bodyBytes;
   }
 
   /// Top-level orchestrator. On success returns [SelfUpdateOutcome.spawned]
@@ -282,27 +357,57 @@ class SelfUpdateService {
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
-    final asset = pickAsset(info.assets, '.msi');
+    final asset =
+        pickAssetByPattern(
+          info.assets,
+          RegExp(r'^Dacx-Windows-x64\.msi$', caseSensitive: false),
+        ) ??
+        pickAsset(info.assets, '.msi');
     final checksums = pickAsset(info.assets, 'SHA256SUMS-Windows-x64.txt');
+    final manifest = pickAsset(info.assets, _windowsManifestName);
+    final manifestSignature = pickAsset(
+      info.assets,
+      _windowsManifestSignatureName,
+    );
     if (asset == null) {
       return const SelfUpdateResult(SelfUpdateOutcome.missingAsset);
     }
     if (checksums == null) {
       return const SelfUpdateResult(SelfUpdateOutcome.missingChecksums);
     }
+    if (manifest == null || manifestSignature == null) {
+      return const SelfUpdateResult(SelfUpdateOutcome.missingSignature);
+    }
 
     final cacheDir = updateCacheDir();
     final msiPath = File(p.join(cacheDir.path, asset.name));
 
     String checksumsBody;
+    List<int> manifestBytes;
+    List<int> manifestSignatureBytes;
     try {
       await _downloadTo(asset.downloadUrl, msiPath, onProgress: onProgress);
       checksumsBody = await _fetchText(checksums.downloadUrl);
+      manifestBytes = await _fetchBytes(manifest.downloadUrl);
+      final manifestSignatureBody = await _fetchText(
+        manifestSignature.downloadUrl,
+      );
+      manifestSignatureBytes = base64Decode(manifestSignatureBody.trim());
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.downloadFailed,
         message: e.toString(),
       );
+    }
+
+    final manifestResult = await _validateWindowsManifest(
+      manifestBytes: manifestBytes,
+      signatureBytes: manifestSignatureBytes,
+      version: info.version,
+      assetName: asset.name,
+    );
+    if (manifestResult.outcome != SelfUpdateOutcome.spawned) {
+      return manifestResult;
     }
 
     final expectedHash = parseChecksumsFile(checksumsBody, asset.name);
@@ -320,15 +425,37 @@ class SelfUpdateService {
       );
     }
 
+    final manifestHash = _hashFromWindowsManifest(manifestBytes, asset.name);
+    if (manifestHash == null) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.checksumMismatch,
+        message: 'No MSI entry in signed update manifest',
+      );
+    }
+    if (actualHash != manifestHash) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.checksumMismatch,
+        message: 'signed manifest expected $manifestHash, got $actualHash',
+      );
+    }
+
+    if (expectedWindowsSignerThumbprint.isNotEmpty) {
+      final signature = await _validateWindowsInstallerSignature(msiPath);
+      if (signature.outcome != SelfUpdateOutcome.spawned) {
+        return signature;
+      }
+    }
+
     // Watchdog .cmd polls until our PID exits, then runs msiexec.
     final cmdPath = File(p.join(cacheDir.path, 'apply-update.cmd'));
     await cmdPath.writeAsString(_buildWindowsWatchdogCmd());
     try {
-      await _processStart(
-        cmdPath.path,
-        [pid.toString(), msiPath.path],
-        mode: ProcessStartMode.detached,
-      );
+      await _processStart(cmdPath.path, [
+        pid.toString(),
+        msiPath.path,
+        normalizeCertificateThumbprint(expectedWindowsSignerThumbprint),
+        actualHash,
+      ], mode: ProcessStartMode.detached);
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.spawnFailed,
@@ -346,12 +473,151 @@ class SelfUpdateService {
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
+  Future<SelfUpdateResult> _validateWindowsManifest({
+    required List<int> manifestBytes,
+    required List<int> signatureBytes,
+    required String version,
+    required String assetName,
+  }) async {
+    final publicKey = UpdateTrustConfig.windowsManifestPublicKeyBase64.trim();
+    if (publicKey.isEmpty) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message:
+            'Self-update is misconfigured: Windows update manifest public key is not set.',
+      );
+    }
+
+    bool isValid;
+    try {
+      isValid = await verifyEd25519Signature(
+        message: manifestBytes,
+        signature: signatureBytes,
+        publicKeyBase64: publicKey,
+      );
+    } catch (e) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: e.toString(),
+      );
+    }
+    if (!isValid) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: 'Windows update manifest signature is invalid.',
+      );
+    }
+
+    final decoded = jsonDecode(utf8.decode(manifestBytes));
+    if (decoded is! Map<String, dynamic>) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: 'Windows update manifest is malformed.',
+      );
+    }
+    if (decoded['version'] != version) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.versionMismatch,
+        message: 'expected $version, got "${decoded['version']}"',
+      );
+    }
+    final assets = decoded['assets'];
+    if (assets is! Map || assets[assetName] is! String) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.checksumMismatch,
+        message: 'Windows update manifest does not include the MSI asset.',
+      );
+    }
+    return const SelfUpdateResult(SelfUpdateOutcome.spawned);
+  }
+
+  static String? _hashFromWindowsManifest(
+    List<int> manifestBytes,
+    String assetName,
+  ) {
+    final decoded = jsonDecode(utf8.decode(manifestBytes));
+    if (decoded is! Map<String, dynamic>) return null;
+    final assets = decoded['assets'];
+    if (assets is! Map) return null;
+    final hash = assets[assetName];
+    if (hash is! String) return null;
+    if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(hash)) return null;
+    return hash.toLowerCase();
+  }
+
+  Future<SelfUpdateResult> _validateWindowsInstallerSignature(File file) async {
+    final expected = normalizeCertificateThumbprint(
+      expectedWindowsSignerThumbprint,
+    );
+    if (expected.isEmpty) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message:
+            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT was not set at build time.',
+      );
+    }
+
+    final authenticodeCommand = [
+      r"$sig = Get-AuthenticodeSignature -LiteralPath $args[0];",
+      r"$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' };",
+      r"Write-Output ($sig.Status.ToString() + '|' + $thumb + '|' + $sig.StatusMessage)",
+    ].join(' ');
+    final result = await _processRun('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      authenticodeCommand,
+      file.path,
+    ]);
+    if (result.exitCode != 0) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: result.stderr.toString(),
+      );
+    }
+
+    final parsed = parseAuthenticodeStatus(result.stdout.toString());
+    if (parsed.status != 'Valid') {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: parsed.message.isNotEmpty
+            ? parsed.message
+            : 'Authenticode status: ${parsed.status}',
+      );
+    }
+    if (parsed.thumbprint != expected) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: 'expected signer $expected, got "${parsed.thumbprint}"',
+      );
+    }
+    return const SelfUpdateResult(SelfUpdateOutcome.spawned);
+  }
+
   static String _buildWindowsWatchdogCmd() {
     return '@echo off\r\n'
+        'setlocal\r\n'
+        'set "DACX_PID=%~1"\r\n'
+        'set "DACX_MSI=%~2"\r\n'
+        'set "DACX_EXPECTED_THUMBPRINT=%~3"\r\n'
+        'set "DACX_EXPECTED_SHA256=%~4"\r\n'
         ':wait\r\n'
-        'tasklist /FI "PID eq %1" 2>nul | find "%1" >nul && '
+        'tasklist /FI "PID eq %DACX_PID%" 2>nul | find "%DACX_PID%" >nul && '
         '(timeout /t 1 /nobreak >nul & goto wait)\r\n'
-        'start "" /wait msiexec.exe /i "%2" /passive /norestart\r\n';
+        'for /f %%H in (\'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+        '"(Get-FileHash -Algorithm SHA256 -LiteralPath \$env:DACX_MSI).Hash.ToLowerInvariant()"\') do set "DACX_ACTUAL_SHA256=%%H"\r\n'
+        'if /I not "%DACX_ACTUAL_SHA256%"=="%DACX_EXPECTED_SHA256%" exit /b 12\r\n'
+        'if "%DACX_EXPECTED_THUMBPRINT%"=="" goto install\r\n'
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+        "\"\$sig = Get-AuthenticodeSignature -LiteralPath \$env:DACX_MSI; "
+        "if (\$sig.Status -ne 'Valid') { exit 10 }; "
+        "\$thumb = \$sig.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', ''; "
+        "\$expected = \$env:DACX_EXPECTED_THUMBPRINT -replace '[^0-9A-Fa-f]', ''; "
+        "if (\$thumb -ine \$expected) { exit 11 }\"\r\n"
+        'if errorlevel 1 exit /b %errorlevel%\r\n'
+        ':install\r\n'
+        'start "" /wait msiexec.exe /i "%DACX_MSI%" /passive /norestart\r\n';
   }
 
   // ─────────────────────────────────────────────── macOS path
@@ -440,7 +706,10 @@ class SelfUpdateService {
       );
     }
 
-    final validation = await _validateMacBundle(extractedAppPath);
+    final validation = await _validateMacBundle(
+      extractedAppPath,
+      expectedVersion: info.version,
+    );
     if (validation.outcome != SelfUpdateOutcome.spawned) {
       return validation;
     }
@@ -453,22 +722,39 @@ class SelfUpdateService {
       );
     }
 
+    final helperArgs = [
+      '--wait-pid',
+      pid.toString(),
+      '--new-app',
+      extractedAppPath,
+      '--expected-team-id',
+      expectedTeamId,
+      '--expected-version',
+      info.version,
+      '--relaunch',
+    ];
     try {
-      await _processStart(
-        helperPath,
-        [
-          '--wait-pid',
-          pid.toString(),
-          '--new-app',
-          extractedAppPath,
-          '--install-path',
-          _macInstallPath,
-          '--expected-team-id',
-          expectedTeamId,
-          '--relaunch',
-        ],
-        mode: ProcessStartMode.detached,
-      );
+      final needsElevation = await macInstallNeedsElevation();
+      if (needsElevation) {
+        final elevated = await _processRun('/usr/bin/osascript', [
+          '-e',
+          _buildAdministratorLaunchScript([helperPath, ...helperArgs]),
+        ]);
+        if (elevated.exitCode != 0) {
+          return SelfUpdateResult(
+            SelfUpdateOutcome.spawnFailed,
+            message: elevated.stderr.toString().trim().isNotEmpty
+                ? elevated.stderr.toString()
+                : elevated.stdout.toString(),
+          );
+        }
+      } else {
+        await _processStart(
+          helperPath,
+          helperArgs,
+          mode: ProcessStartMode.detached,
+        );
+      }
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.spawnFailed,
@@ -487,23 +773,57 @@ class SelfUpdateService {
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
-  /// Runs the four-stage Gatekeeper-respecting validation pipeline against
+  static Future<bool> macInstallNeedsElevation({
+    String installPath = _macInstallPath,
+  }) async {
+    final applicationsDir = Directory(p.dirname(installPath));
+    final probe = Directory(
+      p.join(
+        applicationsDir.path,
+        '.dacx-update-write-test-$pid-${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    );
+    try {
+      await probe.create();
+      await probe.delete();
+      return false;
+    } catch (_) {
+      try {
+        if (probe.existsSync()) {
+          probe.deleteSync(recursive: true);
+        }
+      } catch (_) {}
+      return true;
+    }
+  }
+
+  static String _buildAdministratorLaunchScript(List<String> argv) {
+    final command = [
+      ...argv.map(_shellQuote),
+      '>/dev/null',
+      '2>&1',
+      '&',
+    ].join(' ');
+    return 'do shell script ${_appleScriptString(command)} with administrator privileges';
+  }
+
+  static String _shellQuote(String value) {
+    return "'${value.replaceAll("'", "'\\''")}'";
+  }
+
+  static String _appleScriptString(String value) {
+    return '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"';
+  }
+
+  /// Runs a Gatekeeper-respecting validation pipeline against
   /// the bundle at [appPath]. Returns SelfUpdateOutcome.spawned on full pass
   /// (sentinel meaning "ok to continue"); any other outcome is a failure.
-  Future<SelfUpdateResult> _validateMacBundle(String appPath) async {
-    // 1. stapler validate
-    final stapler = await _processRun('/usr/bin/xcrun', [
-      'stapler',
-      'validate',
-      appPath,
-    ]);
-    if (stapler.exitCode != 0) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.notarizationInvalid,
-        message: stapler.stderr.toString(),
-      );
-    }
-    // 2. codesign --verify --deep --strict
+  Future<SelfUpdateResult> _validateMacBundle(
+    String appPath, {
+    required String expectedVersion,
+  }) async {
+    // 1. Verify the full nested code signature. This uses the built-in
+    // codesign tool only; no Xcode/CLT-only stapler dependency at runtime.
     final verify = await _processRun('/usr/bin/codesign', [
       '--verify',
       '--deep',
@@ -517,25 +837,52 @@ class SelfUpdateService {
         message: verify.stderr.toString(),
       );
     }
-    // 3. Team ID parse
+
+    // 2. Read signed code metadata and make sure this is Dacx from our team.
     final dv = await _processRun('/usr/bin/codesign', [
       '-dv',
       '--verbose=4',
       appPath,
     ]);
+    if (dv.exitCode != 0) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: dv.stderr.toString(),
+      );
+    }
     final dvOutput = '${dv.stdout}\n${dv.stderr}';
-    final teamMatch = RegExp(
-      r'^TeamIdentifier=([A-Za-z0-9]+)',
-      multiLine: true,
-    ).firstMatch(dvOutput);
-    final actualTeamId = teamMatch?.group(1) ?? '';
+    final details = parseCodesignDetails(dvOutput);
+    final actualIdentifier = details['Identifier'] ?? '';
+    if (actualIdentifier != _macBundleIdentifier) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.bundleIdentifierMismatch,
+        message: 'expected $_macBundleIdentifier, got "$actualIdentifier"',
+      );
+    }
+    final actualTeamId = details['TeamIdentifier'] ?? '';
     if (actualTeamId != expectedTeamId) {
       return SelfUpdateResult(
         SelfUpdateOutcome.teamIdMismatch,
         message: 'expected $expectedTeamId, got "$actualTeamId"',
       );
     }
-    // 4. spctl --assess
+
+    // 3. Check the signed Info.plist version matches the release selected.
+    final version = await _processRun('/usr/libexec/PlistBuddy', [
+      '-c',
+      'Print :CFBundleShortVersionString',
+      p.join(appPath, 'Contents', 'Info.plist'),
+    ]);
+    final actualVersion = version.stdout.toString().trim();
+    if (version.exitCode != 0 || actualVersion != expectedVersion) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.versionMismatch,
+        message: 'expected $expectedVersion, got "$actualVersion"',
+      );
+    }
+
+    // 4. Ask Gatekeeper to assess the app. This validates notarization without
+    // relying on the developer-only `xcrun stapler` command being installed.
     final spctl = await _processRun('/usr/sbin/spctl', [
       '--assess',
       '--type',
