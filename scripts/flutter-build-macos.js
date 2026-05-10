@@ -44,7 +44,19 @@ if (effectiveDeveloperDir) {
   console.log('Using active xcode-select developer directory.');
 }
 
-const result = spawnSync('fvm', ['flutter', 'build', 'macos', '--release'], {
+const teamId = (env.APPLE_TEAM_ID ?? '').trim();
+if (!teamId) {
+  console.warn(
+    'WARN: APPLE_TEAM_ID not set in .env — self-update Team ID check will fail at runtime.',
+  );
+}
+
+const flutterArgs = ['flutter', 'build', 'macos', '--release'];
+if (teamId) {
+  flutterArgs.push(`--dart-define=DACX_APPLE_TEAM_ID=${teamId}`);
+}
+
+const result = spawnSync('fvm', flutterArgs, {
   stdio: 'inherit',
   env,
   shell: true,

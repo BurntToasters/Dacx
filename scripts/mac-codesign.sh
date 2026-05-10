@@ -43,6 +43,11 @@ else
   echo "WARN: Missing $MUSIC_ICON_SOURCE; audio files will use the default document icon."
 fi
 
+# Build self-update helper directly into the bundle (signed below).
+HELPER_OUT="$APP_BUNDLE/Contents/MacOS/dacx-update-helper"
+echo "Building update helper → $HELPER_OUT"
+bash "$ROOT/macos/Helper/build-helper.sh" --output "$HELPER_OUT"
+
 # Signing
 echo "Codesigning ${APP_BUNDLE}..."
 
@@ -57,6 +62,13 @@ find "$APP_BUNDLE" -type d -name "*.framework" -print0 | while IFS= read -r -d '
   codesign --force --options runtime --timestamp \
     --sign "$APPLE_SIGNING_IDENTITY" "$fw"
 done
+
+# Sign the update helper before the parent bundle (codesign rules require
+# nested executables to be signed inside-out).
+if [[ -f "$HELPER_OUT" ]]; then
+  codesign --force --options runtime --timestamp \
+    --sign "$APPLE_SIGNING_IDENTITY" "$HELPER_OUT"
+fi
 
 codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS_FILE" \
@@ -92,6 +104,43 @@ xcrun stapler staple "$APP_BUNDLE"
 # Re-zip with stapled ticket
 rm -f "$ZIP_PATH"
 ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+
+echo "Verifying final zip payload..."
+ZIP_VERIFY_DIR="$(mktemp -d)"
+cleanup_zip_verify() {
+  rm -rf "$ZIP_VERIFY_DIR"
+}
+trap cleanup_zip_verify EXIT
+
+ditto -x -k --sequesterRsrc "$ZIP_PATH" "$ZIP_VERIFY_DIR"
+ZIP_VERIFY_APP="$ZIP_VERIFY_DIR/${APP_NAME}.app"
+ZIP_VERIFY_INFO="$ZIP_VERIFY_APP/Contents/Info.plist"
+
+if [[ ! -d "$ZIP_VERIFY_APP" ]]; then
+  echo "ERROR: Final zip did not extract ${APP_NAME}.app"
+  exit 1
+fi
+
+ZIP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$ZIP_VERIFY_INFO")"
+if [[ "$ZIP_BUNDLE_ID" != "run.rosie.dacx" ]]; then
+  echo "ERROR: Final zip app bundle id is $ZIP_BUNDLE_ID, expected run.rosie.dacx"
+  exit 1
+fi
+
+ZIP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ZIP_VERIFY_INFO")"
+if [[ "$ZIP_VERSION" != "$PKG_VERSION" ]]; then
+  echo "ERROR: Final zip app version is $ZIP_VERSION, expected $PKG_VERSION"
+  exit 1
+fi
+
+codesign --verify --deep --strict --verbose=2 "$ZIP_VERIFY_APP"
+if ! spctl --assess --type execute --verbose=4 "$ZIP_VERIFY_APP"; then
+  echo "ERROR: spctl assessment failed for app extracted from final zip"
+  exit 1
+fi
+
+cleanup_zip_verify
+trap - EXIT
 
 # DMG
 DMG_NAME="Dacx-macOS.dmg"

@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.8.0-beta.1",
+  "version": "0.8.0-beta.2",
   "private": true,
   "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
   "license": "GPL-3.0-only",
@@ -41,7 +41,7 @@
     "check:mac:toolchain": "node scripts/check-mac-toolchain.js",
     "licenses": "node scripts/generate-licenses.js",
     "build": "fvm flutter build",
-    "build:win": "npm run sync-version && fvm flutter pub get && npm run patch:media-kit:win-cmake && fvm flutter build windows --release",
+    "build:win": "npm run sync-version && fvm flutter pub get && npm run patch:media-kit:win-cmake && node scripts/flutter-build-windows.js",
     "build:mac": "npm run sync-version && npm run check:mac:toolchain && node scripts/flutter-build-macos.js",
     "build:linux": "npm run sync-version && fvm flutter pub get && npm run patch:media-kit:linux-cmake && fvm flutter build linux --release",
     "test": "fvm flutter test",
@@ -86,7 +86,8 @@
     "release:linux:x64": "npm run release:linux",
     "gitprune": "node scripts/git-prune-local-branches.js",
     "gitprune:dry": "node scripts/git-prune-local-branches.js --dry-run",
-    "gitprune:force": "node scripts/git-prune-local-branches.js --force"
+    "gitprune:force": "node scripts/git-prune-local-branches.js --force",
+    "localbuild:mac": "npm run build:mac && npm run release:package:mac && dotenv -e .env -- node scripts/post-release-assets.js"
   },
   "devDependencies": {
     "dotenv-cli": "^8.0.0"

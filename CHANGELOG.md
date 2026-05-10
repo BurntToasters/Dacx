@@ -16,6 +16,11 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 *This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
+## Changes in `v0.8.0-beta.2:`
+* **NEW - Self updater:** Added a new experimental custom self updater for Windows and macOS
+  * **Windows:** Verifies new json signature file when downloading and verifies .msi SHA256SUM and then launches `msiexec`.
+  * **MacOS:** Helper spawns in, closes Dacx, downloads .zip from github, verifies SHA256 sum and unzips .zip, verifies code signature for unzipped .app, overwrites current app in /Applications/.
+
 ## Changes in `v0.8.0-beta.1:`
 *Welcome to the first REAL beta of Dacx! Dacx like my other projects now has two update channels: `STABLE` and `BETA`.*
 * **NEW - Update channels:** Added the ability for users to switch between `STABLE` and `BETA` updates for Dacx!
