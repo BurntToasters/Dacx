@@ -130,10 +130,21 @@ func teamId(of appPath: String) -> String? {
     return codesignDetails(of: appPath)?["TeamIdentifier"]
 }
 
-func shortVersion(of appPath: String) -> String? {
+struct BundleVersion {
+    let value: String
+    let source: String
+}
+
+func releaseVersion(of appPath: String) -> BundleVersion? {
     let infoPath = appPath + "/Contents/Info.plist"
     guard let plist = NSDictionary(contentsOfFile: infoPath) else { return nil }
-    return plist["CFBundleShortVersionString"] as? String
+    if let version = plist["DacxReleaseVersion"] as? String, !version.isEmpty {
+        return BundleVersion(value: version, source: "DacxReleaseVersion")
+    }
+    if let version = plist["CFBundleShortVersionString"] as? String, !version.isEmpty {
+        return BundleVersion(value: version, source: "CFBundleShortVersionString")
+    }
+    return nil
 }
 
 enum ValidationFailure: Error {
@@ -164,9 +175,14 @@ func validateBundle(_ appPath: String, expectedTeamId: String, expectedVersion: 
     if actual != expectedTeamId {
         return .teamMismatch("expected \(expectedTeamId), got \(actual)")
     }
-    let actualVersion = shortVersion(of: appPath) ?? ""
-    if actualVersion != expectedVersion {
-        return .versionMismatch("expected \(expectedVersion), got \(actualVersion)")
+    guard let actualVersion = releaseVersion(of: appPath) else {
+        return .versionMismatch("could not read DacxReleaseVersion")
+    }
+    if expectedVersion.contains("-") && actualVersion.source != "DacxReleaseVersion" {
+        return .versionMismatch("prerelease bundle is missing DacxReleaseVersion")
+    }
+    if actualVersion.value != expectedVersion {
+        return .versionMismatch("expected \(expectedVersion), got \(actualVersion.value)")
     }
     let spctl = runCommand("/usr/sbin/spctl", [
         "--assess", "--type", "execute", "--verbose=2", appPath,

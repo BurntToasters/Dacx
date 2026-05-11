@@ -13,6 +13,7 @@ PKG_VERSION="$(node -p "require('$ROOT/package.json').version")"
 APP_NAME="Dacx"
 BUILD_DIR="$ROOT/build/macos/Build/Products/Release"
 APP_BUNDLE="$BUILD_DIR/${APP_NAME}.app"
+APP_INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 ZIP_NAME="${APP_NAME}-${PKG_VERSION}-macos.zip"
 ZIP_PATH="$ROOT/release/$ZIP_NAME"
 ENTITLEMENTS_FILE="$ROOT/macos/Runner/Release.entitlements"
@@ -47,6 +48,10 @@ fi
 HELPER_OUT="$APP_BUNDLE/Contents/MacOS/dacx-update-helper"
 echo "Building update helper → $HELPER_OUT"
 bash "$ROOT/macos/Helper/build-helper.sh" --output "$HELPER_OUT"
+
+# Preserve the raw release SemVer in the signed bundle.
+/usr/libexec/PlistBuddy -c "Set :DacxReleaseVersion $PKG_VERSION" "$APP_INFO_PLIST" 2>/dev/null ||
+  /usr/libexec/PlistBuddy -c "Add :DacxReleaseVersion string $PKG_VERSION" "$APP_INFO_PLIST"
 
 # Signing
 echo "Codesigning ${APP_BUNDLE}..."
@@ -127,9 +132,9 @@ if [[ "$ZIP_BUNDLE_ID" != "run.rosie.dacx" ]]; then
   exit 1
 fi
 
-ZIP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ZIP_VERIFY_INFO")"
-if [[ "$ZIP_VERSION" != "$PKG_VERSION" ]]; then
-  echo "ERROR: Final zip app version is $ZIP_VERSION, expected $PKG_VERSION"
+ZIP_RELEASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :DacxReleaseVersion' "$ZIP_VERIFY_INFO")"
+if [[ "$ZIP_RELEASE_VERSION" != "$PKG_VERSION" ]]; then
+  echo "ERROR: Final zip app release version is $ZIP_RELEASE_VERSION, expected $PKG_VERSION"
   exit 1
 fi
 
