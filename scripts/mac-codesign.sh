@@ -64,15 +64,18 @@ find_codesigning_identities | grep -F "$APPLE_SIGNING_IDENTITY" >/dev/null || {
 
 SIGN_TEST_DIR="$(mktemp -d)"
 SIGN_TEST_FILE="$SIGN_TEST_DIR/codesign-access-test"
+SIGN_TEST_LOG="$SIGN_TEST_DIR/codesign-access-test.log"
 printf 'dacx codesign access test\n' > "$SIGN_TEST_FILE"
 cleanup_sign_test() {
   rm -rf "$SIGN_TEST_DIR"
 }
 trap cleanup_sign_test EXIT
-if ! run_codesign --force --timestamp=none --sign "$APPLE_SIGNING_IDENTITY" "$SIGN_TEST_FILE" >/dev/null 2>&1; then
+if ! run_codesign --force --timestamp=none --sign "$APPLE_SIGNING_IDENTITY" "$SIGN_TEST_FILE" >"$SIGN_TEST_LOG" 2>&1; then
   echo "ERROR: codesign could not use APPLE_SIGNING_IDENTITY."
   echo "       This usually means the private key is missing, the keychain is locked,"
   echo "       or codesign is not allowed to access the private key in this SSH session."
+  echo "       codesign output:"
+  sed 's/^/         /' "$SIGN_TEST_LOG"
   echo "       Try: npm run release:mac:ssh"
   exit 1
 fi
