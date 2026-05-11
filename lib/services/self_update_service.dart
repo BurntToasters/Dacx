@@ -867,17 +867,25 @@ class SelfUpdateService {
       );
     }
 
-    // 3. Check the signed Info.plist version matches the release selected.
-    final version = await _processRun('/usr/libexec/PlistBuddy', [
-      '-c',
-      'Print :CFBundleShortVersionString',
-      p.join(appPath, 'Contents', 'Info.plist'),
-    ]);
-    final actualVersion = version.stdout.toString().trim();
-    if (version.exitCode != 0 || actualVersion != expectedVersion) {
+    final version = await _readMacBundleReleaseVersion(appPath);
+    if (version == null) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.versionMismatch,
+        message: 'DacxReleaseVersion not found in bundle Info.plist',
+      );
+    }
+    if (version.source != 'DacxReleaseVersion' &&
+        expectedVersion.contains('-')) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.versionMismatch,
+        message:
+            'Prerelease macOS updates must include DacxReleaseVersion in bundle Info.plist',
+      );
+    }
+    if (version.value != expectedVersion) {
       return SelfUpdateResult(
         SelfUpdateOutcome.versionMismatch,
-        message: 'expected $expectedVersion, got "$actualVersion"',
+        message: 'expected $expectedVersion, got "${version.value}"',
       );
     }
 
@@ -897,6 +905,27 @@ class SelfUpdateService {
       );
     }
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
+  }
+
+  Future<({String value, String source})?> _readMacBundleReleaseVersion(
+    String appPath,
+  ) async {
+    final infoPlist = p.join(appPath, 'Contents', 'Info.plist');
+    for (final key in const [
+      'DacxReleaseVersion',
+      'CFBundleShortVersionString',
+    ]) {
+      final result = await _processRun('/usr/libexec/PlistBuddy', [
+        '-c',
+        'Print :$key',
+        infoPlist,
+      ]);
+      final value = result.stdout.toString().trim();
+      if (result.exitCode == 0 && value.isNotEmpty) {
+        return (value: value, source: key);
+      }
+    }
+    return null;
   }
 
   static String? _resolveMacHelperPath() {
