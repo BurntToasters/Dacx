@@ -20,7 +20,7 @@ ENTITLEMENTS_FILE="$ROOT/macos/Runner/Release.entitlements"
 MUSIC_ICON_SOURCE="$ROOT/assets/dacx_music_icon.png"
 MUSIC_ICON_NAME="dacx_music_icon.icns"
 MUSIC_ICON_DEST="$APP_BUNDLE/Contents/Resources/$MUSIC_ICON_NAME"
-KEYCHAIN_PATH="${KEYCHAIN_PATH:-}"
+KEYCHAIN_PATH="${KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
 
 find_codesigning_identities() {
   if [[ -n "$KEYCHAIN_PATH" ]]; then
@@ -31,11 +31,23 @@ find_codesigning_identities() {
 }
 
 run_codesign() {
-  if [[ -n "$KEYCHAIN_PATH" ]]; then
-    codesign --keychain "$KEYCHAIN_PATH" "$@"
-  else
-    codesign "$@"
-  fi
+  codesign --keychain "$KEYCHAIN_PATH" "$@"
+}
+
+keychain_password_from_dotenv() {
+  local name="$1"
+  [[ -f "$ROOT/.env" ]] || return 0
+  awk -F= -v key="$name" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+      val=substr($0, index($0, "=") + 1)
+      sub(/\r$/, "", val)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+      if ((val ~ /^".*"$/) || (val ~ /^'\''.*'\''$/)) {
+        val=substr(val, 2, length(val)-2)
+      }
+      print val
+    }
+  ' "$ROOT/.env" | tail -n 1
 }
 
 # Validate
@@ -43,6 +55,26 @@ run_codesign() {
 : "${APPLE_ID:?Set APPLE_ID in .env}"
 : "${APPLE_PASSWORD:?Set APPLE_PASSWORD in .env}"
 : "${APPLE_TEAM_ID:?Set APPLE_TEAM_ID in .env}"
+
+if [[ -z "${KEYCHAIN_PASSWORD:-}" && -n "${SSH_USER_PWD:-}" ]]; then
+  KEYCHAIN_PASSWORD="$SSH_USER_PWD"
+fi
+if [[ -z "${KEYCHAIN_PASSWORD:-}" ]]; then
+  KEYCHAIN_PASSWORD="$(keychain_password_from_dotenv KEYCHAIN_PASSWORD)"
+fi
+if [[ -z "${KEYCHAIN_PASSWORD:-}" ]]; then
+  KEYCHAIN_PASSWORD="$(keychain_password_from_dotenv SSH_USER_PWD)"
+fi
+if [[ -n "${KEYCHAIN_PASSWORD:-}" ]]; then
+  echo "Preparing keychain for codesign: $KEYCHAIN_PATH"
+  security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+  security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+  security list-keychains -d user -s "$KEYCHAIN_PATH"
+  security default-keychain -d user -s "$KEYCHAIN_PATH"
+  security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+else
+  echo "WARN: KEYCHAIN_PASSWORD/SSH_USER_PWD not set; assuming keychain is already unlocked for codesign."
+fi
 
 if [[ ! -d "$APP_BUNDLE" ]]; then
   echo "ERROR: App bundle not found at $APP_BUNDLE"
