@@ -22,6 +22,7 @@ const defaultTimeoutMs = 300_000;
 function createInitialResults() {
   return {
     "version-sync": { status: "pending" },
+    "pub-get": { status: "pending" },
     static: { status: "pending" },
     hygiene: { status: "pending" },
     "metainfo-idempotency": { status: "pending" },
@@ -132,6 +133,7 @@ ${colors.reset}`);
   );
 
   console.log(`${colors.bold}Version sync:${colors.reset} ${fmt("version-sync")}`);
+  console.log(`${colors.bold}Pub get:${colors.reset}      ${fmt("pub-get")}`);
   console.log(`${colors.bold}Static:${colors.reset}       ${fmt("static")}`);
   console.log(`${colors.bold}Hygiene:${colors.reset}      ${fmt("hygiene")}`);
   console.log(`${colors.bold}Metainfo:${colors.reset}     ${fmt("metainfo-idempotency")}`);
@@ -175,6 +177,7 @@ function main() {
     null,
     results,
   );
+  runCommand("pub-get", "flutter", ["pub", "get"], null, results);
   runCommand("static", "node", ["scripts/check-static.js"], null, results);
   runCommand("hygiene", "node", ["scripts/check-hygiene.js"], null, results);
   runCommand(

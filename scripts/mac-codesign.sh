@@ -20,6 +20,23 @@ ENTITLEMENTS_FILE="$ROOT/macos/Runner/Release.entitlements"
 MUSIC_ICON_SOURCE="$ROOT/assets/dacx_music_icon.png"
 MUSIC_ICON_NAME="dacx_music_icon.icns"
 MUSIC_ICON_DEST="$APP_BUNDLE/Contents/Resources/$MUSIC_ICON_NAME"
+KEYCHAIN_PATH="${KEYCHAIN_PATH:-}"
+
+find_codesigning_identities() {
+  if [[ -n "$KEYCHAIN_PATH" ]]; then
+    security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+  else
+    security find-identity -v -p codesigning
+  fi
+}
+
+run_codesign() {
+  if [[ -n "$KEYCHAIN_PATH" ]]; then
+    codesign --keychain "$KEYCHAIN_PATH" "$@"
+  else
+    codesign "$@"
+  fi
+}
 
 # Validate
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY in .env}"
@@ -37,6 +54,13 @@ if [[ ! -f "$ENTITLEMENTS_FILE" ]]; then
   echo "ERROR: Entitlements file not found at $ENTITLEMENTS_FILE"
   exit 1
 fi
+
+find_codesigning_identities | grep -F "$APPLE_SIGNING_IDENTITY" >/dev/null || {
+  echo "ERROR: APPLE_SIGNING_IDENTITY was not found in the codesigning identities."
+  echo "       Identity: $APPLE_SIGNING_IDENTITY"
+  echo "       Run: security find-identity -v -p codesigning${KEYCHAIN_PATH:+ \"$KEYCHAIN_PATH\"}"
+  exit 1
+}
 
 if [[ -f "$MUSIC_ICON_SOURCE" ]]; then
   bash "$ROOT/scripts/embed-mac-document-icon.sh" "$APP_BUNDLE"
@@ -58,24 +82,24 @@ echo "Codesigning ${APP_BUNDLE}..."
 
 # Sign all embedded dylibs first (files)
 find "$APP_BUNDLE" -type f -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
-  codesign --force --options runtime --timestamp \
+  run_codesign --force --options runtime --timestamp \
     --sign "$APPLE_SIGNING_IDENTITY" "$lib"
 done
 
 # Sign all embedded frameworks (directories)
 find "$APP_BUNDLE" -type d -name "*.framework" -print0 | while IFS= read -r -d '' fw; do
-  codesign --force --options runtime --timestamp \
+  run_codesign --force --options runtime --timestamp \
     --sign "$APPLE_SIGNING_IDENTITY" "$fw"
 done
 
 # Sign the update helper before the parent bundle (codesign rules require
 # nested executables to be signed inside-out).
 if [[ -f "$HELPER_OUT" ]]; then
-  codesign --force --options runtime --timestamp \
+  run_codesign --force --options runtime --timestamp \
     --sign "$APPLE_SIGNING_IDENTITY" "$HELPER_OUT"
 fi
 
-codesign --force --options runtime --timestamp \
+run_codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS_FILE" \
   --sign "$APPLE_SIGNING_IDENTITY" \
   "$APP_BUNDLE"
@@ -164,7 +188,7 @@ hdiutil create -volname "Dacx" -srcfolder "$DMG_STAGE" \
 rm -rf "$DMG_STAGE"
 
 # Sign DMG
-codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+run_codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
 
 # Notarize DMG so Gatekeeper can verify it offline (the inner .app is already
 # stapled, but stapling the DMG too lets users mount it without a network

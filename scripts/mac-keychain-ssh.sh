@@ -7,27 +7,9 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 KEYCHAIN_PATH="${KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
-DOTENV_FILE="${DOTENV_FILE:-.env}"
 
 if [[ -z "${KEYCHAIN_PASSWORD:-}" && -n "${SSH_USER_PWD:-}" ]]; then
   KEYCHAIN_PASSWORD="${SSH_USER_PWD}"
-fi
-
-if [[ -z "${KEYCHAIN_PASSWORD:-}" && -f "$DOTENV_FILE" ]]; then
-  DOTENV_SSH_USER_PWD="$(awk -F= '
-    /^[[:space:]]*SSH_USER_PWD[[:space:]]*=/ {
-      val=substr($0, index($0, "=") + 1)
-      sub(/\r$/, "", val)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
-      if ((val ~ /^".*"$/) || (val ~ /^'\''.*'\''$/)) {
-        val=substr(val, 2, length(val)-2)
-      }
-      print val
-    }
-  ' "$DOTENV_FILE" | tail -n 1)"
-  if [[ -n "$DOTENV_SSH_USER_PWD" ]]; then
-    KEYCHAIN_PASSWORD="$DOTENV_SSH_USER_PWD"
-  fi
 fi
 
 if [[ -z "${KEYCHAIN_PASSWORD:-}" ]]; then
