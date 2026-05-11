@@ -297,6 +297,33 @@ void main() {
   });
 
   group('UpdateService macOS version normalization', () {
+    test('reads plist string values without spawning macOS tools', () {
+      const plist = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>CFBundleShortVersionString</key>
+  <string>0.8.0.2</string>
+  <key>DacxReleaseVersion</key>
+  <string>0.8.0-beta.2</string>
+</dict>
+</plist>
+''';
+
+      expect(
+        UpdateService.parseBundleInfoString(plist, 'DacxReleaseVersion'),
+        '0.8.0-beta.2',
+      );
+      expect(
+        UpdateService.parseBundleInfoString(
+          plist,
+          'CFBundleShortVersionString',
+        ),
+        '0.8.0.2',
+      );
+      expect(UpdateService.parseBundleInfoString(plist, 'Missing'), isNull);
+    });
+
     test(
       'maps normalized four-part beta bundle version back to semver beta',
       () {

@@ -84,8 +84,8 @@ echo "Verifying codesign..."
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 echo "Verifying entitlements..."
-if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.apple.security.files.user-selected.read-only'; then
-  echo "ERROR: Missing file picker entitlement after signing."
+if codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.apple.security.app-sandbox'; then
+  echo "ERROR: Release app is sandboxed, but the self-updater needs to spawn validation and helper tools."
   exit 1
 fi
 

@@ -915,13 +915,8 @@ class SelfUpdateService {
       'DacxReleaseVersion',
       'CFBundleShortVersionString',
     ]) {
-      final result = await _processRun('/usr/libexec/PlistBuddy', [
-        '-c',
-        'Print :$key',
-        infoPlist,
-      ]);
-      final value = result.stdout.toString().trim();
-      if (result.exitCode == 0 && value.isNotEmpty) {
+      final value = await UpdateService.readBundleInfoString(infoPlist, key);
+      if (value != null) {
         return (value: value, source: key);
       }
     }
