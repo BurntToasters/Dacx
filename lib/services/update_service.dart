@@ -115,18 +115,30 @@ class UpdateService {
     if (idx < 0) return null;
     final appPath = exe.substring(0, idx + '.app'.length);
     final infoPlist = '$appPath/Contents/Info.plist';
+    return readBundleInfoString(infoPlist, 'DacxReleaseVersion');
+  }
+
+  static Future<String?> readBundleInfoString(
+    String infoPlistPath,
+    String key,
+  ) async {
     try {
-      final result = await Process.run('/usr/libexec/PlistBuddy', [
-        '-c',
-        'Print :DacxReleaseVersion',
-        infoPlist,
-      ]);
-      if (result.exitCode != 0) return null;
-      final version = result.stdout.toString().trim();
-      return version.isEmpty ? null : version;
+      return parseBundleInfoString(
+        await File(infoPlistPath).readAsString(),
+        key,
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  static String? parseBundleInfoString(String plistXml, String key) {
+    final match = RegExp(
+      '<key>\\s*${RegExp.escape(key)}\\s*</key>\\s*<string>(.*?)</string>',
+      dotAll: true,
+    ).firstMatch(plistXml);
+    final value = match?.group(1)?.trim();
+    return value == null || value.isEmpty ? null : value;
   }
 
   Future<UpdateInfo?> checkForUpdate({
