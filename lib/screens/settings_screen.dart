@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
@@ -1125,10 +1124,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _aboutTile() {
-    return FutureBuilder<PackageInfo>(
-      future: PackageInfo.fromPlatform(),
+    return FutureBuilder<String>(
+      future: UpdateService.currentVersionFromPlatform(),
       builder: (context, snapshot) {
-        final version = snapshot.data?.version ?? '...';
+        final version = snapshot.data ?? '...';
         return ListTile(
           title: GestureDetector(
             onTap: _promptToggleDebugMode,
