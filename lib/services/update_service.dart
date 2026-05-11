@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -6,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'debug_log_service.dart';
 
 typedef PackageInfoLoader = Future<PackageInfo> Function();
+typedef CurrentVersionLoader = Future<String> Function(PackageInfo packageInfo);
 typedef HttpGet =
     Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
@@ -22,6 +25,7 @@ class UpdateService {
   final DebugLogService? _debugLog;
   final String _debugSource;
   final PackageInfoLoader _packageInfoLoader;
+  final CurrentVersionLoader _currentVersionLoader;
   final HttpGet _httpGet;
   final CanLaunchUrlFn _canLaunch;
   final LaunchUrlFn _launch;
@@ -31,12 +35,15 @@ class UpdateService {
     DebugLogService? debugLog,
     String debugSource = 'unknown',
     PackageInfoLoader? packageInfoLoader,
+    CurrentVersionLoader? currentVersionLoader,
     HttpGet? httpGet,
     CanLaunchUrlFn? canLaunch,
     LaunchUrlFn? launch,
   }) : _debugLog = debugLog,
        _debugSource = debugSource,
        _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
+       _currentVersionLoader =
+           currentVersionLoader ?? currentVersionFromPackageInfo,
        _httpGet = httpGet ?? http.get,
        _canLaunch = canLaunch ?? canLaunchUrl,
        _launch = launch ?? launchUrl;
@@ -76,13 +83,59 @@ class UpdateService {
         : UpdateChannel.stable;
   }
 
+  static Future<String> currentVersionFromPlatform() async {
+    return currentVersionFromPackageInfo(await PackageInfo.fromPlatform());
+  }
+
+  static Future<String> currentVersionFromPackageInfo(
+    PackageInfo packageInfo,
+  ) async {
+    final macOSReleaseVersion = await _macOSReleaseVersionFromRunningBundle();
+    if (macOSReleaseVersion != null &&
+        _versionPattern.hasMatch(macOSReleaseVersion)) {
+      return macOSReleaseVersion;
+    }
+    if (Platform.isMacOS) {
+      return normalizeMacOSPackageVersion(packageInfo.version);
+    }
+    return packageInfo.version;
+  }
+
+  static String normalizeMacOSPackageVersion(String version) {
+    final match = RegExp(r'^(\d+)\.(\d+)\.(\d+)\.(\d+)$').firstMatch(version);
+    if (match == null) return version;
+    return '${match[1]}.${match[2]}.${match[3]}-beta.${match[4]}';
+  }
+
+  static Future<String?> _macOSReleaseVersionFromRunningBundle() async {
+    if (!Platform.isMacOS) return null;
+    final exe = Platform.resolvedExecutable;
+    const marker = '.app/Contents/MacOS/';
+    final idx = exe.indexOf(marker);
+    if (idx < 0) return null;
+    final appPath = exe.substring(0, idx + '.app'.length);
+    final infoPlist = '$appPath/Contents/Info.plist';
+    try {
+      final result = await Process.run('/usr/libexec/PlistBuddy', [
+        '-c',
+        'Print :DacxReleaseVersion',
+        infoPlist,
+      ]);
+      if (result.exitCode != 0) return null;
+      final version = result.stdout.toString().trim();
+      return version.isEmpty ? null : version;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<UpdateInfo?> checkForUpdate({
     UpdateChannel channel = UpdateChannel.auto,
   }) async {
     _lastCheckSucceeded = false;
     try {
       final packageInfo = await _packageInfoLoader();
-      final currentVersion = packageInfo.version;
+      final currentVersion = await _currentVersionLoader(packageInfo);
       final resolved = resolveChannel(channel, currentVersion);
       _log(
         'check_started',

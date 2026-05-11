@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
@@ -711,10 +710,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final ageMs = DateTime.now().millisecondsSinceEpoch - startedAt;
       if (ageMs > const Duration(days: 7).inMilliseconds) return;
     }
-    final pkg = await PackageInfo.fromPlatform();
+    final actualVersion = await UpdateService.currentVersionFromPlatform();
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    if (pkg.version == targetVersion) {
+    if (actualVersion == targetVersion) {
       _log(
         'launch_update_succeeded_notice',
         category: DebugLogCategory.update,
@@ -728,7 +727,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'launch_update_failed_notice',
         category: DebugLogCategory.update,
         severity: DebugSeverity.warn,
-        detailsBuilder: () => {'target': targetVersion, 'actual': pkg.version},
+        detailsBuilder: () => {
+          'target': targetVersion,
+          'actual': actualVersion,
+        },
       );
       messenger.showSnackBar(
         SnackBar(content: Text('Update to v$targetVersion may have failed.')),
