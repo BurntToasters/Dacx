@@ -42,7 +42,7 @@
     "licenses": "node scripts/generate-licenses.js",
     "build": "fvm flutter build",
     "build:win": "npm run sync-version && fvm flutter pub get && npm run patch:media-kit:win-cmake && node scripts/flutter-build-windows.js",
-    "build:mac": "npm run sync-version && npm run check:mac:toolchain && node scripts/flutter-build-macos.js",
+    "build:mac": "npm run sync-version && fvm flutter pub get && npm run check:mac:toolchain && node scripts/flutter-build-macos.js",
     "build:linux": "npm run sync-version && fvm flutter pub get && npm run patch:media-kit:linux-cmake && fvm flutter build linux --release",
     "test": "fvm flutter test",
     "test:coverage": "fvm flutter test --coverage",
