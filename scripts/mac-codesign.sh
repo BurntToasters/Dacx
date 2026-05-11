@@ -20,6 +20,15 @@ ENTITLEMENTS_FILE="$ROOT/macos/Runner/Release.entitlements"
 MUSIC_ICON_SOURCE="$ROOT/assets/dacx_music_icon.png"
 MUSIC_ICON_NAME="dacx_music_icon.icns"
 MUSIC_ICON_DEST="$APP_BUNDLE/Contents/Resources/$MUSIC_ICON_NAME"
+KEYCHAIN_PATH="${KEYCHAIN_PATH:-}"
+SIGN_KEYCHAIN_ARGS=()
+if [[ -n "$KEYCHAIN_PATH" ]]; then
+  SIGN_KEYCHAIN_ARGS=(--keychain "$KEYCHAIN_PATH")
+fi
+FIND_IDENTITY_ARGS=()
+if [[ -n "$KEYCHAIN_PATH" ]]; then
+  FIND_IDENTITY_ARGS=("$KEYCHAIN_PATH")
+fi
 
 # Validate
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY in .env}"
@@ -37,6 +46,30 @@ if [[ ! -f "$ENTITLEMENTS_FILE" ]]; then
   echo "ERROR: Entitlements file not found at $ENTITLEMENTS_FILE"
   exit 1
 fi
+
+security find-identity -v -p codesigning "${FIND_IDENTITY_ARGS[@]}" | grep -F "$APPLE_SIGNING_IDENTITY" >/dev/null || {
+  echo "ERROR: APPLE_SIGNING_IDENTITY was not found in the codesigning identities."
+  echo "       Identity: $APPLE_SIGNING_IDENTITY"
+  echo "       Run: security find-identity -v -p codesigning${KEYCHAIN_PATH:+ \"$KEYCHAIN_PATH\"}"
+  exit 1
+}
+
+SIGN_TEST_DIR="$(mktemp -d)"
+SIGN_TEST_FILE="$SIGN_TEST_DIR/codesign-access-test"
+printf 'dacx codesign access test\n' > "$SIGN_TEST_FILE"
+cleanup_sign_test() {
+  rm -rf "$SIGN_TEST_DIR"
+}
+trap cleanup_sign_test EXIT
+if ! codesign --force --timestamp=none --sign "$APPLE_SIGNING_IDENTITY" "${SIGN_KEYCHAIN_ARGS[@]}" "$SIGN_TEST_FILE" >/dev/null 2>&1; then
+  echo "ERROR: codesign could not use APPLE_SIGNING_IDENTITY."
+  echo "       This usually means the private key is missing, the keychain is locked,"
+  echo "       or codesign is not allowed to access the private key in this SSH session."
+  echo "       Try: npm run release:mac:ssh"
+  exit 1
+fi
+cleanup_sign_test
+trap - EXIT
 
 if [[ -f "$MUSIC_ICON_SOURCE" ]]; then
   bash "$ROOT/scripts/embed-mac-document-icon.sh" "$APP_BUNDLE"
@@ -59,25 +92,25 @@ echo "Codesigning ${APP_BUNDLE}..."
 # Sign all embedded dylibs first (files)
 find "$APP_BUNDLE" -type f -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
   codesign --force --options runtime --timestamp \
-    --sign "$APPLE_SIGNING_IDENTITY" "$lib"
+    --sign "$APPLE_SIGNING_IDENTITY" "${SIGN_KEYCHAIN_ARGS[@]}" "$lib"
 done
 
 # Sign all embedded frameworks (directories)
 find "$APP_BUNDLE" -type d -name "*.framework" -print0 | while IFS= read -r -d '' fw; do
   codesign --force --options runtime --timestamp \
-    --sign "$APPLE_SIGNING_IDENTITY" "$fw"
+    --sign "$APPLE_SIGNING_IDENTITY" "${SIGN_KEYCHAIN_ARGS[@]}" "$fw"
 done
 
 # Sign the update helper before the parent bundle (codesign rules require
 # nested executables to be signed inside-out).
 if [[ -f "$HELPER_OUT" ]]; then
   codesign --force --options runtime --timestamp \
-    --sign "$APPLE_SIGNING_IDENTITY" "$HELPER_OUT"
+    --sign "$APPLE_SIGNING_IDENTITY" "${SIGN_KEYCHAIN_ARGS[@]}" "$HELPER_OUT"
 fi
 
 codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS_FILE" \
-  --sign "$APPLE_SIGNING_IDENTITY" \
+  --sign "$APPLE_SIGNING_IDENTITY" "${SIGN_KEYCHAIN_ARGS[@]}" \
   "$APP_BUNDLE"
 
 echo "Verifying codesign..."
@@ -164,7 +197,7 @@ hdiutil create -volname "Dacx" -srcfolder "$DMG_STAGE" \
 rm -rf "$DMG_STAGE"
 
 # Sign DMG
-codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+codesign --force --sign "$APPLE_SIGNING_IDENTITY" "${SIGN_KEYCHAIN_ARGS[@]}" "$DMG_PATH"
 
 # Notarize DMG so Gatekeeper can verify it offline (the inner .app is already
 # stapled, but stapling the DMG too lets users mount it without a network
