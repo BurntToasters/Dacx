@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.8.0-beta.4",
+  "version": "0.8.0-beta.5",
   "private": true,
   "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
   "license": "GPL-3.0-only",
