@@ -581,30 +581,51 @@ function packageWindows() {
 
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
 
-  // 1. Portable zip
+  // Defensive sweep: if a previous run was hard-killed between writing the
+  // portable marker and its `finally` cleanup, the leftover file would be
+  // harvested by WiX into the MSI. Remove it before MSI build runs.
+  const portableMarkerPath = path.join(buildDir, "portable.txt");
+  removeIfExists(portableMarkerPath);
+
+  // 1. MSI installer (WiX Toolset) — must run before the portable marker is
+  // dropped, so the MSI does not register the marker file and try to gate
+  // itself out of the self-updater after installation.
+  buildWindowsMsiInstaller(buildDir, audioIconFileName);
+
+  // 2. Portable zip — drop the `portable.txt` marker so the running app can
+  // detect it is the portable build and skip the MSI-based self-updater.
+  // (Path declared above so the pre-MSI sweep can reuse it.)
+  fs.writeFileSync(
+    portableMarkerPath,
+    "This file marks the Dacx portable build. Do not delete — its presence\r\n" +
+      "tells the app to skip the MSI-based self-updater and direct the user to\r\n" +
+      "the release page instead.\r\n",
+  );
+
   const zipName = "Dacx-Windows-x64.zip";
   const zipPath = path.join(releaseDir, zipName);
   removeIfExists(zipPath);
-  if (hasCommand("7z")) {
-    run(`7z a -tzip -mx=9 "${zipPath}" *`, { cwd: buildDir });
-  } else {
-    const psSourceDir = escapePowerShellSingleQuoted(buildDir);
-    const psZipPath = escapePowerShellSingleQuoted(zipPath);
-    run(
-      `powershell -NoProfile -Command "` +
-        `$src='${psSourceDir}'; ` +
-        `$dst='${psZipPath}'; ` +
-        `if (Test-Path $dst) { Remove-Item -Force $dst }; ` +
-        `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
-        `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
-        `$src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)` +
-        `"`,
-    );
+  try {
+    if (hasCommand("7z")) {
+      run(`7z a -tzip -mx=9 "${zipPath}" *`, { cwd: buildDir });
+    } else {
+      const psSourceDir = escapePowerShellSingleQuoted(buildDir);
+      const psZipPath = escapePowerShellSingleQuoted(zipPath);
+      run(
+        `powershell -NoProfile -Command "` +
+          `$src='${psSourceDir}'; ` +
+          `$dst='${psZipPath}'; ` +
+          `if (Test-Path $dst) { Remove-Item -Force $dst }; ` +
+          `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+          `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
+          `$src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)` +
+          `"`,
+      );
+    }
+  } finally {
+    removeIfExists(portableMarkerPath);
   }
   console.log(`  ✓ ${zipName}`);
-
-  // 2. MSI installer (WiX Toolset)
-  buildWindowsMsiInstaller(buildDir, audioIconFileName);
 }
 
 function buildWindowsMsiInstaller(buildDir, audioIconFileName) {
