@@ -18,6 +18,7 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 
 ## Changes in `v0.8.0-beta.5:`
 * **MacOS:** Self-updater deemed stable-ish.
+* **Windows:** Fixed an issue with the .MSI installers where beta string names were being passed to it (MSI installs don't support version #s with strings).
 * **Windows:** `.EXE` Installers have been **REMOVED**.
   * For now I have made the decision to remove the exe installer as for the new self-updater function to work in the best way, `.MSI` is the clear choice. If a user installs Dacx via .exe and then updates via .msi, there will be multiple entries in the registry and install list and could create conflict issues in the future.
   * The portable exe remains for now; but it is deprecated and NOT supported any longer.
