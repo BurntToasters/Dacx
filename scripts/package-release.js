@@ -591,13 +591,42 @@ function listFilesRecursive(baseDir) {
 }
 
 function toMsiVersion(version) {
-  const match = String(version).match(/^(\d+)\.(\d+)\.(\d+)/);
+  const match = String(version).match(
+    /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/,
+  );
   if (!match) {
     throw new Error(
-      `Cannot convert version "${version}" to MSI version. Expected semver like 1.2.3`,
+      `Cannot convert version "${version}" to MSI version. Expected semver like 1.2.3 or 1.2.3-beta.4`,
     );
   }
-  return `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  const prerelease = match[4];
+
+  if (patch > 654) {
+    throw new Error(
+      `Patch ${patch} exceeds 654 — MSI build field would overflow (max 65535).`,
+    );
+  }
+
+  if (!prerelease) {
+    return `${major}.${minor}.${patch * 100 + 99}`;
+  }
+
+  const tagMatch = prerelease.match(/^beta\.(\d+)$/);
+  if (!tagMatch) {
+    throw new Error(
+      `Cannot encode prerelease "${prerelease}" — only beta.N is supported (e.g. beta.5).`,
+    );
+  }
+  const n = Number(tagMatch[1]);
+  if (n < 1 || n > 98) {
+    throw new Error(
+      `Beta counter ${n} out of range (1..98). Bump patch and reset.`,
+    );
+  }
+  return `${major}.${minor}.${patch * 100 + n}`;
 }
 
 // ── Windows ────────────────────────────────────────────────────
