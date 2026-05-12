@@ -127,7 +127,25 @@ class SelfUpdateService {
 
   /// Returns true on Windows or macOS only — the platforms where self-update
   /// is implemented. Linux and others fall back to the existing "View" link.
-  static bool isSupported() => Platform.isWindows || Platform.isMacOS;
+  /// Portable Windows builds (marked by a `portable.txt` file next to the
+  /// executable) also return false: there is no MSI install state to upgrade,
+  /// and the user is expected to replace the unzipped folder manually.
+  static bool isSupported() {
+    if (Platform.isWindows && isPortable()) return false;
+    return Platform.isWindows || Platform.isMacOS;
+  }
+
+  /// Detects the portable Windows build. The portable ZIP ships with a
+  /// `portable.txt` marker file alongside `dacx.exe`; MSI installs do not.
+  static bool isPortable() {
+    if (!Platform.isWindows) return false;
+    try {
+      final exeDir = File(Platform.resolvedExecutable).parent;
+      return File(p.join(exeDir.path, 'portable.txt')).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Picks the asset whose name ends with [suffix] (case-insensitive).
   /// Returns null if no match is found.

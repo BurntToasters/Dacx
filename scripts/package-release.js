@@ -10,7 +10,6 @@
  *
  * Windows produces:
  *   release/Dacx-Windows-x64.zip    (portable zip)
- *   release/Dacx-Windows-x64.exe    (Inno Setup installer)
  *   release/Dacx-Windows-x64.msi    (WiX Toolset installer)
  *
  * macOS produces:
@@ -241,30 +240,6 @@ function findWindowsDirByPrefix(baseDir, prefixRegex) {
   }
 }
 
-function resolveInnoSetupCompilerPath() {
-  if (process.env.INNO_SETUP_COMPILER && fs.existsSync(process.env.INNO_SETUP_COMPILER)) {
-    return process.env.INNO_SETUP_COMPILER;
-  }
-
-  const pathHit = resolveCommandFromPath("iscc");
-  if (pathHit) return pathHit;
-
-  const programFilesX86 = process.env["ProgramFiles(x86)"];
-  const programFiles = process.env.ProgramFiles;
-
-  const directCandidates = [
-    programFilesX86 ? path.join(programFilesX86, "Inno Setup 6", "ISCC.exe") : null,
-    programFiles ? path.join(programFiles, "Inno Setup 6", "ISCC.exe") : null,
-  ];
-
-  const prefixedDirCandidates = [
-    ...findWindowsDirByPrefix(programFilesX86, /^Inno Setup/i),
-    ...findWindowsDirByPrefix(programFiles, /^Inno Setup/i),
-  ].map((dir) => path.join(dir, "ISCC.exe"));
-
-  return firstExistingPath([...directCandidates, ...prefixedDirCandidates]);
-}
-
 function resolveWixV4PlusTool() {
   if (process.env.WIX_BIN) {
     const wixExe = path.join(process.env.WIX_BIN, "wix.exe");
@@ -409,41 +384,6 @@ function escapeXmlAttr(value) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-function renderInnoOpenWithRegistryLines(audioIconFileName) {
-  const openCommandValue = '"""{app}\\{#AppExeName}"" ""%1"""';
-  const audioIconValue = audioIconFileName
-    ? `{app}\\${audioIconFileName},0`
-    : "{app}\\{#AppExeName},0";
-  const lines = [
-    'Root: HKCR; Subkey: "Dacx.Audio"; ValueType: string; ValueData: "Dacx Audio File"; Flags: uninsdeletekey',
-    `Root: HKCR; Subkey: "Dacx.Audio\\DefaultIcon"; ValueType: string; ValueData: "${audioIconValue}"; Flags: uninsdeletekey`,
-    `Root: HKCR; Subkey: "Dacx.Audio\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
-    'Root: HKCR; Subkey: "Dacx.Video"; ValueType: string; ValueData: "Dacx Video File"; Flags: uninsdeletekey',
-    'Root: HKCR; Subkey: "Dacx.Video\\DefaultIcon"; ValueType: string; ValueData: "{app}\\{#AppExeName},0"; Flags: uninsdeletekey',
-    `Root: HKCR; Subkey: "Dacx.Video\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
-    `Root: HKCR; Subkey: "Applications\\{#AppExeName}\\shell\\open\\command"; ValueType: string; ValueData: ${openCommandValue}; Flags: uninsdeletekey`,
-  ];
-
-  for (const ext of SUPPORTED_MEDIA_EXTENSIONS) {
-    lines.push(
-      `Root: HKCR; Subkey: "Applications\\{#AppExeName}\\SupportedTypes"; ValueType: string; ValueName: ".${ext}"; ValueData: ""; Flags: uninsdeletevalue`,
-    );
-  }
-
-  for (const ext of AUDIO_EXTENSIONS) {
-    lines.push(
-      `Root: HKCR; Subkey: ".${ext}\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Audio"; ValueData: ""; Flags: uninsdeletevalue`,
-    );
-  }
-
-  for (const ext of VIDEO_EXTENSIONS) {
-    lines.push(
-      `Root: HKCR; Subkey: ".${ext}\\OpenWithProgids"; ValueType: string; ValueName: "Dacx.Video"; ValueData: ""; Flags: uninsdeletevalue`,
-    );
-  }
-  return lines.join("\n");
 }
 
 function renderWixV4FileAssociationComponent(audioIconFileName) {
@@ -591,13 +531,42 @@ function listFilesRecursive(baseDir) {
 }
 
 function toMsiVersion(version) {
-  const match = String(version).match(/^(\d+)\.(\d+)\.(\d+)/);
+  const match = String(version).match(
+    /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/,
+  );
   if (!match) {
     throw new Error(
-      `Cannot convert version "${version}" to MSI version. Expected semver like 1.2.3`,
+      `Cannot convert version "${version}" to MSI version. Expected semver like 1.2.3 or 1.2.3-beta.4`,
     );
   }
-  return `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  const prerelease = match[4];
+
+  if (patch > 654) {
+    throw new Error(
+      `Patch ${patch} exceeds 654 — MSI build field would overflow (max 65535).`,
+    );
+  }
+
+  if (!prerelease) {
+    return `${major}.${minor}.${patch * 100 + 99}`;
+  }
+
+  const tagMatch = prerelease.match(/^beta\.(\d+)$/);
+  if (!tagMatch) {
+    throw new Error(
+      `Cannot encode prerelease "${prerelease}" — only beta.N is supported (e.g. beta.5).`,
+    );
+  }
+  const n = Number(tagMatch[1]);
+  if (n < 1 || n > 98) {
+    throw new Error(
+      `Beta counter ${n} out of range (1..98). Bump patch and reset.`,
+    );
+  }
+  return `${major}.${minor}.${patch * 100 + n}`;
 }
 
 // ── Windows ────────────────────────────────────────────────────
@@ -612,120 +581,51 @@ function packageWindows() {
 
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
 
-  // 1. Portable zip
+  // Defensive sweep: if a previous run was hard-killed between writing the
+  // portable marker and its `finally` cleanup, the leftover file would be
+  // harvested by WiX into the MSI. Remove it before MSI build runs.
+  const portableMarkerPath = path.join(buildDir, "portable.txt");
+  removeIfExists(portableMarkerPath);
+
+  // 1. MSI installer (WiX Toolset) — must run before the portable marker is
+  // dropped, so the MSI does not register the marker file and try to gate
+  // itself out of the self-updater after installation.
+  buildWindowsMsiInstaller(buildDir, audioIconFileName);
+
+  // 2. Portable zip — drop the `portable.txt` marker so the running app can
+  // detect it is the portable build and skip the MSI-based self-updater.
+  // (Path declared above so the pre-MSI sweep can reuse it.)
+  fs.writeFileSync(
+    portableMarkerPath,
+    "This file marks the Dacx portable build. Do not delete — its presence\r\n" +
+      "tells the app to skip the MSI-based self-updater and direct the user to\r\n" +
+      "the release page instead.\r\n",
+  );
+
   const zipName = "Dacx-Windows-x64.zip";
   const zipPath = path.join(releaseDir, zipName);
   removeIfExists(zipPath);
-  if (hasCommand("7z")) {
-    run(`7z a -tzip -mx=9 "${zipPath}" *`, { cwd: buildDir });
-  } else {
-    const psSourceDir = escapePowerShellSingleQuoted(buildDir);
-    const psZipPath = escapePowerShellSingleQuoted(zipPath);
-    run(
-      `powershell -NoProfile -Command "` +
-        `$src='${psSourceDir}'; ` +
-        `$dst='${psZipPath}'; ` +
-        `if (Test-Path $dst) { Remove-Item -Force $dst }; ` +
-        `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
-        `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
-        `$src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)` +
-        `"`,
-    );
+  try {
+    if (hasCommand("7z")) {
+      run(`7z a -tzip -mx=9 "${zipPath}" *`, { cwd: buildDir });
+    } else {
+      const psSourceDir = escapePowerShellSingleQuoted(buildDir);
+      const psZipPath = escapePowerShellSingleQuoted(zipPath);
+      run(
+        `powershell -NoProfile -Command "` +
+          `$src='${psSourceDir}'; ` +
+          `$dst='${psZipPath}'; ` +
+          `if (Test-Path $dst) { Remove-Item -Force $dst }; ` +
+          `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+          `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
+          `$src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)` +
+          `"`,
+      );
+    }
+  } finally {
+    removeIfExists(portableMarkerPath);
   }
   console.log(`  ✓ ${zipName}`);
-
-  // 2. EXE installer (Inno Setup)
-  buildWindowsExeInstaller(buildDir, audioIconFileName);
-
-  // 3. MSI installer (WiX Toolset)
-  buildWindowsMsiInstaller(buildDir, audioIconFileName);
-}
-
-function buildWindowsExeInstaller(buildDir, audioIconFileName) {
-  const isccPath = resolveInnoSetupCompilerPath();
-  if (!isccPath) {
-    console.error("Inno Setup compiler was not found.");
-    console.error("Install it: winget install JRSoftware.InnoSetup");
-    console.error(
-      "If already installed but not detected, set INNO_SETUP_COMPILER to full ISCC.exe path.",
-    );
-    process.exit(1);
-  }
-
-  const outName = "Dacx-Windows-x64.exe";
-  const outPath = path.join(releaseDir, outName);
-  removeIfExists(outPath);
-
-  const installerDir = path.join(root, "build", "win-installer");
-  fs.mkdirSync(installerDir, { recursive: true });
-  const issPath = path.join(installerDir, "dacx-installer.iss");
-
-  const setupIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
-
-  const script = `; Auto-generated by scripts/package-release.js
-#define AppName "Dacx"
-#define AppVersion GetEnv("APP_VERSION")
-#define AppPublisher "run.rosie"
-#define AppExeName "dacx.exe"
-#define SourceDir GetEnv("SOURCE_DIR")
-#define OutputDir GetEnv("OUTPUT_DIR")
-#define OutputName GetEnv("OUTPUT_NAME")
-#define SetupIconPath GetEnv("SETUP_ICON_PATH")
-
-[Setup]
-AppId=run.rosie.dacx
-AppName={#AppName}
-AppVersion={#AppVersion}
-AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\\{#AppName}
-DefaultGroupName={#AppName}
-OutputDir={#OutputDir}
-OutputBaseFilename={#OutputName}
-Compression=lzma2
-SolidCompression=yes
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=admin
-UninstallDisplayIcon={app}\\{#AppExeName}
-DisableProgramGroupPage=yes
-WizardStyle=modern
-#if SetupIconPath != ""
-SetupIconFile={#SetupIconPath}
-#endif
-
-[Tasks]
-Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
-
-[Files]
-Source: "{#SourceDir}\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
-
-[Icons]
-Name: "{autoprograms}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"
-Name: "{autodesktop}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"; Tasks: desktopicon
-
-[Registry]
-${renderInnoOpenWithRegistryLines(audioIconFileName)}
-`;
-
-  fs.writeFileSync(issPath, script);
-
-  run(`"${isccPath}" /Qp "${issPath}"`, {
-    env: {
-      ...process.env,
-      APP_VERSION: VERSION,
-      SOURCE_DIR: toWindowsPath(buildDir),
-      OUTPUT_DIR: toWindowsPath(releaseDir),
-      OUTPUT_NAME: "Dacx-Windows-x64",
-      SETUP_ICON_PATH: fs.existsSync(setupIconPath) ? toWindowsPath(setupIconPath) : "",
-    },
-  });
-
-  if (!fs.existsSync(outPath)) {
-    console.error(`Inno Setup did not produce expected output: ${outPath}`);
-    process.exit(1);
-  }
-  signWindowsArtifact(outPath);
-  console.log(`  ✓ ${outName}`);
 }
 
 function buildWindowsMsiInstaller(buildDir, audioIconFileName) {
@@ -1113,7 +1013,7 @@ function packageMac() {
   ensureMacAudioFileIconInBundle(appBundle);
 
   // 1. Zip (may already exist from mac-codesign.sh)
-  const codesignZipPattern = new RegExp(`^dacx-.*-macos\\.zip$`, "i");
+  const codesignZipPattern = /^dacx-(?:.*-)?macos\.zip$/i;
   const existing = fs.readdirSync(releaseDir).filter((f) => codesignZipPattern.test(f));
   if (existing.length > 0) {
     console.log(`  ✓ ${existing[0]} (from mac-codesign.sh)`);
