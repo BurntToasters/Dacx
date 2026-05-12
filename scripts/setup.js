@@ -125,8 +125,7 @@ function setupWindows() {
   console.log('   "Desktop development with C++" workload. If not installed:');
   console.log('   winget install Microsoft.VisualStudio.2022.BuildTools');
   console.log('   Then add the C++ desktop workload via the VS Installer.');
-  console.log('   For release installers (.exe + .msi), also install:');
-  console.log('   winget install JRSoftware.InnoSetup');
+  console.log('   For the release MSI installer, also install:');
   console.log('   WiX v7 (.NET global tool, preferred):');
   console.log('     dotnet tool install -g wix --version 7.0.0');
   console.log('     wix eula accept wix7');

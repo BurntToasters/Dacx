@@ -40,7 +40,6 @@ const isUpdateManifestName = rx(/^Dacx-update-manifest-[A-Za-z0-9_-]+\.json$/);
 const isUpdateManifestSigName = rx(/^Dacx-update-manifest-[A-Za-z0-9_-]+\.json\.sig$/);
 
 const ARTIFACT_RULES = [
-  rx(/^Dacx-.*\.exe$/i),
   ext(".msi"),
   ext(".dmg"),
   ext(".zip"),
@@ -49,12 +48,11 @@ const ARTIFACT_RULES = [
   ext(".flatpak"),
   rx(/\.appimage$/i),
   rx(/\.tar\.gz$/i),
-  rx(/\.(?:exe|msi|dmg|deb|rpm|flatpak|appimage|zip)\.sig$/i),
+  rx(/\.(?:msi|dmg|deb|rpm|flatpak|appimage|zip)\.sig$/i),
   rx(/\.tar\.gz\.sig$/i),
 ];
 
 const SIGN_RULES = [
-  ext(".exe"),
   ext(".msi"),
   ext(".dmg"),
   ext(".deb"),
@@ -83,7 +81,6 @@ function cleanArtifactBaseName(name) {
   if (/^dacx.*\.zip$/i.test(name) && /mac/i.test(name)) return "Dacx-macOS.zip";
 
   // Windows
-  if (/x64.*\.exe$/i.test(name) || /\.exe$/i.test(name)) return "Dacx-Windows-x64.exe";
   if (/\.msi$/i.test(name)) return "Dacx-Windows-x64.msi";
 
   // Linux
@@ -321,7 +318,7 @@ function sha256(filePath) {
 
 function classifyArtifactPlatform(name) {
   const n = name.toLowerCase();
-  if (/windows|\.msi$|\.exe$|\.msix$/.test(n)) {
+  if (/windows|\.msi$|\.msix$/.test(n)) {
     const arch = /arm64|aarch64/.test(n) ? "arm64" : "x64";
     return `Windows-${arch}`;
   }

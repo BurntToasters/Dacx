@@ -77,7 +77,6 @@ void main() {
   group('SelfUpdateService.parseChecksumsFile', () {
     const content = '''
 abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx-Windows-x64.msi
-1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff  Dacx-Windows-x64.exe
 deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef  Dacx-Windows-x64.zip
 ''';
 
