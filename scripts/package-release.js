@@ -1113,7 +1113,7 @@ function packageMac() {
   ensureMacAudioFileIconInBundle(appBundle);
 
   // 1. Zip (may already exist from mac-codesign.sh)
-  const codesignZipPattern = new RegExp(`^dacx-.*-macos\\.zip$`, "i");
+  const codesignZipPattern = /^dacx-(?:.*-)?macos\.zip$/i;
   const existing = fs.readdirSync(releaseDir).filter((f) => codesignZipPattern.test(f));
   if (existing.length > 0) {
     console.log(`  ✓ ${existing[0]} (from mac-codesign.sh)`);
