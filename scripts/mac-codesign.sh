@@ -68,10 +68,23 @@ else
   echo "WARN: Missing $MUSIC_ICON_SOURCE; audio files will use the default document icon."
 fi
 
-# Build self-update helper directly into the bundle (signed below).
-HELPER_OUT="$APP_BUNDLE/Contents/MacOS/dacx-update-helper"
+# Build the bundled XPC update helper service directly into the app bundle
+# (signed below as a nested bundle with its own — un-sandboxed — entitlements).
+HELPER_OUT="$APP_BUNDLE/Contents/XPCServices/run.rosie.dacx.UpdateHelper.xpc"
+HELPER_ENTITLEMENTS="$ROOT/macos/Helper/UpdateHelper.entitlements"
+# Remove any stale pre-migration `dacx-update-helper` binary that would
+# otherwise trip codesign --deep --strict.
+rm -f "$APP_BUNDLE/Contents/MacOS/dacx-update-helper"
+# Inherit the parent app's CFBundleVersion (Flutter-validated build number)
+# for the XPC bundle; notarytool requires it to be one to three integers, so
+# the SemVer-style PKG_VERSION (e.g. "0.8.0-beta.5") can't go there directly.
+PARENT_BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_INFO_PLIST")"
 echo "Building update helper → $HELPER_OUT"
-bash "$ROOT/macos/Helper/build-helper.sh" --output "$HELPER_OUT"
+mkdir -p "$(dirname "$HELPER_OUT")"
+bash "$ROOT/macos/Helper/build-helper.sh" \
+  --output "$HELPER_OUT" \
+  --short-version "$PKG_VERSION" \
+  --build-version "$PARENT_BUILD_VERSION"
 
 # Preserve the raw release SemVer in the signed bundle.
 /usr/libexec/PlistBuddy -c "Set :DacxReleaseVersion $PKG_VERSION" "$APP_INFO_PLIST" 2>/dev/null ||
@@ -92,10 +105,13 @@ find "$APP_BUNDLE" -type d -name "*.framework" -print0 | while IFS= read -r -d '
     --sign "$APPLE_SIGNING_IDENTITY" "$fw"
 done
 
-# Sign the update helper before the parent bundle (codesign rules require
-# nested executables to be signed inside-out).
-if [[ -f "$HELPER_OUT" ]]; then
+# Sign the XPC update helper bundle before the parent app (codesign rules
+# require nested bundles to be signed inside-out). The helper's entitlements
+# deliberately omit `com.apple.security.app-sandbox` so launchd hosts the XPC
+# service outside the main app's container.
+if [[ -d "$HELPER_OUT" ]]; then
   run_codesign --force --options runtime --timestamp \
+    --entitlements "$HELPER_ENTITLEMENTS" \
     --sign "$APPLE_SIGNING_IDENTITY" "$HELPER_OUT"
 fi
 
@@ -108,8 +124,12 @@ echo "Verifying codesign..."
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 echo "Verifying entitlements..."
-if codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.apple.security.app-sandbox'; then
-  echo "ERROR: Release app is sandboxed, but the self-updater needs to spawn validation and helper tools."
+if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.apple.security.app-sandbox'; then
+  echo "ERROR: Release app is missing com.apple.security.app-sandbox; the XPC update helper expects the main app to be sandboxed."
+  exit 1
+fi
+if codesign -d --entitlements :- "$HELPER_OUT" 2>/dev/null | grep -q 'com.apple.security.app-sandbox'; then
+  echo "ERROR: XPC update helper must NOT be sandboxed."
   exit 1
 fi
 

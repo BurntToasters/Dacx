@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'dart:io';
 import 'dart:convert';
 
 import 'package:dacx/services/self_update_service.dart';
@@ -268,35 +267,6 @@ TeamIdentifier=ABCDE12345
         ),
         isFalse,
       );
-    });
-  });
-
-  group('SelfUpdateService.macInstallNeedsElevation', () {
-    test('returns false when install parent is writable', () async {
-      final dir = await Directory.systemTemp.createTemp('dacx-updater-test-');
-      try {
-        final needsElevation = await SelfUpdateService.macInstallNeedsElevation(
-          installPath: '${dir.path}/Dacx.app',
-        );
-
-        expect(needsElevation, isFalse);
-      } finally {
-        await dir.delete(recursive: true);
-      }
-    });
-
-    test('returns true when install parent is missing', () async {
-      final dir = await Directory.systemTemp.createTemp('dacx-updater-test-');
-      final missingParent = Directory('${dir.path}/missing');
-      try {
-        final needsElevation = await SelfUpdateService.macInstallNeedsElevation(
-          installPath: '${missingParent.path}/Dacx.app',
-        );
-
-        expect(needsElevation, isTrue);
-      } finally {
-        await dir.delete(recursive: true);
-      }
     });
   });
 
