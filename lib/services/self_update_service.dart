@@ -734,16 +734,14 @@ class SelfUpdateService {
     }
 
     try {
-      final reply = await _macUpdateChannel.invokeMapMethod<String, dynamic>(
-        'installUpdate',
-        {
-          'newAppPath': extractedAppPath,
-          'installedAppPath': _macInstallPath,
-          'expectedTeamId': expectedTeamId,
-          'expectedVersion': info.version,
-          'relaunch': true,
-        },
-      );
+      final reply = await _macUpdateChannel
+          .invokeMapMethod<String, dynamic>('installUpdate', {
+            'newAppPath': extractedAppPath,
+            'installedAppPath': _macInstallPath,
+            'expectedTeamId': expectedTeamId,
+            'expectedVersion': info.version,
+            'relaunch': true,
+          });
       final accepted = reply?['accepted'] == true;
       if (!accepted) {
         final err = reply?['error']?.toString();
@@ -887,7 +885,6 @@ class SelfUpdateService {
     }
     return null;
   }
-
 }
 
 /// Persists "an update was just spawned" so the next launch can show a
