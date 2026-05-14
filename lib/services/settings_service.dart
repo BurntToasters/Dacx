@@ -666,7 +666,9 @@ class SettingsService extends ChangeNotifier {
           });
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('Dacx: resume positions decode failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: resume positions decode failed: $e');
+        }
         result = <String, _ResumeEntry>{};
       }
     }
@@ -759,7 +761,9 @@ class SettingsService extends ChangeNotifier {
           .where((entry) => entry.isNotEmpty)
           .toList(growable: false);
     } catch (e) {
-      if (kDebugMode) debugPrint('Dacx: recent files decode failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: recent files decode failed: $e');
+      }
       return [];
     }
   }

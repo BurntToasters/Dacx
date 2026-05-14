@@ -65,3 +65,75 @@ jobs:
           name: coverage-lcov
           path: coverage/lcov.info
           if-no-files-found: error
+
+  build-smoke:
+    name: Build smoke (${{ matrix.os }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Read pinned Flutter version from .fvmrc
+        id: fvm
+        shell: bash
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Dart (for fvm bootstrap)
+        uses: dart-lang/setup-dart@v1
+
+      - name: Cache fvm versions
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/fvm/versions
+            ~/AppData/Roaming/fvm/versions
+          key: fvm-${{ runner.os }}-${{ steps.fvm.outputs.version }}
+
+      - name: Install fvm
+        shell: bash
+        run: |
+          dart pub global activate fvm
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "$LOCALAPPDATA/Pub/Cache/bin" >> "$GITHUB_PATH"
+          else
+            echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install pinned Flutter via fvm
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            export PATH="$LOCALAPPDATA/Pub/Cache/bin:$PATH"
+          else
+            export PATH="$HOME/.pub-cache/bin:$PATH"
+          fi
+          fvm install --setup "$(jq -r .flutter .fvmrc)"
+
+      - name: Install Linux desktop deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libepoxy-dev libmpv-dev mpv libunwind-dev
+
+      - name: Flutter pub get
+        shell: bash
+        run: fvm flutter pub get
+
+      - name: Build smoke
+        shell: bash
+        env:
+          CI: "true"
+        run: npm run check:build-smoke

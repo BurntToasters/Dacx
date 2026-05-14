@@ -73,17 +73,19 @@ class InstanceModeService {
 
   static Future<bool> openNewWindow() async {
     if (isAllowMultipleInstancesEnabled()) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint(
           'Dacx: openNewWindow → spawnNewInstance (allow_multi_instance flag set)',
         );
+      }
       return spawnNewInstance();
     }
     if (Platform.isWindows || Platform.isLinux) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint(
           'Dacx: openNewWindow → spawnNewInstance (separate process on ${Platform.operatingSystem})',
         );
+      }
       return spawnNewInstance();
     }
     if (Platform.isMacOS) {
@@ -92,19 +94,24 @@ class InstanceModeService {
           'openNewWindow',
         );
         if (opened == true) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint('Dacx: openNewWindow → in-process native bridge');
+          }
           return true;
         }
       } on MissingPluginException catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('Dacx: native openNewWindow bridge missing: $e');
+        }
       } on PlatformException catch (e) {
-        if (kDebugMode) debugPrint('Dacx: native openNewWindow failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: native openNewWindow failed: $e');
+        }
       }
     }
-    if (kDebugMode)
+    if (kDebugMode) {
       debugPrint('Dacx: openNewWindow → spawnNewInstance (fallback)');
+    }
     return spawnNewInstance();
   }
 

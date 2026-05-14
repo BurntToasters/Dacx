@@ -80,11 +80,15 @@ class SeekPreviewService {
       try {
         await p.setVolume(0);
       } catch (e) {
-        if (kDebugMode) debugPrint('Dacx: seek-preview setVolume failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: seek-preview setVolume failed: $e');
+        }
       }
       _loadedPath = normalized;
     } catch (e) {
-      if (kDebugMode) debugPrint('Dacx: seek-preview open failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview open failed: $e');
+      }
       _loadedPath = null;
     }
   }
@@ -112,8 +116,9 @@ class SeekPreviewService {
       try {
         await platform.setProperty(name, value);
       } catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('Dacx: seek-preview setProperty $name failed: $e');
+        }
       }
     }
 
@@ -204,7 +209,9 @@ class SeekPreviewService {
     try {
       await p.seek(Duration(milliseconds: key));
     } catch (e) {
-      if (kDebugMode) debugPrint('Dacx: seek-preview seek failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview seek failed: $e');
+      }
     }
     if (_disposed) return null;
     await Future<void>.delayed(_frameSettleDelay);
@@ -213,7 +220,9 @@ class SeekPreviewService {
     try {
       bytes = await p.screenshot(format: 'image/jpeg');
     } catch (e) {
-      if (kDebugMode) debugPrint('Dacx: seek-preview screenshot failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview screenshot failed: $e');
+      }
       bytes = null;
     }
     if (_disposed) return null;
@@ -280,8 +289,9 @@ class SeekPreviewService {
       try {
         await p.dispose();
       } catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('Dacx: seek-preview teardown dispose failed: $e');
+        }
       }
     }
   }

@@ -27,10 +27,12 @@ void main() {
     // any of them silently wipes a user's settings. If you need to rename,
     // write a migration in SettingsService first, then update this list.
     const frozen = <String>{
+      'settings_schema_version',
       'playback_volume',
       'playback_speed',
       'playback_loop_mode',
       'playback_auto_play',
+      'update_channel',
       'appearance_theme',
       'appearance_accent',
       'appearance_always_on_top',
@@ -61,8 +63,9 @@ void main() {
       'media_session_enabled',
       'keybinds_v1',
       'resume_playback_enabled',
-      'resume_positions_v1',
+      'resume_positions_v2',
       'playlist_shuffle',
+      'allow_multiple_instances',
     };
 
     test('snapshot is non-empty and unique', () {

@@ -105,8 +105,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         setState(() => _nativeCaptionVisible = nativeCaptionVisible);
       }
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint('Dacx: refreshNativeCaptionVisibility failed: $e');
+      }
     }
   }
 

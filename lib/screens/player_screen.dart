@@ -31,6 +31,7 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
+import 'chapter_info.dart';
 import 'settings_screen.dart';
 
 const _audioExtensions = {
@@ -129,7 +130,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Tracks / chapters / OSD state
   Tracks? _currentTracks;
   Track? _currentTrackSelection;
-  List<_ChapterInfo> _chapters = const [];
+  List<ChapterInfo> _chapters = const [];
   bool _subtitlesVisible = true;
   bool _osdVisible = false;
   String? _osdTransientMessage;
@@ -2136,13 +2137,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (_chapters.isNotEmpty && mounted) setState(() => _chapters = const []);
       return;
     }
-    final list = <_ChapterInfo>[];
+    final list = <ChapterInfo>[];
     for (var i = 0; i < count; i++) {
       final title = await _playerService.getProperty('chapter-list/$i/title');
       final timeStr = await _playerService.getProperty('chapter-list/$i/time');
       final time = double.tryParse(timeStr ?? '') ?? 0;
       list.add(
-        _ChapterInfo(
+        ChapterInfo(
           index: i,
           title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
           time: Duration(milliseconds: (time * 1000).round()),
@@ -3317,15 +3318,4 @@ class _PlayerScreenState extends State<PlayerScreen> {
     node.dispose();
     return captured;
   }
-}
-
-class _ChapterInfo {
-  const _ChapterInfo({
-    required this.index,
-    required this.title,
-    required this.time,
-  });
-  final int index;
-  final String title;
-  final Duration time;
 }
