@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
@@ -732,47 +733,32 @@ class SelfUpdateService {
       return validation;
     }
 
-    final helperPath = _resolveMacHelperPath();
-    if (helperPath == null || !File(helperPath).existsSync()) {
-      return const SelfUpdateResult(
-        SelfUpdateOutcome.spawnFailed,
-        message: 'Update helper binary not found inside running bundle',
-      );
-    }
-
-    final helperArgs = [
-      '--wait-pid',
-      pid.toString(),
-      '--new-app',
-      extractedAppPath,
-      '--expected-team-id',
-      expectedTeamId,
-      '--expected-version',
-      info.version,
-      '--relaunch',
-    ];
     try {
-      final needsElevation = await macInstallNeedsElevation();
-      if (needsElevation) {
-        final elevated = await _processRun('/usr/bin/osascript', [
-          '-e',
-          _buildAdministratorLaunchScript([helperPath, ...helperArgs]),
-        ]);
-        if (elevated.exitCode != 0) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.spawnFailed,
-            message: elevated.stderr.toString().trim().isNotEmpty
-                ? elevated.stderr.toString()
-                : elevated.stdout.toString(),
-          );
-        }
-      } else {
-        await _processStart(
-          helperPath,
-          helperArgs,
-          mode: ProcessStartMode.detached,
+      final reply = await _macUpdateChannel.invokeMapMethod<String, dynamic>(
+        'installUpdate',
+        {
+          'newAppPath': extractedAppPath,
+          'installedAppPath': _macInstallPath,
+          'expectedTeamId': expectedTeamId,
+          'expectedVersion': info.version,
+          'relaunch': true,
+        },
+      );
+      final accepted = reply?['accepted'] == true;
+      if (!accepted) {
+        final err = reply?['error']?.toString();
+        return SelfUpdateResult(
+          SelfUpdateOutcome.spawnFailed,
+          message: (err != null && err.trim().isNotEmpty)
+              ? err
+              : 'XPC update helper rejected install',
         );
       }
+    } on PlatformException catch (e) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.spawnFailed,
+        message: e.message ?? e.code,
+      );
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.spawnFailed,
@@ -785,53 +771,14 @@ class SelfUpdateService {
         'platform': 'macos',
         'extracted': extractedAppPath,
         'install_path': _macInstallPath,
-        'pid': pid,
       },
     );
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
-  static Future<bool> macInstallNeedsElevation({
-    String installPath = _macInstallPath,
-  }) async {
-    final applicationsDir = Directory(p.dirname(installPath));
-    final probe = Directory(
-      p.join(
-        applicationsDir.path,
-        '.dacx-update-write-test-$pid-${DateTime.now().microsecondsSinceEpoch}',
-      ),
-    );
-    try {
-      await probe.create();
-      await probe.delete();
-      return false;
-    } catch (_) {
-      try {
-        if (probe.existsSync()) {
-          probe.deleteSync(recursive: true);
-        }
-      } catch (_) {}
-      return true;
-    }
-  }
-
-  static String _buildAdministratorLaunchScript(List<String> argv) {
-    final command = [
-      ...argv.map(_shellQuote),
-      '>/dev/null',
-      '2>&1',
-      '&',
-    ].join(' ');
-    return 'do shell script ${_appleScriptString(command)} with administrator privileges';
-  }
-
-  static String _shellQuote(String value) {
-    return "'${value.replaceAll("'", "'\\''")}'";
-  }
-
-  static String _appleScriptString(String value) {
-    return '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"';
-  }
+  static const MethodChannel _macUpdateChannel = MethodChannel(
+    'run.rosie.dacx/update',
+  );
 
   /// Runs a Gatekeeper-respecting validation pipeline against
   /// the bundle at [appPath]. Returns SelfUpdateOutcome.spawned on full pass
@@ -941,14 +888,6 @@ class SelfUpdateService {
     return null;
   }
 
-  static String? _resolveMacHelperPath() {
-    final exe = Platform.resolvedExecutable;
-    const marker = '.app/Contents/MacOS/';
-    final idx = exe.indexOf(marker);
-    if (idx < 0) return null;
-    final macosDir = exe.substring(0, idx + marker.length - 1);
-    return p.join(macosDir, 'dacx-update-helper');
-  }
 }
 
 /// Persists "an update was just spawned" so the next launch can show a

@@ -29,6 +29,8 @@
 		DA02C1C0010000000000B001 /* dacx_music_icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = DA02C1C0020000000000B001 /* dacx_music_icon.icns */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
 		DA01CA01000000000000A001 /* MediaSessionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA01CA02000000000000A001 /* MediaSessionBridge.swift */; };
+		DA01CA03000000000000A001 /* UpdateBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA01CA04000000000000A001 /* UpdateBridge.swift */; };
+		DA01CA05000000000000A001 /* UpdateHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA01CA06000000000000A001 /* UpdateHelperProtocol.swift */; };
 		A5C9FD09D4282CF3B8F78FFE /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3E9E574D7DB2F8B5B7A1C37B /* Pods_RunnerTests.framework */; };
 		BB19AAF4CBBB5821ED6C97BD /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CADC71A0816A22D76C6091EA /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -76,6 +78,8 @@
 		33CC10F72044A3C60003C045 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = "<group>"; };
 		33CC11122044BFA00003C045 /* MainFlutterWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainFlutterWindow.swift; sourceTree = "<group>"; };
 		DA01CA02000000000000A001 /* MediaSessionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaSessionBridge.swift; sourceTree = "<group>"; };
+		DA01CA04000000000000A001 /* UpdateBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateBridge.swift; sourceTree = "<group>"; };
+		DA01CA06000000000000A001 /* UpdateHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateHelperProtocol.swift; sourceTree = "<group>"; };
 		DA02C1C0020000000000B001 /* dacx_music_icon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = dacx_music_icon.icns; path = Runner/dacx_music_icon.icns; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
@@ -197,6 +201,8 @@
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				DA01CA02000000000000A001 /* MediaSessionBridge.swift */,
+				DA01CA04000000000000A001 /* UpdateBridge.swift */,
+				DA01CA06000000000000A001 /* UpdateHelperProtocol.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
@@ -463,6 +469,8 @@
 			files = (
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				DA01CA01000000000000A001 /* MediaSessionBridge.swift in Sources */,
+				DA01CA03000000000000A001 /* UpdateBridge.swift in Sources */,
+				DA01CA05000000000000A001 /* UpdateHelperProtocol.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);

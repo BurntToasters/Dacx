@@ -15,6 +15,7 @@ private final class EngineRegistration {
   let openFileStreamHandler: OpenFileStreamHandler
   let windowMethodChannel: FlutterMethodChannel
   let mediaSessionChannel: FlutterMethodChannel
+  let updateBridge: UpdateBridge
 
   init(window: MainFlutterWindow,
        messenger: FlutterBinaryMessenger,
@@ -22,7 +23,8 @@ private final class EngineRegistration {
        openFileEventChannel: FlutterEventChannel,
        openFileStreamHandler: OpenFileStreamHandler,
        windowMethodChannel: FlutterMethodChannel,
-       mediaSessionChannel: FlutterMethodChannel) {
+       mediaSessionChannel: FlutterMethodChannel,
+       updateBridge: UpdateBridge) {
     self.window = window
     self.messenger = messenger
     self.openFileMethodChannel = openFileMethodChannel
@@ -30,6 +32,7 @@ private final class EngineRegistration {
     self.openFileStreamHandler = openFileStreamHandler
     self.windowMethodChannel = windowMethodChannel
     self.mediaSessionChannel = mediaSessionChannel
+    self.updateBridge = updateBridge
   }
 }
 
@@ -163,6 +166,7 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     let mediaSessionChannel = mediaSessionBridge.attach(messenger: messenger)
+    let updateBridge = UpdateBridge(messenger: messenger)
 
     let registration = EngineRegistration(
       window: window,
@@ -171,7 +175,8 @@ class AppDelegate: FlutterAppDelegate {
       openFileEventChannel: openFileEventChannel,
       openFileStreamHandler: streamHandler,
       windowMethodChannel: windowMethodChannel,
-      mediaSessionChannel: mediaSessionChannel
+      mediaSessionChannel: mediaSessionChannel,
+      updateBridge: updateBridge
     )
     registrations[windowId] = registration
 
