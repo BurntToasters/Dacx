@@ -81,21 +81,18 @@ npm run build:mac   # macOS
 npm run build:linux # Linux
 ```
 
-### Local dev builds without signing credentials
+### Signing model
 
-Release builds bake the code-signing identity into the binary so self-update can pin against it. The build scripts now fail fast if those secrets are missing:
+Only the macOS build is code-signed end-to-end (Apple Developer ID + notarization). Windows MSIs and Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key) — there is no Authenticode certificate for Windows.
 
-- `scripts/flutter-build-macos.js` requires `APPLE_TEAM_ID` (from `.env`).
-- `scripts/flutter-build-windows.js` requires `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`).
+This means:
 
-For local development builds where you don't have those credentials, set an override env var to skip the check:
-
-```bash
-DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
-DACX_BUILD_DEV_NO_THUMBPRINT=1 npm run build:win
-```
-
-Builds produced this way **will not be able to self-update** — Authenticode / team-id verification is disabled at compile time. They're fine for manual testing.
+- `scripts/flutter-build-macos.js` requires `APPLE_TEAM_ID` in `.env`. Self-update pins against the team id. Set `DACX_BUILD_DEV_NO_TEAM_ID=1` to skip for local dev:
+  ```bash
+  DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
+  ```
+- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` *optionally*. If unset (the default), the MSI is unsigned at the OS level and self-update relies solely on the Ed25519-signed update manifest for trust. If you have an Authenticode certificate and want Authenticode pinning on top, set the thumbprint and the build will bake it in.
+- `scripts/flutter-build-linux` is not affected by either.
 
 ### macOS support
 
