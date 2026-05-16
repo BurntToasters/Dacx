@@ -465,11 +465,18 @@ class SelfUpdateService {
       }
     }
 
-    // Watchdog .cmd polls until our PID exits, then runs msiexec.
-    final cmdPath = File(p.join(cacheDir.path, 'apply-update.cmd'));
-    await cmdPath.writeAsString(_buildWindowsWatchdogCmd());
+    // Hidden watchdog polls until our PID exits, then runs msiexec.
+    final scriptPath = File(p.join(cacheDir.path, 'apply-update.ps1'));
+    await scriptPath.writeAsString(buildWindowsWatchdogPowerShellScript());
     try {
-      await _processStart(cmdPath.path, [
+      await _processStart('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        scriptPath.path,
         pid.toString(),
         msiPath.path,
         normalizeCertificateThumbprint(expectedWindowsSignerThumbprint),
@@ -614,29 +621,43 @@ class SelfUpdateService {
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
-  static String _buildWindowsWatchdogCmd() {
-    return '@echo off\r\n'
-        'setlocal\r\n'
-        'set "DACX_PID=%~1"\r\n'
-        'set "DACX_MSI=%~2"\r\n'
-        'set "DACX_EXPECTED_THUMBPRINT=%~3"\r\n'
-        'set "DACX_EXPECTED_SHA256=%~4"\r\n'
-        ':wait\r\n'
-        'tasklist /FI "PID eq %DACX_PID%" 2>nul | find "%DACX_PID%" >nul && '
-        '(timeout /t 1 /nobreak >nul & goto wait)\r\n'
-        'for /f %%H in (\'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
-        '"(Get-FileHash -Algorithm SHA256 -LiteralPath \$env:DACX_MSI).Hash.ToLowerInvariant()"\') do set "DACX_ACTUAL_SHA256=%%H"\r\n'
-        'if /I not "%DACX_ACTUAL_SHA256%"=="%DACX_EXPECTED_SHA256%" exit /b 12\r\n'
-        'if "%DACX_EXPECTED_THUMBPRINT%"=="" goto install\r\n'
-        'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
-        "\"\$sig = Get-AuthenticodeSignature -LiteralPath \$env:DACX_MSI; "
-        "if (\$sig.Status -ne 'Valid') { exit 10 }; "
-        "\$thumb = \$sig.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', ''; "
-        "\$expected = \$env:DACX_EXPECTED_THUMBPRINT -replace '[^0-9A-Fa-f]', ''; "
-        "if (\$thumb -ine \$expected) { exit 11 }\"\r\n"
-        'if errorlevel 1 exit /b %errorlevel%\r\n'
-        ':install\r\n'
-        'start "" /wait msiexec.exe /i "%DACX_MSI%" /passive /norestart\r\n';
+  @visibleForTesting
+  static String buildWindowsWatchdogPowerShellScript() {
+    return r'''
+param(
+  [Parameter(Mandatory=$true)][int]$DacxPid,
+  [Parameter(Mandatory=$true)][string]$DacxMsi,
+  [Parameter(Mandatory=$true)][string]$ExpectedThumbprint,
+  [Parameter(Mandatory=$true)][string]$ExpectedSha256
+)
+
+$ErrorActionPreference = 'Stop'
+
+while (Get-Process -Id $DacxPid -ErrorAction SilentlyContinue) {
+  Start-Sleep -Seconds 1
+}
+
+$actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $DacxMsi).Hash.ToLowerInvariant()
+if ($actualSha256 -ine $ExpectedSha256) {
+  exit 12
+}
+
+if ($ExpectedThumbprint -ne '') {
+  $sig = Get-AuthenticodeSignature -LiteralPath $DacxMsi
+  if ($sig.Status -ne 'Valid') {
+    exit 10
+  }
+  $thumb = $sig.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', ''
+  $expected = $ExpectedThumbprint -replace '[^0-9A-Fa-f]', ''
+  if ($thumb -ine $expected) {
+    exit 11
+  }
+}
+
+$msiArgs = @('/i', $DacxMsi, '/passive', '/norestart')
+$install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
+exit $install.ExitCode
+''';
   }
 
   // ─────────────────────────────────────────────── macOS path

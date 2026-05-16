@@ -512,6 +512,16 @@ function renderWixV3FileAssociationComponent(audioIconFileName) {
   return lines.join("\n");
 }
 
+function renderWixStartMenuShortcutComponent({ indent, includeIcon }) {
+  const iconAttr = includeIcon ? ' Icon="AppIcon.ico"' : "";
+  return [
+    `${indent}<Component Id="CMP_START_MENU_SHORTCUT" Guid="*">`,
+    `${indent}  <Shortcut Id="StartMenuShortcut" Name="Dacx" Description="Dacx media player" Target="[INSTALLFOLDER]dacx.exe" WorkingDirectory="INSTALLFOLDER"${iconAttr} />`,
+    `${indent}  <RegistryValue Root="HKLM" Key="Software\\run.rosie\\Dacx" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />`,
+    `${indent}</Component>`,
+  ].join("\n");
+}
+
 function listFilesRecursive(baseDir) {
   const out = [];
 
@@ -808,8 +818,9 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   }
 
   const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const hasAppIcon = fs.existsSync(appIconPath);
   const msiVersion = toMsiVersion(VERSION);
-  const iconBlock = fs.existsSync(appIconPath)
+  const iconBlock = hasAppIcon
     ? [
         `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
         `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
@@ -819,6 +830,7 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   const componentRefs = [
     ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
     '      <ComponentRef Id="CMP_FILE_ASSOC" />',
+    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
   ].join("\n");
 
   // WiX v4+ schema: <Package> replaces the v3 <Product>+<Package> pair.
@@ -847,6 +859,12 @@ ${componentRefs}
 ${renderWixV4FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "        ").join("\n")}
       </Directory>
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramMenuFolder">
+${renderWixStartMenuShortcutComponent({ indent: "      ", includeIcon: hasAppIcon })}
     </StandardDirectory>
   </Fragment>
 </Wix>
@@ -951,8 +969,9 @@ function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
   }
 
   const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const hasAppIcon = fs.existsSync(appIconPath);
   const msiVersion = toMsiVersion(VERSION);
-  const iconBlock = fs.existsSync(appIconPath)
+  const iconBlock = hasAppIcon
     ? [
         `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
         `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
@@ -962,6 +981,7 @@ function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
   const componentRefs = [
     ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
     '      <ComponentRef Id="CMP_FILE_ASSOC" />',
+    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
   ].join("\n");
 
   const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
@@ -989,6 +1009,9 @@ ${componentRefs}
 ${renderWixV3FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "          ").join("\n")}
         </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+${renderWixStartMenuShortcutComponent({ indent: "        ", includeIcon: hasAppIcon })}
       </Directory>
     </Directory>
   </Fragment>
