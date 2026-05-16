@@ -76,12 +76,13 @@
     <mediatype>video/x-flv</mediatype>
   </provides>
   <releases>
+    <release version="0.8.0-beta.7" date="2026-05-16"/>
     <release version="0.8.0-beta.6" date="2026-05-14"/>
     <release version="0.8.0-beta.5" date="2026-05-12"/>
     <release version="0.8.0-beta.4" date="2026-05-11"/>
-    <release version="0.8.0-beta.3" date="2026-05-11"/>
-    <release version="0.8.0-beta.2" date="2026-05-11"/>
-    <release version="0.8.0-beta.1" date="2026-05-09"/>
+    <release version="0.8.0-beta.3" date="2026-05-10"/>
+    <release version="0.8.0-beta.2" date="2026-05-09"/>
+    <release version="0.8.0-beta.1" date="2026-05-08"/>
     <release version="0.7.3" date="2026-05-08"/>
     <release version="0.7.2" date="2026-05-07"/>
     <release version="0.7.1" date="2026-05-06"/>

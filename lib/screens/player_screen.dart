@@ -20,6 +20,7 @@ import '../services/debug_log_service.dart';
 import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
+import '../services/bookmark_service.dart';
 import '../services/seek_preview_service.dart';
 import '../services/self_update_service.dart';
 import '../l10n/app_localizations.dart';
@@ -31,6 +32,7 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
+import 'chapter_info.dart';
 import 'settings_screen.dart';
 
 const _audioExtensions = {
@@ -129,7 +131,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Tracks / chapters / OSD state
   Tracks? _currentTracks;
   Track? _currentTrackSelection;
-  List<_ChapterInfo> _chapters = const [];
+  List<ChapterInfo> _chapters = const [];
   bool _subtitlesVisible = true;
   bool _osdVisible = false;
   String? _osdTransientMessage;
@@ -147,6 +149,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Resume-position bookkeeping.
   Timer? _resumeSaveTimer;
   String? _resumePathInProgress;
+
+  String? _activeBookmarkToken;
 
   void _log(
     String event, {
@@ -432,11 +436,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
+    _releaseActiveBookmark();
     unawaited(_mediaSession.dispose());
     _playlist.dispose();
     unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
+  }
+
+  void _releaseActiveBookmark() {
+    final token = _activeBookmarkToken;
+    if (token == null || token.isEmpty) return;
+    _activeBookmarkToken = null;
+    unawaited(BookmarkService.stop(token));
+  }
+
+  Future<String> _resolveSandboxedPath(String requestedPath) async {
+    if (!BookmarkService.isSupported) return requestedPath;
+    final bookmark = _settings.fileBookmark(requestedPath);
+    if (bookmark == null || bookmark.isEmpty) return requestedPath;
+    final resolved = await BookmarkService.resolveAndStart(bookmark);
+    if (resolved == null) {
+      _settings.removeFileBookmark(requestedPath);
+      return requestedPath;
+    }
+    _releaseActiveBookmark();
+    _activeBookmarkToken = resolved.token.isNotEmpty ? resolved.token : null;
+    final bookmarkToPersist = resolved.refreshed ?? bookmark;
+    if (resolved.path != requestedPath) {
+      _settings.setFileBookmark(resolved.path, bookmarkToPersist);
+    } else if (resolved.stale && resolved.refreshed != null) {
+      _settings.setFileBookmark(requestedPath, resolved.refreshed!);
+    }
+    return resolved.path;
+  }
+
+  Future<void> _captureBookmarkFor(String path) async {
+    if (!BookmarkService.isSupported) return;
+    final bookmark = await BookmarkService.createBookmark(path);
+    if (bookmark != null && bookmark.isNotEmpty) {
+      _settings.setFileBookmark(path, bookmark);
+    }
   }
 
   void _onSettingsChanged() {
@@ -833,6 +873,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
 
+      await _captureBookmarkFor(path.trim());
       await _loadFile(path);
     } on PlatformException catch (e) {
       _log(
@@ -883,8 +924,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     bool forcePlay = false,
   }) async {
     if (_isDisposed) return;
-    final normalizedPath = filePath.trim();
-    if (normalizedPath.isEmpty) {
+    final requestedPath = filePath.trim();
+    if (requestedPath.isEmpty) {
       _log(
         'file_load_invalid_path',
         detailsBuilder: () => {'path': filePath},
@@ -899,6 +940,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       return;
     }
+
+    final normalizedPath = await _resolveSandboxedPath(requestedPath);
 
     if (!File(normalizedPath).existsSync()) {
       _log(
@@ -2136,13 +2179,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (_chapters.isNotEmpty && mounted) setState(() => _chapters = const []);
       return;
     }
-    final list = <_ChapterInfo>[];
+    final list = <ChapterInfo>[];
     for (var i = 0; i < count; i++) {
       final title = await _playerService.getProperty('chapter-list/$i/title');
       final timeStr = await _playerService.getProperty('chapter-list/$i/time');
       final time = double.tryParse(timeStr ?? '') ?? 0;
       list.add(
-        _ChapterInfo(
+        ChapterInfo(
           index: i,
           title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
           time: Duration(milliseconds: (time * 1000).round()),
@@ -3317,15 +3360,4 @@ class _PlayerScreenState extends State<PlayerScreen> {
     node.dispose();
     return captured;
   }
-}
-
-class _ChapterInfo {
-  const _ChapterInfo({
-    required this.index,
-    required this.title,
-    required this.time,
-  });
-  final int index;
-  final String title;
-  final Duration time;
 }

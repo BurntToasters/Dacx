@@ -87,11 +87,11 @@ trap 'rm -rf "$TMP"' EXIT
 
 SOURCES=("$PROTOCOL_SRC" "$IMPL_SRC" "$SERVICE_SRC")
 
-xcrun swiftc -O -target arm64-apple-macos11 \
+xcrun swiftc -O -target arm64-apple-macos15 \
   -framework Foundation \
   -o "$TMP/${EXEC_NAME}-arm64" "${SOURCES[@]}"
 
-xcrun swiftc -O -target x86_64-apple-macos11 \
+xcrun swiftc -O -target x86_64-apple-macos15 \
   -framework Foundation \
   -o "$TMP/${EXEC_NAME}-x86_64" "${SOURCES[@]}"
 

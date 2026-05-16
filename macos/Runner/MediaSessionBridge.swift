@@ -7,8 +7,14 @@ import MediaPlayer
 /// singletons). Multiple Flutter engines may attach; the most recently
 /// active one (last `setEnabled(true)` or `update`) receives remote-command
 /// callbacks.
+///
+/// All mutable state (`channels`, `activeChannel`, `info`, `artworkTask`,
+/// `enabled`) is owned by `stateQueue` — a serial queue — to keep multi-
+/// engine attach/detach and the URLSession artwork callback off each other's
+/// read-modify-write paths.
 final class MediaSessionBridge {
   private let channelName = "run.rosie.dacx/media_session"
+  private let stateQueue = DispatchQueue(label: "run.rosie.dacx.media-session-bridge.state")
   private var channels: [FlutterMethodChannel] = []
   private weak var activeChannel: FlutterMethodChannel?
   private var enabled = false
@@ -18,7 +24,8 @@ final class MediaSessionBridge {
   private var commandsConfigured = false
 
   deinit {
-    artworkTask?.cancel()
+    let task = stateQueue.sync { artworkTask }
+    task?.cancel()
   }
 
   func attach(messenger: FlutterBinaryMessenger) -> FlutterMethodChannel {
@@ -26,11 +33,15 @@ final class MediaSessionBridge {
     ch.setMethodCallHandler { [weak self, weak ch] call, result in
       self?.handle(call, from: ch, result: result)
     }
-    channels.append(ch)
-    if activeChannel == nil { activeChannel = ch }
-    if !commandsConfigured {
-      configureRemoteCommands()
+    let needsCommandSetup: Bool = stateQueue.sync {
+      channels.append(ch)
+      if activeChannel == nil { activeChannel = ch }
+      if commandsConfigured { return false }
       commandsConfigured = true
+      return true
+    }
+    if needsCommandSetup {
+      configureRemoteCommands()
     }
     return ch
   }
@@ -38,9 +49,11 @@ final class MediaSessionBridge {
   /// Drop a previously-attached channel when its window closes.
   func detach(channel: FlutterMethodChannel) {
     channel.setMethodCallHandler(nil)
-    channels.removeAll { $0 === channel }
-    if activeChannel === channel {
-      activeChannel = channels.last
+    stateQueue.sync {
+      channels.removeAll { $0 === channel }
+      if activeChannel === channel {
+        activeChannel = channels.last
+      }
     }
   }
 
@@ -49,74 +62,99 @@ final class MediaSessionBridge {
     case "setEnabled":
       let args = call.arguments as? [String: Any]
       let want = (args?["enabled"] as? Bool) ?? false
-      if want {
-        enabled = true
-        if let channel { activeChannel = channel }
-      } else if activeChannel === channel {
+      let shouldClear: Bool = stateQueue.sync {
+        if want {
+          enabled = true
+          if let channel { activeChannel = channel }
+          return false
+        }
         // Only the active engine may disable globally.
-        enabled = false
-        clear()
+        if activeChannel === channel {
+          enabled = false
+          return true
+        }
+        return false
       }
+      if shouldClear { clear() }
       result(nil)
     case "update":
-      guard enabled, let args = call.arguments as? [String: Any] else {
+      guard let args = call.arguments as? [String: Any] else {
         result(nil); return
       }
-      // Latest writer wins.
-      if let channel { activeChannel = channel }
-      apply(args)
+      apply(args, fromChannel: channel)
       result(nil)
     case "clear":
-      // Only the active source may clear.
-      if activeChannel === channel || activeChannel == nil {
-        clear()
+      let shouldClear: Bool = stateQueue.sync {
+        return activeChannel === channel || activeChannel == nil
       }
+      if shouldClear { clear() }
       result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
   }
 
-  private func apply(_ args: [String: Any]) {
-    if let title = args["title"] as? String, !title.isEmpty {
-      info[MPMediaItemPropertyTitle] = title
+  /// Applies an update to `info` and the now-playing center. The whole
+  /// read-modify-write happens inside one `stateQueue.sync` so concurrent
+  /// `update` calls from two engines can't overwrite each other.
+  /// `loadRemoteArtworkAsync` is dispatched from inside the same lock to
+  /// keep the request-id increment paired with the assignment.
+  private func apply(_ args: [String: Any], fromChannel channel: FlutterMethodChannel?) {
+    var pendingArtUri: String? = nil
+    let result: (info: [String: Any], playing: Bool?)? = stateQueue.sync {
+      guard enabled else { return nil }
+      // Latest writer wins.
+      if let channel { activeChannel = channel }
+
+      if let title = args["title"] as? String, !title.isEmpty {
+        info[MPMediaItemPropertyTitle] = title
+      }
+      if let artist = args["artist"] as? String, !artist.isEmpty {
+        info[MPMediaItemPropertyArtist] = artist
+      }
+      if let album = args["album"] as? String, !album.isEmpty {
+        info[MPMediaItemPropertyAlbumTitle] = album
+      }
+      if let durMs = args["durationMs"] as? Int, durMs > 0 {
+        info[MPMediaItemPropertyPlaybackDuration] = Double(durMs) / 1000.0
+      }
+      if let posMs = args["positionMs"] as? Int {
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = Double(posMs) / 1000.0
+      }
+      var playingFlag: Bool? = nil
+      if let playing = args["playing"] as? Bool {
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? 1.0 : 0.0
+        playingFlag = playing
+      }
+      if let rate = args["rate"] as? Double, rate > 0 {
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate
+      }
+      if let artUri = args["artUri"] as? String, !artUri.isEmpty {
+        if isLocalArtwork(artUri) {
+          if let image = loadLocalArtwork(artUri) {
+            info[MPMediaItemPropertyArtwork] = makeArtwork(image)
+          } else {
+            info.removeValue(forKey: MPMediaItemPropertyArtwork)
+          }
+        } else {
+          // Remote URLs may stall on the main thread; fetch in the background.
+          info.removeValue(forKey: MPMediaItemPropertyArtwork)
+          pendingArtUri = artUri
+        }
+      } else if args.keys.contains("artUri") {
+        info.removeValue(forKey: MPMediaItemPropertyArtwork)
+      }
+      return (info, playingFlag)
     }
-    if let artist = args["artist"] as? String, !artist.isEmpty {
-      info[MPMediaItemPropertyArtist] = artist
-    }
-    if let album = args["album"] as? String, !album.isEmpty {
-      info[MPMediaItemPropertyAlbumTitle] = album
-    }
-    if let durMs = args["durationMs"] as? Int, durMs > 0 {
-      info[MPMediaItemPropertyPlaybackDuration] = Double(durMs) / 1000.0
-    }
-    if let posMs = args["positionMs"] as? Int {
-      info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = Double(posMs) / 1000.0
-    }
-    if let playing = args["playing"] as? Bool {
-      info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? 1.0 : 0.0
+    guard let result = result else { return }
+    if let playing = result.playing {
       MPNowPlayingInfoCenter.default().playbackState =
         playing ? .playing : .paused
     }
-    if let rate = args["rate"] as? Double, rate > 0 {
-      info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = result.info
+    if let uri = pendingArtUri {
+      loadRemoteArtworkAsync(uri)
     }
-    if let artUri = args["artUri"] as? String, !artUri.isEmpty {
-      if isLocalArtwork(artUri) {
-        if let image = loadLocalArtwork(artUri) {
-          info[MPMediaItemPropertyArtwork] = makeArtwork(image)
-        } else {
-          info.removeValue(forKey: MPMediaItemPropertyArtwork)
-        }
-      } else {
-        // Remote URLs may stall on the main thread; fetch in the background.
-        info.removeValue(forKey: MPMediaItemPropertyArtwork)
-        loadRemoteArtworkAsync(artUri)
-      }
-    } else if args.keys.contains("artUri") {
-      info.removeValue(forKey: MPMediaItemPropertyArtwork)
-    }
-    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
   }
 
   private func makeArtwork(_ image: NSImage) -> MPMediaItemArtwork {
@@ -128,25 +166,37 @@ final class MediaSessionBridge {
 
   private func loadRemoteArtworkAsync(_ uri: String) {
     guard let url = URL(string: uri) else { return }
-    let token = artworkRequestId &+ 1
-    artworkRequestId = token
-    artworkTask?.cancel()
+    let token: UInt64 = stateQueue.sync {
+      artworkRequestId = artworkRequestId &+ 1
+      artworkTask?.cancel()
+      return artworkRequestId
+    }
     let task = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
       guard let self = self,
             let data = data,
             let image = NSImage(data: data) else { return }
+      let artwork = self.makeArtwork(image)
+      let snapshot: [String: Any]? = self.stateQueue.sync {
+        // A newer update may have superseded this fetch.
+        guard self.artworkRequestId == token else { return nil }
+        self.info[MPMediaItemPropertyArtwork] = artwork
+        return self.info
+      }
+      guard let nextInfo = snapshot else { return }
       DispatchQueue.main.async {
-        guard self.artworkRequestId == token else { return }
-        self.info[MPMediaItemPropertyArtwork] = self.makeArtwork(image)
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = self.info
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nextInfo
       }
     }
-    artworkTask = task
+    stateQueue.sync { artworkTask = task }
     task.resume()
   }
 
   private func clear() {
-    info.removeAll()
+    stateQueue.sync {
+      info.removeAll()
+      artworkTask?.cancel()
+      artworkTask = nil
+    }
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     MPNowPlayingInfoCenter.default().playbackState = .stopped
   }
@@ -192,12 +242,15 @@ final class MediaSessionBridge {
   private func invokeCommand(_ action: String, positionMs: Int? = nil) {
     var args: [String: Any] = ["action": action]
     if let pos = positionMs { args["positionMs"] = pos }
-    DispatchQueue.main.async { [weak self] in
-      let target = self?.activeChannel ?? self?.channels.first
+    let target: FlutterMethodChannel? = stateQueue.sync {
+      activeChannel ?? channels.first
+    }
+    DispatchQueue.main.async {
       target?.invokeMethod("command", arguments: args)
     }
   }
 }
+
 private func isLocalArtwork(_ uri: String) -> Bool {
   return !(uri.hasPrefix("http://") || uri.hasPrefix("https://"))
 }

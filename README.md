@@ -81,6 +81,23 @@ npm run build:mac   # macOS
 npm run build:linux # Linux
 ```
 
+### Signing model
+
+Only the macOS build is code-signed end-to-end (Apple Developer ID + notarization). Windows MSIs and Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key) — there is no Authenticode certificate for Windows.
+
+This means:
+
+- `scripts/flutter-build-macos.js` requires `APPLE_TEAM_ID` in `.env`. Self-update pins against the team id. Set `DACX_BUILD_DEV_NO_TEAM_ID=1` to skip for local dev:
+  ```bash
+  DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
+  ```
+- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` *optionally*. If unset (the default), the MSI is unsigned at the OS level and self-update relies solely on the Ed25519-signed update manifest for trust. If you have an Authenticode certificate and want Authenticode pinning on top, set the thumbprint and the build will bake it in.
+- `scripts/flutter-build-linux` is not affected by either.
+
+### macOS support
+
+The macOS build targets **macOS 15 (Sequoia) or newer**. Older macOS versions are not supported.
+
 ## License
 
 [GPLv3](LICENSE)
