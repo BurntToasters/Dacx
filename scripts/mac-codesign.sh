@@ -55,12 +55,27 @@ if [[ ! -f "$ENTITLEMENTS_FILE" ]]; then
   exit 1
 fi
 
-find_codesigning_identities | grep -F "$APPLE_SIGNING_IDENTITY" >/dev/null || {
+IDENTITY_MATCHES="$(find_codesigning_identities | grep -F "$APPLE_SIGNING_IDENTITY" || true)"
+IDENTITY_MATCH_COUNT="$(printf '%s\n' "$IDENTITY_MATCHES" | grep -c '[A-F0-9]\{40\}' || true)"
+if [[ "$IDENTITY_MATCH_COUNT" -eq 0 ]]; then
   echo "ERROR: APPLE_SIGNING_IDENTITY was not found in the codesigning identities."
   echo "       Identity: $APPLE_SIGNING_IDENTITY"
   echo "       Run: security find-identity -v -p codesigning${KEYCHAIN_PATH:+ \"$KEYCHAIN_PATH\"}"
   exit 1
-}
+fi
+if [[ "$IDENTITY_MATCH_COUNT" -gt 1 ]]; then
+  echo "ERROR: APPLE_SIGNING_IDENTITY matched $IDENTITY_MATCH_COUNT identities; refusing to guess which one to use."
+  printf '%s\n' "$IDENTITY_MATCHES"
+  echo "       Set APPLE_SIGNING_IDENTITY to the 40-char SHA-1 hash of the desired identity."
+  exit 1
+fi
+APPLE_SIGNING_IDENTITY_HASH="$(printf '%s\n' "$IDENTITY_MATCHES" | grep -oE '[A-F0-9]{40}' | head -n1)"
+if [[ -z "$APPLE_SIGNING_IDENTITY_HASH" ]]; then
+  echo "ERROR: could not resolve a SHA-1 hash for APPLE_SIGNING_IDENTITY."
+  exit 1
+fi
+echo "Using codesign identity hash: $APPLE_SIGNING_IDENTITY_HASH ($APPLE_SIGNING_IDENTITY)"
+APPLE_SIGNING_IDENTITY="$APPLE_SIGNING_IDENTITY_HASH"
 
 if [[ -f "$MUSIC_ICON_SOURCE" ]]; then
   bash "$ROOT/scripts/embed-mac-document-icon.sh" "$APP_BUNDLE"
@@ -130,6 +145,21 @@ if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null | grep -q 'com.appl
 fi
 if codesign -d --entitlements :- "$HELPER_OUT" 2>/dev/null | grep -q 'com.apple.security.app-sandbox'; then
   echo "ERROR: XPC update helper must NOT be sandboxed."
+  exit 1
+fi
+
+PARENT_TEAM_ID="$(codesign -dv --verbose=4 "$APP_BUNDLE" 2>&1 | awk -F'=' '/^TeamIdentifier=/ {print $2}')"
+HELPER_TEAM_ID="$(codesign -dv --verbose=4 "$HELPER_OUT" 2>&1 | awk -F'=' '/^TeamIdentifier=/ {print $2}')"
+if [[ -z "$PARENT_TEAM_ID" || "$PARENT_TEAM_ID" == "not set" ]]; then
+  echo "ERROR: could not read TeamIdentifier from parent app signature."
+  exit 1
+fi
+if [[ "$PARENT_TEAM_ID" != "$HELPER_TEAM_ID" ]]; then
+  echo "ERROR: helper TeamIdentifier ($HELPER_TEAM_ID) does not match parent ($PARENT_TEAM_ID)."
+  exit 1
+fi
+if [[ "$PARENT_TEAM_ID" != "$APPLE_TEAM_ID" ]]; then
+  echo "ERROR: signed TeamIdentifier ($PARENT_TEAM_ID) does not match APPLE_TEAM_ID ($APPLE_TEAM_ID)."
   exit 1
 fi
 
@@ -208,7 +238,8 @@ hdiutil create -volname "Dacx" -srcfolder "$DMG_STAGE" \
 rm -rf "$DMG_STAGE"
 
 # Sign DMG
-run_codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+run_codesign --force --options runtime --timestamp \
+  --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
 
 # Notarize DMG so Gatekeeper can verify it offline (the inner .app is already
 # stapled, but stapling the DMG too lets users mount it without a network

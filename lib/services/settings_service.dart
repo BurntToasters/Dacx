@@ -131,6 +131,7 @@ class SettingsService extends ChangeNotifier {
   static const _kWindowX = 'window_x';
   static const _kWindowY = 'window_y';
   static const _kRecentFiles = 'recent_files';
+  static const _kFileBookmarks = 'file_bookmarks_v1';
   static const _kLastOpenDirectory = 'last_open_directory';
   static const _kUpdateCheck = 'update_check_enabled';
   static const _kLastUpdateCheck = 'update_last_check';
@@ -346,7 +347,65 @@ class SettingsService extends ChangeNotifier {
       files.removeRange(maxRecentFiles, files.length);
     }
     _prefs.setString(_kRecentFiles, jsonEncode(files));
+    _pruneBookmarksToList(files);
     notifyListeners();
+  }
+
+  Map<String, String> _readBookmarkMap() {
+    final raw = _prefs.getString(_kFileBookmarks);
+    if (raw == null || raw.isEmpty) return <String, String>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final result = <String, String>{};
+        decoded.forEach((k, v) {
+          if (k is String && v is String && k.isNotEmpty && v.isNotEmpty) {
+            result[k] = v;
+          }
+        });
+        return result;
+      }
+    } catch (_) {}
+    return <String, String>{};
+  }
+
+  void _writeBookmarkMap(Map<String, String> map) {
+    if (map.isEmpty) {
+      _prefs.remove(_kFileBookmarks);
+    } else {
+      _prefs.setString(_kFileBookmarks, jsonEncode(map));
+    }
+  }
+
+  String? fileBookmark(String path) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) return null;
+    return _readBookmarkMap()[normalized];
+  }
+
+  void setFileBookmark(String path, String bookmark) {
+    final normalized = path.trim();
+    if (!_isSafeFilePath(normalized) || bookmark.isEmpty) return;
+    final map = _readBookmarkMap();
+    map[normalized] = bookmark;
+    _writeBookmarkMap(map);
+  }
+
+  void removeFileBookmark(String path) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) return;
+    final map = _readBookmarkMap();
+    if (map.remove(normalized) != null) {
+      _writeBookmarkMap(map);
+    }
+  }
+
+  void _pruneBookmarksToList(List<String> keep) {
+    final map = _readBookmarkMap();
+    if (map.isEmpty) return;
+    final keepSet = keep.toSet();
+    map.removeWhere((k, _) => !keepSet.contains(k));
+    _writeBookmarkMap(map);
   }
 
   bool pruneRecentFiles({bool notifyListeners = true}) {
@@ -362,6 +421,7 @@ class SettingsService extends ChangeNotifier {
     } else {
       _prefs.setString(_kRecentFiles, nextRaw);
     }
+    _pruneBookmarksToList(pruned);
     if (notifyListeners) {
       this.notifyListeners();
     }
@@ -370,6 +430,7 @@ class SettingsService extends ChangeNotifier {
 
   void clearRecentFiles() {
     _prefs.remove(_kRecentFiles);
+    _prefs.remove(_kFileBookmarks);
     notifyListeners();
   }
 

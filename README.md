@@ -81,6 +81,26 @@ npm run build:mac   # macOS
 npm run build:linux # Linux
 ```
 
+### Local dev builds without signing credentials
+
+Release builds bake the code-signing identity into the binary so self-update can pin against it. The build scripts now fail fast if those secrets are missing:
+
+- `scripts/flutter-build-macos.js` requires `APPLE_TEAM_ID` (from `.env`).
+- `scripts/flutter-build-windows.js` requires `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`).
+
+For local development builds where you don't have those credentials, set an override env var to skip the check:
+
+```bash
+DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
+DACX_BUILD_DEV_NO_THUMBPRINT=1 npm run build:win
+```
+
+Builds produced this way **will not be able to self-update** — Authenticode / team-id verification is disabled at compile time. They're fine for manual testing.
+
+### macOS support
+
+The macOS build targets **macOS 15 (Sequoia) or newer**. Older macOS versions are not supported.
+
 ## License
 
 [GPLv3](LICENSE)

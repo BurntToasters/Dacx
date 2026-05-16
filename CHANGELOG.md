@@ -119,3 +119,5 @@ This is intended to be a light-weight music and video player just meant to launc
 
 ## Info
 More information about Dacx is available via the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md) and also via: [https://help.rosie.run/dacx/en-us/faq](https://help.rosie.run/dacx/en-us/faq).
+
+[i] This changelog is made using the BCLS standard: https://github.com/BurntToasters/BCLS

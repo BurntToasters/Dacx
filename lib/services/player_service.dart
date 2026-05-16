@@ -31,7 +31,6 @@ class PlayerService {
       if (!_errorController.isClosed) {
         _errorController.add(PlayerErrorEvent(op, e, st));
       }
-      rethrow;
     }
   }
 
@@ -47,8 +46,10 @@ class PlayerService {
     }
   }
 
-  Future<void> open(String filePath, {bool play = true}) =>
-      _guard('open', () => player.open(Media(filePath), play: play));
+  Future<void> open(String filePath, {bool play = true}) async {
+    if (_disposed) return;
+    await player.open(Media(filePath), play: play);
+  }
 
   Future<void> playPause() => _guard('playPause', player.playOrPause);
 

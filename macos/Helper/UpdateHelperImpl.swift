@@ -161,7 +161,7 @@ func bundleExists(_ path: String) -> Bool {
 /// PID was already gone at registration), `false` if we timed out / errored
 /// out with the parent still alive — callers MUST treat `false` as "do not
 /// proceed with the swap; the parent is still running."
-func waitForPidExit(_ pid: pid_t, timeoutSeconds: Int = 120) -> Bool {
+func waitForPidExit(_ pid: pid_t, timeoutSeconds: Int = 45) -> Bool {
     let kq = kqueue()
     if kq == -1 {
         dacxLog("kqueue() failed (errno=\(errno))")
@@ -414,6 +414,17 @@ func runRootInstall() -> Int32 {
 // MARK: - XPC service implementation
 
 @objc final class UpdateHelperImpl: NSObject, UpdateHelperProtocol {
+    let verifiedCallerPID: Int32
+
+    @objc init(verifiedCallerPID: Int32) {
+        self.verifiedCallerPID = verifiedCallerPID
+        super.init()
+    }
+
+    @objc override convenience init() {
+        self.init(verifiedCallerPID: 0)
+    }
+
     func install(newAppPath: String,
                  installedAppPath: String,
                  expectedTeamId: String,
@@ -423,9 +434,28 @@ func runRootInstall() -> Int32 {
                  reply: @escaping (Bool, String?) -> Void) {
 
         if newAppPath.isEmpty || installedAppPath.isEmpty
-            || expectedTeamId.isEmpty || expectedVersion.isEmpty
-            || parentPID <= 0 {
+            || expectedTeamId.isEmpty || expectedVersion.isEmpty {
             reply(false, "missing required arguments")
+            return
+        }
+        if verifiedCallerPID <= 0 {
+            reply(false, "caller PID not verified by XPC layer")
+            return
+        }
+        let effectiveParentPID = verifiedCallerPID
+        if parentPID != 0 && parentPID != effectiveParentPID {
+            dacxLog("caller-supplied parentPID=\(parentPID) differs from XPC-verified pid=\(effectiveParentPID); using verified pid")
+        }
+        if installedAppPath != "/Applications/Dacx.app" {
+            reply(false, "installed path must be /Applications/Dacx.app")
+            return
+        }
+        if !newAppPath.hasPrefix("/") || newAppPath.contains("/..") {
+            reply(false, "new app path must be an absolute path without ..")
+            return
+        }
+        if !newAppPath.hasSuffix("/Dacx.app") && !newAppPath.hasSuffix("/Dacx.app/") {
+            reply(false, "new app path must end in /Dacx.app")
             return
         }
         if !bundleExists(newAppPath) {
@@ -444,7 +474,7 @@ func runRootInstall() -> Int32 {
             "DACX_INSTALLED_APP": installedAppPath,
             "DACX_TEAM_ID": expectedTeamId,
             "DACX_VERSION": expectedVersion,
-            "DACX_PARENT_PID": String(parentPID),
+            "DACX_PARENT_PID": String(effectiveParentPID),
             "DACX_RELAUNCH": relaunch ? "1" : "0",
         ]
 

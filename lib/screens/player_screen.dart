@@ -20,6 +20,7 @@ import '../services/debug_log_service.dart';
 import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
+import '../services/bookmark_service.dart';
 import '../services/seek_preview_service.dart';
 import '../services/self_update_service.dart';
 import '../l10n/app_localizations.dart';
@@ -148,6 +149,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Resume-position bookkeeping.
   Timer? _resumeSaveTimer;
   String? _resumePathInProgress;
+
+  String? _activeBookmarkToken;
 
   void _log(
     String event, {
@@ -433,11 +436,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
+    _releaseActiveBookmark();
     unawaited(_mediaSession.dispose());
     _playlist.dispose();
     unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
+  }
+
+  void _releaseActiveBookmark() {
+    final token = _activeBookmarkToken;
+    if (token == null || token.isEmpty) return;
+    _activeBookmarkToken = null;
+    unawaited(BookmarkService.stop(token));
+  }
+
+  Future<String> _resolveSandboxedPath(String requestedPath) async {
+    if (!BookmarkService.isSupported) return requestedPath;
+    final bookmark = _settings.fileBookmark(requestedPath);
+    if (bookmark == null || bookmark.isEmpty) return requestedPath;
+    final resolved = await BookmarkService.resolveAndStart(bookmark);
+    if (resolved == null) {
+      _settings.removeFileBookmark(requestedPath);
+      return requestedPath;
+    }
+    _releaseActiveBookmark();
+    _activeBookmarkToken = resolved.token.isNotEmpty ? resolved.token : null;
+    final bookmarkToPersist = resolved.refreshed ?? bookmark;
+    if (resolved.path != requestedPath) {
+      _settings.setFileBookmark(resolved.path, bookmarkToPersist);
+    } else if (resolved.stale && resolved.refreshed != null) {
+      _settings.setFileBookmark(requestedPath, resolved.refreshed!);
+    }
+    return resolved.path;
+  }
+
+  Future<void> _captureBookmarkFor(String path) async {
+    if (!BookmarkService.isSupported) return;
+    final bookmark = await BookmarkService.createBookmark(path);
+    if (bookmark != null && bookmark.isNotEmpty) {
+      _settings.setFileBookmark(path, bookmark);
+    }
   }
 
   void _onSettingsChanged() {
@@ -834,6 +873,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
 
+      await _captureBookmarkFor(path.trim());
       await _loadFile(path);
     } on PlatformException catch (e) {
       _log(
@@ -884,8 +924,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     bool forcePlay = false,
   }) async {
     if (_isDisposed) return;
-    final normalizedPath = filePath.trim();
-    if (normalizedPath.isEmpty) {
+    final requestedPath = filePath.trim();
+    if (requestedPath.isEmpty) {
       _log(
         'file_load_invalid_path',
         detailsBuilder: () => {'path': filePath},
@@ -900,6 +940,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       return;
     }
+
+    final normalizedPath = await _resolveSandboxedPath(requestedPath);
 
     if (!File(normalizedPath).existsSync()) {
       _log(
