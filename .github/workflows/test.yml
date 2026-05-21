@@ -102,25 +102,20 @@ jobs:
             ~/AppData/Roaming/fvm/versions
           key: fvm-${{ runner.os }}-${{ steps.fvm.outputs.version }}
 
-      - name: Install fvm
+      - name: Install fvm and pinned Flutter
         shell: bash
         run: |
           dart pub global activate fvm
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "$LOCALAPPDATA/Pub/Cache/bin" >> "$GITHUB_PATH"
+            # Backslashes in $LOCALAPPDATA break bash (e.g. \r in \runneradmin).
+            PUB_BIN="${LOCALAPPDATA//\\//}/Pub/Cache/bin"
+            echo "$PUB_BIN" >> "$GITHUB_PATH"
+            export PATH="$PUB_BIN:$PATH"
           else
             echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-          fi
-
-      - name: Install pinned Flutter via fvm
-        shell: bash
-        run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            export PATH="$LOCALAPPDATA/Pub/Cache/bin:$PATH"
-          else
             export PATH="$HOME/.pub-cache/bin:$PATH"
           fi
-          fvm install --setup "$(jq -r .flutter .fvmrc)"
+          npm run setup:flutter
 
       - name: Install Linux desktop deps
         if: matrix.os == 'ubuntu-latest'
