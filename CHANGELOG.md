@@ -20,6 +20,7 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 * **Win:** Addressed multiple issues with the new self-updater on windows:
   * Updater spawned a visible terminal window that was broken.
   * Updater wasn't cleanly launching.
+  * TLS issues with Dart.
 * **Codebase:** Misc fixes to the build pipeline and general stability fixes.
 
 ## Changes in `v0.8.0-beta.7:`

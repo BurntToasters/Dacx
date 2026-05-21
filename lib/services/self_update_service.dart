@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'debug_log_service.dart';
+import 'trusted_http.dart';
 import 'update_trust_config.dart';
 import 'update_service.dart';
 
@@ -98,16 +99,10 @@ class SelfUpdateService {
     ProcessRunFn? processRun,
     ProcessStartFn? processStart,
   }) : _debugLog = debugLog,
-       _httpGet = httpGet ?? http.get,
-       _httpStream = httpStream ?? _defaultStream,
+       _httpGet = httpGet ?? platformHttpGetFn,
+       _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
        _processStart = processStart ?? Process.start;
-
-  static Future<http.StreamedResponse> _defaultStream(
-    http.BaseRequest request,
-  ) {
-    return request.send();
-  }
 
   void _log(
     String event, {
