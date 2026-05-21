@@ -89,6 +89,20 @@ void main() {
       expect(c.barColor, v.barColor);
     });
 
+    test('copyWith keeps blur settings when not overridden', () {
+      final v = WindowVisuals.fromScheme(
+        scheme,
+        blurEnabled: true,
+        blurStrength: 0.4,
+      );
+
+      final c = v.copyWith();
+
+      expect(c.blurEnabled, v.blurEnabled);
+      expect(c.blurStrength, v.blurStrength);
+      expect(c.barColor, v.barColor);
+    });
+
     test('lerp interpolates between two visuals', () {
       final a = WindowVisuals.fromScheme(
         scheme,

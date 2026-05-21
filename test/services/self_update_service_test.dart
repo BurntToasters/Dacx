@@ -226,6 +226,22 @@ TeamIdentifier=ABCDE12345
     });
   });
 
+  group('SelfUpdateService Windows watchdog', () {
+    test(
+      'uses hidden PowerShell-friendly commands instead of cmd find loop',
+      () {
+        final script = SelfUpdateService.buildWindowsWatchdogPowerShellScript();
+
+        expect(script, contains('Get-Process -Id \$DacxPid'));
+        expect(script, contains('Start-Sleep -Seconds 1'));
+        expect(script, contains('Get-FileHash -Algorithm SHA256'));
+        expect(script, contains("Start-Process -FilePath 'msiexec.exe'"));
+        expect(script, isNot(contains('tasklist')));
+        expect(script, isNot(contains('find "%DACX_PID%"')));
+      },
+    );
+  });
+
   group('SelfUpdateService Ed25519 helpers', () {
     test('verifies a known RFC 8032 signature vector', () async {
       final publicKey = base64Encode(

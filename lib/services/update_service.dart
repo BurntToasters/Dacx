@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'debug_log_service.dart';
+import 'trusted_http.dart';
 
 typedef PackageInfoLoader = Future<PackageInfo> Function();
 typedef CurrentVersionLoader = Future<String> Function(PackageInfo packageInfo);
@@ -44,7 +45,7 @@ class UpdateService {
        _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
        _currentVersionLoader =
            currentVersionLoader ?? currentVersionFromPackageInfo,
-       _httpGet = httpGet ?? http.get,
+       _httpGet = httpGet ?? platformHttpGetFn,
        _canLaunch = canLaunch ?? canLaunchUrl,
        _launch = launch ?? launchUrl;
 

@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
+import 'services/trusted_http.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
@@ -70,6 +71,9 @@ void main(List<String> args) async {
   // frame is not blocked by sysctl + system_profiler subprocesses. No-op
   // elsewhere.
   unawaited(HardwareAccelerationService.prime());
+  if (Platform.isWindows) {
+    unawaited(primeWindowsTlsTrust());
+  }
 
   await windowManager.ensureInitialized();
 

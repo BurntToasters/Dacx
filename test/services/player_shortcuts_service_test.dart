@@ -231,6 +231,26 @@ void main() {
       );
     });
 
+    test('matches custom accelerators with Meta and Alt modifiers', () {
+      const event = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyN,
+        logicalKey: LogicalKeyboardKey.keyN,
+        timeStamp: Duration.zero,
+      );
+
+      expect(
+        resolveCustom(
+          event,
+          {
+            'newWindow': ['Meta+Alt+N'],
+          },
+          meta: true,
+          alt: true,
+        ),
+        PlayerShortcutAction.newWindow,
+      );
+    });
+
     test('returns null when no custom binding matches the accelerator', () {
       const event = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.keyP,

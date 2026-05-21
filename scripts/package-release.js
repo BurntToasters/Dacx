@@ -512,6 +512,43 @@ function renderWixV3FileAssociationComponent(audioIconFileName) {
   return lines.join("\n");
 }
 
+const DACX_APP_USER_MODEL_ID = "run.rosie.dacx";
+
+function renderWixStartMenuShortcutTree({ indent, includeIcon }) {
+  const iconAttr = includeIcon ? ' Icon="AppIcon.ico"' : "";
+  return [
+    `${indent}<Directory Name="Dacx">`,
+    `${indent}  <Component Id="CMP_START_MENU_SHORTCUT" Guid="*">`,
+    `${indent}    <Shortcut`,
+    `${indent}      Id="StartMenuShortcut"`,
+    `${indent}      Name="Dacx"`,
+    `${indent}      Description="Dacx media player"`,
+    `${indent}      Target="[INSTALLFOLDER]dacx.exe"`,
+    `${indent}      WorkingDirectory="INSTALLFOLDER"${iconAttr}>`,
+    `${indent}      <ShortcutProperty Key="System.AppUserModel.ID" Value="${DACX_APP_USER_MODEL_ID}" />`,
+    `${indent}    </Shortcut>`,
+    `${indent}    <RemoveFolder Id="RemoveDacxStartMenuFolder" On="uninstall" />`,
+    `${indent}    <RegistryValue Root="HKLM" Key="Software\\run.rosie\\Dacx" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />`,
+    `${indent}  </Component>`,
+    `${indent}</Directory>`,
+  ].join("\n");
+}
+
+function renderWixApplicationSearchRegistrationComponent({ indent }) {
+  return [
+    `${indent}<Component Id="CMP_APP_SEARCH_REGISTRATION" Guid="*">`,
+    `${indent}  <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe">`,
+    `${indent}    <RegistryValue Type="string" Value="Dacx" />`,
+    `${indent}    <RegistryValue Name="FriendlyAppName" Type="string" Value="Dacx" />`,
+    `${indent}    <RegistryValue Name="ApplicationDescription" Type="string" Value="Dacx media player" />`,
+    `${indent}    <RegistryKey Key="shell\\open\\command">`,
+    `${indent}      <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; %1" KeyPath="yes" />`,
+    `${indent}    </RegistryKey>`,
+    `${indent}  </RegistryKey>`,
+    `${indent}</Component>`,
+  ].join("\n");
+}
+
 function listFilesRecursive(baseDir) {
   const out = [];
 
@@ -808,8 +845,9 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   }
 
   const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const hasAppIcon = fs.existsSync(appIconPath);
   const msiVersion = toMsiVersion(VERSION);
-  const iconBlock = fs.existsSync(appIconPath)
+  const iconBlock = hasAppIcon
     ? [
         `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
         `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
@@ -819,6 +857,8 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   const componentRefs = [
     ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
     '      <ComponentRef Id="CMP_FILE_ASSOC" />',
+    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
+    '      <ComponentRef Id="CMP_APP_SEARCH_REGISTRATION" />',
   ].join("\n");
 
   // WiX v4+ schema: <Package> replaces the v3 <Product>+<Package> pair.
@@ -848,6 +888,18 @@ ${renderWixV4FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "        ").join("\n")}
       </Directory>
     </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramMenuFolder">
+${renderWixStartMenuShortcutTree({ indent: "      ", includeIcon: hasAppIcon })}
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+${renderWixApplicationSearchRegistrationComponent({ indent: "      " })}
+    </DirectoryRef>
   </Fragment>
 </Wix>
 `;
@@ -951,8 +1003,9 @@ function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
   }
 
   const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const hasAppIcon = fs.existsSync(appIconPath);
   const msiVersion = toMsiVersion(VERSION);
-  const iconBlock = fs.existsSync(appIconPath)
+  const iconBlock = hasAppIcon
     ? [
         `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
         `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
@@ -962,6 +1015,8 @@ function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
   const componentRefs = [
     ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
     '      <ComponentRef Id="CMP_FILE_ASSOC" />',
+    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
+    '      <ComponentRef Id="CMP_APP_SEARCH_REGISTRATION" />',
   ].join("\n");
 
   const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
@@ -990,7 +1045,16 @@ ${renderWixV3FileAssociationComponent(audioIconFileName)}
 ${renderDirectoryContents(rootNode, "          ").join("\n")}
         </Directory>
       </Directory>
+      <Directory Id="ProgramMenuFolder">
+${renderWixStartMenuShortcutTree({ indent: "        ", includeIcon: hasAppIcon })}
+      </Directory>
     </Directory>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+${renderWixApplicationSearchRegistrationComponent({ indent: "      " })}
+    </DirectoryRef>
   </Fragment>
 </Wix>
 `;
