@@ -27,7 +27,7 @@ We aim to acknowledge reports within a few business days and will coordinate dis
 
 Dacx is a **local desktop media player**. It does not implement user accounts or a server API. Primary trust boundaries:
 
-- **Self-update** — downloads from GitHub (host allowlist), verified with SHA256 + Ed25519 manifests (Windows) and codesign / Team ID / Gatekeeper checks (macOS).
+- **Self-update** — downloads from GitHub (host allowlist), verified with SHA256 + Ed25519 manifests (Windows) and `codesign --verify --deep --strict` plus Team ID / bundle ID / version checks (macOS).
 - **Local IPC** — method/event channels between Flutter and native runners; Windows named pipes use a per-user DACL.
 - **File open** — paths from CLI, drag-and-drop, and OS “Open With” are validated before use.
 

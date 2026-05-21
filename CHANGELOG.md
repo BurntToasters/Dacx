@@ -16,6 +16,9 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 *This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
+## Unreleased
+* **macOS:** Self-update verification uses `codesign` only (removed deprecated `spctl`); fixes false "internal error in Code Signing subsystem" when assessing bundles inside the sandbox container (beta 6+).
+
 ## Changes in `v0.8.0-beta.8:`
 * **Win:** Addressed multiple issues with the new self-updater on windows:
   * Updater spawned a visible terminal window that was broken.

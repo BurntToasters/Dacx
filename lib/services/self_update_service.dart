@@ -741,6 +741,12 @@ exit $install.ExitCode
         message: 'Dacx.app not found inside extracted zip',
       );
     }
+    // Downloaded zips may carry quarantine; strip before codesign verification.
+    await _processRun('/usr/bin/xattr', [
+      '-dr',
+      'com.apple.quarantine',
+      extractedAppPath,
+    ]);
 
     final validation = await _validateMacBundle(
       extractedAppPath,
@@ -762,11 +768,18 @@ exit $install.ExitCode
       final accepted = reply?['accepted'] == true;
       if (!accepted) {
         final err = reply?['error']?.toString();
+        final message = (err != null && err.trim().isNotEmpty)
+            ? err
+            : 'XPC update helper rejected install';
+        if (message.contains('codesign:')) {
+          return SelfUpdateResult(
+            SelfUpdateOutcome.signatureInvalid,
+            message: message,
+          );
+        }
         return SelfUpdateResult(
           SelfUpdateOutcome.spawnFailed,
-          message: (err != null && err.trim().isNotEmpty)
-              ? err
-              : 'XPC update helper rejected install',
+          message: message,
         );
       }
     } on PlatformException catch (e) {
@@ -795,9 +808,10 @@ exit $install.ExitCode
     'run.rosie.dacx/update',
   );
 
-  /// Runs a Gatekeeper-respecting validation pipeline against
-  /// the bundle at [appPath]. Returns SelfUpdateOutcome.spawned on full pass
-  /// (sentinel meaning "ok to continue"); any other outcome is a failure.
+  /// Pre-install signature checks on the extracted bundle (`codesign` only).
+  ///
+  /// The unsandboxed XPC update helper repeats `codesign --verify --deep
+  /// --strict` before swapping `/Applications/Dacx.app`.
   Future<SelfUpdateResult> _validateMacBundle(
     String appPath, {
     required String expectedVersion,
@@ -869,21 +883,6 @@ exit $install.ExitCode
       );
     }
 
-    // 4. Ask Gatekeeper to assess the app. This validates notarization without
-    // relying on the developer-only `xcrun stapler` command being installed.
-    final spctl = await _processRun('/usr/sbin/spctl', [
-      '--assess',
-      '--type',
-      'execute',
-      '--verbose=2',
-      appPath,
-    ]);
-    if (spctl.exitCode != 0) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.gatekeeperRejected,
-        message: spctl.stderr.toString(),
-      );
-    }
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 

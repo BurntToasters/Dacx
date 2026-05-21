@@ -75,7 +75,6 @@ enum ValidationFailure: Error, CustomStringConvertible {
     case bundleIdentifierMismatch(String)
     case teamMismatch(String)
     case versionMismatch(String)
-    case spctl(String)
 
     var description: String {
         switch self {
@@ -83,7 +82,6 @@ enum ValidationFailure: Error, CustomStringConvertible {
         case .bundleIdentifierMismatch(let m): return "bundle id mismatch: \(m)"
         case .teamMismatch(let m): return "team id mismatch: \(m)"
         case .versionMismatch(let m): return "version mismatch: \(m)"
-        case .spctl(let m): return "spctl: \(m)"
         }
     }
 }
@@ -116,12 +114,6 @@ func validateBundle(_ appPath: String, expectedTeamId: String, expectedVersion: 
     }
     if actualVersion.value != expectedVersion {
         return .versionMismatch("expected \(expectedVersion), got \(actualVersion.value)")
-    }
-    let spctl = runCommand("/usr/sbin/spctl", [
-        "--assess", "--type", "execute", "--verbose=2", appPath,
-    ])
-    if spctl.0 != 0 {
-        return .spctl(spctl.1)
     }
     return nil
 }

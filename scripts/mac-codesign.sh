@@ -38,6 +38,15 @@ run_codesign() {
   fi
 }
 
+# Apple recommends codesign (and stapler validate when stapled) over spctl --assess.
+verify_macos_codesign() {
+  local path="$1"
+  codesign --verify --deep --strict --verbose=2 "$path"
+  if command -v xcrun >/dev/null 2>&1; then
+    xcrun stapler validate "$path"
+  fi
+}
+
 # Validate
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY in .env}"
 : "${APPLE_ID:?Set APPLE_ID in .env}"
@@ -212,9 +221,9 @@ if [[ "$ZIP_RELEASE_VERSION" != "$PKG_VERSION" ]]; then
   exit 1
 fi
 
-codesign --verify --deep --strict --verbose=2 "$ZIP_VERIFY_APP"
-if ! spctl --assess --type execute --verbose=4 "$ZIP_VERIFY_APP"; then
-  echo "ERROR: spctl assessment failed for app extracted from final zip"
+echo "Verifying codesign on zip payload..."
+if ! verify_macos_codesign "$ZIP_VERIFY_APP"; then
+  echo "ERROR: codesign/stapler validation failed for app extracted from final zip"
   exit 1
 fi
 
@@ -255,16 +264,14 @@ xcrun notarytool submit "$DMG_PATH" \
 echo "Stapling DMG..."
 xcrun stapler staple "$DMG_PATH"
 
-echo "Verifying Gatekeeper acceptance of stapled .app..."
-if ! spctl --assess --type execute --verbose=4 "$APP_BUNDLE"; then
-  echo "ERROR: spctl assessment failed for $APP_BUNDLE"
-  echo "       The signed/stapled .app would be rejected by Gatekeeper."
+echo "Verifying codesign on stapled .app..."
+if ! verify_macos_codesign "$APP_BUNDLE"; then
+  echo "ERROR: codesign/stapler validation failed for $APP_BUNDLE"
   exit 1
 fi
-echo "Verifying Gatekeeper acceptance of DMG..."
-if ! spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"; then
-  echo "ERROR: spctl assessment failed for $DMG_PATH"
-  echo "       The notarized DMG would be rejected by Gatekeeper."
+echo "Verifying codesign on stapled DMG..."
+if ! verify_macos_codesign "$DMG_PATH"; then
+  echo "ERROR: codesign/stapler validation failed for $DMG_PATH"
   exit 1
 fi
 
