@@ -346,7 +346,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           final l10n = AppLocalizations.of(context);
           messenger.showSnackBar(
             SnackBar(
-              content: Text(l10n.snackPlaybackOperationFailed(event.error.toString())),
+              content: Text(
+                l10n.snackPlaybackOperationFailed(event.error.toString()),
+              ),
               duration: const Duration(seconds: 4),
             ),
           );
@@ -1236,12 +1238,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       PageRouteBuilder<void>(
         transitionDuration: _settingsFwdTransition,
         reverseTransitionDuration: _settingsRevTransition,
-        pageBuilder: (_, _, _) =>
-            SettingsScreen(
-              settings: _settings,
-              debugLog: widget.debugLog,
-              updateService: _updateService,
-            ),
+        pageBuilder: (_, _, _) => SettingsScreen(
+          settings: _settings,
+          debugLog: widget.debugLog,
+          updateService: _updateService,
+        ),
         opaque: false,
         transitionsBuilder: (context, animation, _, child) {
           // Mask ramps up quickly to hide the player underneath the
@@ -2479,10 +2480,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context).snackQueueTruncated(
-                PlaylistService.maxQueueItems,
-                dropped,
-              ),
+              AppLocalizations.of(
+                context,
+              ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
             ),
           ),
         );
@@ -2498,10 +2498,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context).snackQueueTruncated(
-                PlaylistService.maxQueueItems,
-                dropped,
-              ),
+              AppLocalizations.of(
+                context,
+              ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
             ),
           ),
         );

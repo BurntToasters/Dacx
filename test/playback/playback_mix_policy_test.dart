@@ -21,9 +21,9 @@ void main() {
   });
 
   test('numericAudioIds filters auto/no and non-numeric', () {
-    expect(
-      PlaybackMixPolicy.numericAudioIds(['auto', 'no', '2', 'x', '1']),
-      ['2', '1'],
-    );
+    expect(PlaybackMixPolicy.numericAudioIds(['auto', 'no', '2', 'x', '1']), [
+      '2',
+      '1',
+    ]);
   });
 }

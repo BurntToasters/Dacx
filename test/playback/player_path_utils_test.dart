@@ -37,9 +37,7 @@ void main() {
   group('PlayerPathUtils.isPermissionDeniedError', () {
     test('detects permission denied message', () {
       expect(
-        PlayerPathUtils.isPermissionDeniedError(
-          Exception('Permission denied'),
-        ),
+        PlayerPathUtils.isPermissionDeniedError(Exception('Permission denied')),
         isTrue,
       );
     });

@@ -60,9 +60,7 @@ class PlaylistService extends ChangeNotifier {
     if (filtered.isEmpty) return 0;
     final room = maxQueueItems - _items.length;
     if (room <= 0) return filtered.length;
-    final toAdd = filtered.length > room
-        ? filtered.sublist(0, room)
-        : filtered;
+    final toAdd = filtered.length > room ? filtered.sublist(0, room) : filtered;
     final dropped = filtered.length - toAdd.length;
     final wasEmpty = _items.isEmpty;
     _items.addAll(toAdd);

@@ -119,7 +119,7 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
       case SelfUpdateOutcome.teamIdMismatch:
         return 'Downloaded app is signed by an unexpected developer. Refusing to install.';
       case SelfUpdateOutcome.gatekeeperRejected:
-        return 'Downloaded app was rejected by Gatekeeper.';
+        return 'Self-update is not available on this build (missing signing configuration).';
       case SelfUpdateOutcome.spawnFailed:
         return 'Could not launch the installer.';
       case SelfUpdateOutcome.spawned:

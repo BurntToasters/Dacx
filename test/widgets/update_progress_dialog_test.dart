@@ -128,7 +128,7 @@ void main() {
         SelfUpdateOutcome.teamIdMismatch:
             'Downloaded app is signed by an unexpected developer. Refusing to install.',
         SelfUpdateOutcome.gatekeeperRejected:
-            'Downloaded app was rejected by Gatekeeper.',
+            'Self-update is not available on this build (missing signing configuration).',
         SelfUpdateOutcome.spawnFailed: 'Could not launch the installer.',
       };
 

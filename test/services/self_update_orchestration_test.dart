@@ -61,7 +61,10 @@ void main() {
         jsonEncode({'version': '0.8.0', 'assets': {}}),
       );
       expect(
-        SelfUpdateService.hashFromWindowsManifest(manifest, 'Dacx-Windows-x64.msi'),
+        SelfUpdateService.hashFromWindowsManifest(
+          manifest,
+          'Dacx-Windows-x64.msi',
+        ),
         isNull,
       );
     });

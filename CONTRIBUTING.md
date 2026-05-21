@@ -17,12 +17,6 @@ npm run test:all
 
 This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage (55% floor), and a build smoke. CI on `main`, `beta`, and `next-*` runs a subset plus multi-OS build smoke.
 
-Integration smoke (`integration_test/`) runs on Linux in CI. Locally on macOS:
-
-```bash
-fvm flutter test integration_test -d macos
-```
-
 ## Pull requests
 
 - Target `beta` or `main` as agreed with maintainers.

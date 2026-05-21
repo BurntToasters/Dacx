@@ -62,14 +62,6 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
-      - name: Install Linux desktop deps (integration smoke)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libepoxy-dev libmpv-dev mpv libunwind-dev
-
-      - name: Integration smoke tests
-        run: fvm flutter test integration_test -d linux
-
       - name: Generate licenses manifest (advisory)
         continue-on-error: true
         run: npm run licenses

@@ -103,137 +103,141 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: visuals.overlayColor,
                   border: Border(top: BorderSide(color: visuals.dividerColor)),
                 ),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 210),
-                  curve: Curves.easeOutCubic,
-                  opacity: _contentVisible ? 1 : 0,
-                  child: AnimatedSlide(
-                    duration: const Duration(milliseconds: 260),
+                child: Material(
+                  color: visuals.overlayColor,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 210),
                     curve: Curves.easeOutCubic,
-                    offset: _contentVisible
-                        ? Offset.zero
-                        : const Offset(0, 0.02),
-                    child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      children: [
-                        _helpFaqTile(),
-                        _supportProjectTile(),
-                        const Divider(),
-                        _sectionHeader(l10n.settingsSectionPlayback),
-                        _speedTile(),
-                        _loopModeTile(),
-                        SwitchListTile(
-                          title: Text(l10n.settingsAutoPlay),
-                          value: _s.autoPlay,
-                          onChanged: (v) => setState(() {
-                            _s.autoPlay = v;
-                            _log(
-                              'auto_play_changed',
-                              detailsBuilder: () => {'value': v},
-                            );
-                          }),
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.settingsResumePlayback),
-                          subtitle: Text(l10n.settingsResumeSubtitle),
-                          value: _s.resumePlaybackEnabled,
-                          onChanged: (v) =>
-                              setState(() => _s.resumePlaybackEnabled = v),
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.settingsOnScreenDisplay),
-                          subtitle: Text(l10n.settingsOsdSubtitle),
-                          value: _s.osdEnabled,
-                          onChanged: (v) => setState(() => _s.osdEnabled = v),
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.settingsMediaSession),
-                          subtitle: Text(l10n.settingsMediaSessionSubtitle),
-                          value: _s.mediaSessionEnabled,
-                          onChanged: (v) =>
-                              setState(() => _s.mediaSessionEnabled = v),
-                        ),
-                        _hwDecTile(),
-                        const Divider(),
-                        _sectionHeader(l10n.settingsSectionAppearance),
-                        _themeModeTile(),
-                        _accentColorTile(colorScheme),
-                        if (_s.experimentalFeaturesEnabled) ...[
-                          _experimentalTile(_windowOpacityTile()),
-                          if (Platform.isLinux)
-                            _experimentalTile(_linuxCompositorBlurTile()),
-                          _experimentalTile(_windowBlurTile()),
-                          _experimentalTile(_windowBlurStrengthTile()),
-                        ],
-                        SwitchListTile(
-                          title: Text(l10n.settingsAlwaysOnTop),
-                          value: _s.alwaysOnTop,
-                          onChanged: (v) => setState(() {
-                            _s.alwaysOnTop = v;
-                            _log(
-                              'always_on_top_changed',
-                              detailsBuilder: () => {'value': v},
-                            );
-                          }),
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.settingsRememberWindow),
-                          value: _s.rememberWindow,
-                          onChanged: (v) => setState(() {
-                            _s.rememberWindow = v;
-                            _log(
-                              'remember_window_changed',
-                              detailsBuilder: () => {'value': v},
-                            );
-                          }),
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.settingsAllowMultipleWindows),
-                          subtitle: Text(l10n.settingsAllowMultipleWindowsSubtitle),
-                          value: _s.allowMultipleInstances,
-                          onChanged: (v) => setState(() {
-                            _s.allowMultipleInstances = v;
-                            _log(
-                              'allow_multiple_instances_changed',
-                              detailsBuilder: () => {'value': v},
-                            );
-                          }),
-                        ),
-                        const Divider(),
-                        _sectionHeader(l10n.settingsSectionGeneral),
-                        SwitchListTile(
-                          title: Text(l10n.settingsCheckForUpdatesOnLaunch),
-                          value: _s.updateCheckEnabled,
-                          onChanged: (v) => setState(() {
-                            _s.updateCheckEnabled = v;
-                            _log(
-                              'update_check_on_launch_changed',
-                              category: DebugLogCategory.update,
-                              detailsBuilder: () => {'value': v},
-                            );
-                          }),
-                        ),
-                        _updateChannelTile(),
-                        _recentFilesTile(),
-                        _checkForUpdatesTile(),
-                        _keyboardShortcutsTile(),
-                        const Divider(),
-                        _sectionHeader(l10n.settingsSectionExperimental),
-                        _experimentalTile(_experimentalFeaturesTile()),
-                        if (_s.debugModeEnabled) ...[
+                    opacity: _contentVisible ? 1 : 0,
+                    child: AnimatedSlide(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      offset: _contentVisible
+                          ? Offset.zero
+                          : const Offset(0, 0.02),
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        children: [
+                          _helpFaqTile(),
+                          _supportProjectTile(),
                           const Divider(),
-                          _sectionHeader(l10n.settingsSectionDebug),
-                          _debugLogPanel(),
+                          _sectionHeader(l10n.settingsSectionPlayback),
+                          _speedTile(),
+                          _loopModeTile(),
+                          SwitchListTile(
+                            title: Text(l10n.settingsAutoPlay),
+                            value: _s.autoPlay,
+                            onChanged: (v) => setState(() {
+                              _s.autoPlay = v;
+                              _log(
+                                'auto_play_changed',
+                                detailsBuilder: () => {'value': v},
+                              );
+                            }),
+                          ),
+                          SwitchListTile(
+                            title: Text(l10n.settingsResumePlayback),
+                            subtitle: Text(l10n.settingsResumeSubtitle),
+                            value: _s.resumePlaybackEnabled,
+                            onChanged: (v) =>
+                                setState(() => _s.resumePlaybackEnabled = v),
+                          ),
+                          SwitchListTile(
+                            title: Text(l10n.settingsOnScreenDisplay),
+                            subtitle: Text(l10n.settingsOsdSubtitle),
+                            value: _s.osdEnabled,
+                            onChanged: (v) => setState(() => _s.osdEnabled = v),
+                          ),
+                          SwitchListTile(
+                            title: Text(l10n.settingsMediaSession),
+                            subtitle: Text(l10n.settingsMediaSessionSubtitle),
+                            value: _s.mediaSessionEnabled,
+                            onChanged: (v) =>
+                                setState(() => _s.mediaSessionEnabled = v),
+                          ),
+                          _hwDecTile(),
+                          const Divider(),
+                          _sectionHeader(l10n.settingsSectionAppearance),
+                          _themeModeTile(),
+                          _accentColorTile(colorScheme),
+                          if (_s.experimentalFeaturesEnabled) ...[
+                            _experimentalTile(_windowOpacityTile()),
+                            if (Platform.isLinux)
+                              _experimentalTile(_linuxCompositorBlurTile()),
+                            _experimentalTile(_windowBlurTile()),
+                            _experimentalTile(_windowBlurStrengthTile()),
+                          ],
+                          SwitchListTile(
+                            title: Text(l10n.settingsAlwaysOnTop),
+                            value: _s.alwaysOnTop,
+                            onChanged: (v) => setState(() {
+                              _s.alwaysOnTop = v;
+                              _log(
+                                'always_on_top_changed',
+                                detailsBuilder: () => {'value': v},
+                              );
+                            }),
+                          ),
+                          SwitchListTile(
+                            title: Text(l10n.settingsRememberWindow),
+                            value: _s.rememberWindow,
+                            onChanged: (v) => setState(() {
+                              _s.rememberWindow = v;
+                              _log(
+                                'remember_window_changed',
+                                detailsBuilder: () => {'value': v},
+                              );
+                            }),
+                          ),
+                          SwitchListTile(
+                            title: Text(l10n.settingsAllowMultipleWindows),
+                            subtitle: Text(
+                              l10n.settingsAllowMultipleWindowsSubtitle,
+                            ),
+                            value: _s.allowMultipleInstances,
+                            onChanged: (v) => setState(() {
+                              _s.allowMultipleInstances = v;
+                              _log(
+                                'allow_multiple_instances_changed',
+                                detailsBuilder: () => {'value': v},
+                              );
+                            }),
+                          ),
+                          const Divider(),
+                          _sectionHeader(l10n.settingsSectionGeneral),
+                          SwitchListTile(
+                            title: Text(l10n.settingsCheckForUpdatesOnLaunch),
+                            value: _s.updateCheckEnabled,
+                            onChanged: (v) => setState(() {
+                              _s.updateCheckEnabled = v;
+                              _log(
+                                'update_check_on_launch_changed',
+                                category: DebugLogCategory.update,
+                                detailsBuilder: () => {'value': v},
+                              );
+                            }),
+                          ),
+                          _updateChannelTile(),
+                          _recentFilesTile(),
+                          _checkForUpdatesTile(),
+                          _keyboardShortcutsTile(),
+                          const Divider(),
+                          _sectionHeader(l10n.settingsSectionExperimental),
+                          _experimentalTile(_experimentalFeaturesTile()),
+                          if (_s.debugModeEnabled) ...[
+                            const Divider(),
+                            _sectionHeader(l10n.settingsSectionDebug),
+                            _debugLogPanel(),
+                          ],
+                          const Divider(),
+                          _resetTile(),
+                          const Divider(),
+                          _licensesTile(),
+                          _aboutTile(),
                         ],
-                        const Divider(),
-                        _resetTile(),
-                        const Divider(),
-                        _licensesTile(),
-                        _aboutTile(),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -342,10 +346,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: SegmentedButton<LoopMode>(
         segments: LoopMode.values
             .map(
-              (m) => ButtonSegment(
-                value: m,
-                label: Text(_loopModeLabel(l10n, m)),
-              ),
+              (m) =>
+                  ButtonSegment(value: m, label: Text(_loopModeLabel(l10n, m))),
             )
             .toList(),
         selected: {_s.loopMode},
@@ -506,8 +508,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (windowsBlurMode)
-            Text(l10n.settingsWindowOpacityBlurNote),
+          if (windowsBlurMode) Text(l10n.settingsWindowOpacityBlurNote),
           Slider(
             value: opacity,
             min: 0.65,
@@ -678,11 +679,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: colors.background,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: colors.border),
         ),
-        child: child,
+        child: Material(
+          color: colors.background,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
       ),
     );
   }
@@ -775,7 +780,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           severity: DebugSeverity.warn,
         );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).snackUpdateCheckFailed)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).snackUpdateCheckFailed),
+          ),
         );
         return;
       }
@@ -803,7 +810,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         _log('manual_update_not_available', category: DebugLogCategory.update);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).snackUpdateLatest)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).snackUpdateLatest),
+          ),
         );
       }
     } catch (e) {
@@ -815,7 +824,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).snackUpdateCheckFailed)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).snackUpdateCheckFailed),
+        ),
       );
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
@@ -840,7 +851,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _ShortcutRow(openShortcut, dialogL10n.settingsShortcutOpenFile),
+                  _ShortcutRow(
+                    openShortcut,
+                    dialogL10n.settingsShortcutOpenFile,
+                  ),
                   _ShortcutRow(
                     reopenShortcut,
                     dialogL10n.settingsShortcutReopenLast,
@@ -850,7 +864,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _ShortcutRow('↑  ↓', dialogL10n.settingsShortcutVolume),
                   _ShortcutRow('M', dialogL10n.settingsShortcutMute),
                   _ShortcutRow('F', dialogL10n.settingsShortcutFullscreen),
-                  _ShortcutRow('Esc', dialogL10n.settingsShortcutExitFullscreen),
+                  _ShortcutRow(
+                    'Esc',
+                    dialogL10n.settingsShortcutExitFullscreen,
+                  ),
                 ],
               ),
               actions: [
@@ -982,9 +999,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await _s.resetAll();
           if (mounted) {
             setState(() {});
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.snackSettingsReset)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(l10n.snackSettingsReset)));
           }
         } else {
           _log('reset_settings_cancelled');
@@ -1082,8 +1099,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _promptToggleDebugMode() async {
     final l10n = AppLocalizations.of(context);
     final currentlyEnabled = _s.debugModeEnabled;
-    final actionLabel =
-        currentlyEnabled ? l10n.settingsActionDisable : l10n.settingsActionEnable;
+    final actionLabel = currentlyEnabled
+        ? l10n.settingsActionDisable
+        : l10n.settingsActionEnable;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {

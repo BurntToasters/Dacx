@@ -36,11 +36,7 @@ Widget _wrap(SettingsService s, DebugLogService log) {
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     theme: _theme(),
-    home: SettingsScreen(
-      settings: s,
-      debugLog: log,
-      updateService: updates,
-    ),
+    home: SettingsScreen(settings: s, debugLog: log, updateService: updates),
   );
 }
 

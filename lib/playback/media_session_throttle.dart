@@ -1,6 +1,8 @@
 /// Limits how often native media-session position updates are sent.
 class MediaSessionPositionThrottle {
-  MediaSessionPositionThrottle({this.minInterval = const Duration(milliseconds: 400)});
+  MediaSessionPositionThrottle({
+    this.minInterval = const Duration(milliseconds: 400),
+  });
 
   final Duration minInterval;
   DateTime? _lastSent;

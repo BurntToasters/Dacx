@@ -140,10 +140,7 @@ void main(List<String> args) async {
     }),
   );
   final cliFile = _parseCliFilePath(args);
-  final updateService = UpdateService(
-    debugLog: debugLog,
-    debugSource: 'app',
-  );
+  final updateService = UpdateService(debugLog: debugLog, debugSource: 'app');
 
   runApp(
     DacxApp(

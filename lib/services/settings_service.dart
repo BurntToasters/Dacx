@@ -109,9 +109,7 @@ class SettingsService extends ChangeNotifier {
             prefs.remove('resume_positions_v1');
           } catch (e) {
             if (kDebugMode) {
-              debugPrint(
-                'Dacx: resume_positions_v1 migration failed: $e',
-              );
+              debugPrint('Dacx: resume_positions_v1 migration failed: $e');
             }
             prefs.remove('resume_positions_v1');
           }
