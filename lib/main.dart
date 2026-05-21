@@ -17,6 +17,7 @@ import 'services/trusted_http.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
+import 'services/update_service.dart';
 import 'theme/window_visuals.dart';
 
 class _NoBounceScrollBehavior extends MaterialScrollBehavior {
@@ -139,8 +140,19 @@ void main(List<String> args) async {
     }),
   );
   final cliFile = _parseCliFilePath(args);
+  final updateService = UpdateService(
+    debugLog: debugLog,
+    debugSource: 'app',
+  );
 
-  runApp(DacxApp(settings: settings, debugLog: debugLog, initialFile: cliFile));
+  runApp(
+    DacxApp(
+      settings: settings,
+      debugLog: debugLog,
+      updateService: updateService,
+      initialFile: cliFile,
+    ),
+  );
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (!firstFrameReady.isCompleted) {
@@ -219,12 +231,14 @@ String? _normalizeCliPath(String value) {
 class DacxApp extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
+  final UpdateService updateService;
   final String? initialFile;
 
   const DacxApp({
     super.key,
     required this.settings,
     required this.debugLog,
+    required this.updateService,
     this.initialFile,
   });
 
@@ -288,7 +302,6 @@ class _DacxAppState extends State<DacxApp>
         'experimental_features': widget.settings.experimentalFeaturesEnabled,
       },
     );
-    setState(() {});
     unawaited(_applyWindowVisualSettings());
   }
 
@@ -468,43 +481,49 @@ class _DacxAppState extends State<DacxApp>
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.settings;
-    final experimentalEnabled = s.experimentalFeaturesEnabled;
-    final blurEnabled = _isEffectiveBlurEnabled(s);
-    final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
-    final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
-    final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
-        ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
-        : 1.0;
-    final popupAlpha = blurEnabled
-        ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
-        : 1.0;
-    final inputs = _ThemeInputs(
-      seed: s.accentColor.color,
-      blurEnabled: blurEnabled,
-      blurStrength: s.windowBlurStrength,
-      windowsBlurUiOpacity: windowsBlurUiOpacity,
-      popupAlpha: popupAlpha,
-    );
-    final themes = _cachedThemeInputs == inputs && _cachedThemes != null
-        ? _cachedThemes!
-        : (_cachedThemes = _buildThemes(inputs));
-    _cachedThemeInputs = inputs;
+    return ListenableBuilder(
+      listenable: widget.settings,
+      builder: (context, _) {
+        final s = widget.settings;
+        final experimentalEnabled = s.experimentalFeaturesEnabled;
+        final blurEnabled = _isEffectiveBlurEnabled(s);
+        final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
+        final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
+        final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
+            ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
+            : 1.0;
+        final popupAlpha = blurEnabled
+            ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
+            : 1.0;
+        final inputs = _ThemeInputs(
+          seed: s.accentColor.color,
+          blurEnabled: blurEnabled,
+          blurStrength: s.windowBlurStrength,
+          windowsBlurUiOpacity: windowsBlurUiOpacity,
+          popupAlpha: popupAlpha,
+        );
+        final themes = _cachedThemeInputs == inputs && _cachedThemes != null
+            ? _cachedThemes!
+            : (_cachedThemes = _buildThemes(inputs));
+        _cachedThemeInputs = inputs;
 
-    return MaterialApp(
-      title: 'Dacx',
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      scrollBehavior: const _NoBounceScrollBehavior(),
-      themeMode: s.themeMode,
-      theme: themes.light,
-      darkTheme: themes.dark,
-      home: PlayerScreen(
-        settings: s,
-        debugLog: widget.debugLog,
-        initialFile: widget.initialFile,
-      ),
+        return MaterialApp(
+          title: 'Dacx',
+          debugShowCheckedModeBanner: false,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          scrollBehavior: const _NoBounceScrollBehavior(),
+          themeMode: s.themeMode,
+          theme: themes.light,
+          darkTheme: themes.dark,
+          home: PlayerScreen(
+            settings: s,
+            debugLog: widget.debugLog,
+            updateService: widget.updateService,
+            initialFile: widget.initialFile,
+          ),
+        );
+      },
     );
   }
 

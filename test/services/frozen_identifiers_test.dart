@@ -9,6 +9,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/services/settings_service.dart';
+
 void main() {
   group('frozen platform identifiers', () {
     test('media session method channel name is unchanged', () {
@@ -23,61 +25,15 @@ void main() {
   });
 
   group('frozen SharedPreferences keys', () {
-    // These string values are persisted to disk on every install; renaming
-    // any of them silently wipes a user's settings. If you need to rename,
-    // write a migration in SettingsService first, then update this list.
-    const frozen = <String>{
-      'settings_schema_version',
-      'playback_volume',
-      'playback_speed',
-      'playback_loop_mode',
-      'playback_auto_play',
-      'update_channel',
-      'appearance_theme',
-      'appearance_accent',
-      'appearance_always_on_top',
-      'appearance_remember_window',
-      'window_width',
-      'window_height',
-      'window_x',
-      'window_y',
-      'recent_files',
-      'last_open_directory',
-      'update_check_enabled',
-      'update_last_check',
-      'system_hwdec',
-      'window_opacity',
-      'window_blur_enabled',
-      'window_blur_strength',
-      'experimental_features_enabled',
-      'linux_compositor_blur_experimental',
-      'debug_mode_enabled',
-      'eq_enabled',
-      'eq_preset',
-      'eq_bands',
-      'screenshot_dir',
-      'screenshot_format',
-      'osd_enabled',
-      'seek_preview_enabled',
-      'multi_audio_mix',
-      'media_session_enabled',
-      'keybinds_v1',
-      'resume_playback_enabled',
-      'resume_positions_v2',
-      'playlist_shuffle',
-      'allow_multiple_instances',
-    };
-
-    test('snapshot is non-empty and unique', () {
+    test('SettingsService.frozenPreferenceKeys is non-empty and unique', () {
+      const frozen = SettingsService.frozenPreferenceKeys;
       expect(frozen, isNotEmpty);
       expect(frozen.length, frozen.toSet().length);
     });
 
-    test('every key is well-formed', () {
-      // SharedPreferences allows any string but we restrict to lower_snake to
-      // catch accidental whitespace or punctuation.
+    test('every key is well-formed lower_snake_case', () {
       final pattern = RegExp(r'^[a-z][a-z0-9_]*$');
-      for (final key in frozen) {
+      for (final key in SettingsService.frozenPreferenceKeys) {
         expect(
           pattern.hasMatch(key),
           isTrue,

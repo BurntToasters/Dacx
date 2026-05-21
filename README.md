@@ -91,7 +91,7 @@ This means:
   ```bash
   DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
   ```
-- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` *optionally*. If unset (the default), the MSI is unsigned at the OS level and self-update relies solely on the Ed25519-signed update manifest for trust. If you have an Authenticode certificate and want Authenticode pinning on top, set the thumbprint and the build will bake it in.
+- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`) *optionally* for local dev. If unset, the MSI is unsigned at the OS level and self-update relies on the Ed25519-signed update manifest. On **release VMs**, set the thumbprint in `.env` and add `DACX_REQUIRE_WINDOWS_SIGNER=1` so `npm run build:win` fails when the thumbprint is missing (see `SECURITY.md`).
 - `scripts/flutter-build-linux` is not affected by either.
 
 ### macOS support

@@ -11,10 +11,17 @@ const thumbprint = (
   ''
 ).trim();
 
+const requireSigner = process.env.DACX_REQUIRE_WINDOWS_SIGNER === '1';
 if (!thumbprint) {
-  console.warn(
-    'WARN: WINDOWS_SIGNING_CERT_THUMBPRINT not set in .env — Authenticode verification will be skipped; Ed25519 update-manifest verification is still required.',
-  );
+  const message =
+    'WINDOWS_SIGNING_CERT_THUMBPRINT (or DACX_WINDOWS_SIGNER_THUMBPRINT) not set in .env — Authenticode verification will be skipped at runtime; Ed25519 update-manifest verification is still required.';
+  if (requireSigner) {
+    console.error(
+      `ERROR: ${message}\nSet the thumbprint on release VMs, or unset DACX_REQUIRE_WINDOWS_SIGNER for local dev builds.`,
+    );
+    process.exit(1);
+  }
+  console.warn(`WARN: ${message}`);
 }
 
 const flutterArgs = ['flutter', 'build', 'windows', '--release'];

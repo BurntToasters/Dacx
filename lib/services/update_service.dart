@@ -5,8 +5,11 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/update_channel.dart';
 import 'debug_log_service.dart';
 import 'trusted_http.dart';
+
+export '../models/update_channel.dart';
 
 typedef PackageInfoLoader = Future<PackageInfo> Function();
 typedef CurrentVersionLoader = Future<String> Function(PackageInfo packageInfo);
@@ -14,8 +17,6 @@ typedef HttpGet =
     Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
 typedef LaunchUrlFn = Future<bool> Function(Uri uri, {LaunchMode mode});
-
-enum UpdateChannel { auto, stable, beta }
 
 class UpdateService {
   static const String _owner = 'BurntToasters';

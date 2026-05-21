@@ -16,11 +16,13 @@ import '../widgets/update_progress_dialog.dart';
 class SettingsScreen extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
+  final UpdateService updateService;
 
   const SettingsScreen({
     super.key,
     required this.settings,
     required this.debugLog,
+    required this.updateService,
   });
 
   @override
@@ -33,7 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'https://help.rosie.run/dacx/en-us/faq',
   );
   static final Uri _supportProjectUri = Uri.parse('https://rosie.run/support');
-  late final UpdateService _updateService;
+  UpdateService get _updateService => widget.updateService;
   bool _contentVisible = false;
   bool _isDisposed = false;
 
@@ -67,10 +69,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _updateService = UpdateService(
-      debugLog: widget.debugLog,
-      debugSource: 'settings_screen',
-    );
     _log('settings_screen_init', category: DebugLogCategory.ui);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _isDisposed) return;
@@ -124,11 +122,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _helpFaqTile(),
                         _supportProjectTile(),
                         const Divider(),
-                        _sectionHeader('Playback'),
+                        _sectionHeader(l10n.settingsSectionPlayback),
                         _speedTile(),
                         _loopModeTile(),
                         SwitchListTile(
-                          title: const Text('Auto-play on file open'),
+                          title: Text(l10n.settingsAutoPlay),
                           value: _s.autoPlay,
                           onChanged: (v) => setState(() {
                             _s.autoPlay = v;
@@ -139,34 +137,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }),
                         ),
                         SwitchListTile(
-                          title: const Text('Resume from last position'),
-                          subtitle: const Text(
-                            'Remember playback position for each file',
-                          ),
+                          title: Text(l10n.settingsResumePlayback),
+                          subtitle: Text(l10n.settingsResumeSubtitle),
                           value: _s.resumePlaybackEnabled,
                           onChanged: (v) =>
                               setState(() => _s.resumePlaybackEnabled = v),
                         ),
                         SwitchListTile(
-                          title: const Text('On-screen display'),
-                          subtitle: const Text(
-                            'Show title and time overlay during playback',
-                          ),
+                          title: Text(l10n.settingsOnScreenDisplay),
+                          subtitle: Text(l10n.settingsOsdSubtitle),
                           value: _s.osdEnabled,
                           onChanged: (v) => setState(() => _s.osdEnabled = v),
                         ),
                         SwitchListTile(
-                          title: const Text('System media keys / Now Playing'),
-                          subtitle: const Text(
-                            'Publish playback to MPRIS / SMTC / Now Playing',
-                          ),
+                          title: Text(l10n.settingsMediaSession),
+                          subtitle: Text(l10n.settingsMediaSessionSubtitle),
                           value: _s.mediaSessionEnabled,
                           onChanged: (v) =>
                               setState(() => _s.mediaSessionEnabled = v),
                         ),
                         _hwDecTile(),
                         const Divider(),
-                        _sectionHeader('Appearance'),
+                        _sectionHeader(l10n.settingsSectionAppearance),
                         _themeModeTile(),
                         _accentColorTile(colorScheme),
                         if (_s.experimentalFeaturesEnabled) ...[
@@ -177,7 +169,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _experimentalTile(_windowBlurStrengthTile()),
                         ],
                         SwitchListTile(
-                          title: const Text('Always on top'),
+                          title: Text(l10n.settingsAlwaysOnTop),
                           value: _s.alwaysOnTop,
                           onChanged: (v) => setState(() {
                             _s.alwaysOnTop = v;
@@ -188,7 +180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }),
                         ),
                         SwitchListTile(
-                          title: const Text('Remember window size & position'),
+                          title: Text(l10n.settingsRememberWindow),
                           value: _s.rememberWindow,
                           onChanged: (v) => setState(() {
                             _s.rememberWindow = v;
@@ -199,12 +191,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }),
                         ),
                         SwitchListTile(
-                          title: const Text('Allow multiple windows'),
-                          subtitle: const Text(
-                            'When off (default), opening a file from your '
-                            'OS reuses the running Dacx window. Press '
-                            'Ctrl/Cmd+N to open an extra window on demand.',
-                          ),
+                          title: Text(l10n.settingsAllowMultipleWindows),
+                          subtitle: Text(l10n.settingsAllowMultipleWindowsSubtitle),
                           value: _s.allowMultipleInstances,
                           onChanged: (v) => setState(() {
                             _s.allowMultipleInstances = v;
@@ -215,9 +203,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }),
                         ),
                         const Divider(),
-                        _sectionHeader('General'),
+                        _sectionHeader(l10n.settingsSectionGeneral),
                         SwitchListTile(
-                          title: const Text('Check for updates on launch'),
+                          title: Text(l10n.settingsCheckForUpdatesOnLaunch),
                           value: _s.updateCheckEnabled,
                           onChanged: (v) => setState(() {
                             _s.updateCheckEnabled = v;
@@ -233,11 +221,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _checkForUpdatesTile(),
                         _keyboardShortcutsTile(),
                         const Divider(),
-                        _sectionHeader('Experimental'),
+                        _sectionHeader(l10n.settingsSectionExperimental),
                         _experimentalTile(_experimentalFeaturesTile()),
                         if (_s.debugModeEnabled) ...[
                           const Divider(),
-                          _sectionHeader('Debug'),
+                          _sectionHeader(l10n.settingsSectionDebug),
                           _debugLogPanel(),
                         ],
                         const Divider(),
@@ -259,6 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _desktopHeader(BuildContext context) {
     final visuals = context.windowVisuals;
+    final l10n = AppLocalizations.of(context);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -273,17 +262,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.arrow_back),
-                tooltip: 'Back',
+                tooltip: l10n.settingsBack,
                 onPressed: () {
                   _log('settings_back_pressed', category: DebugLogCategory.ui);
                   Navigator.of(context).maybePop();
                 },
               ),
-              const Expanded(
+              Expanded(
                 child: Center(
                   child: Text(
-                    'Settings',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                    l10n.settingsTitle,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -308,8 +300,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _speedTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Playback speed'),
+      title: Text(l10n.settingsPlaybackSpeed),
       trailing: DropdownButton<double>(
         value: _s.speed,
         underline: const SizedBox.shrink(),
@@ -334,12 +327,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  String _loopModeLabel(AppLocalizations l10n, LoopMode mode) {
+    return switch (mode) {
+      LoopMode.none => l10n.settingsLoopOff,
+      LoopMode.single => l10n.settingsLoopSingle,
+      LoopMode.loop => l10n.settingsLoopAll,
+    };
+  }
+
   Widget _loopModeTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Loop mode'),
+      title: Text(l10n.settingsLoopMode),
       trailing: SegmentedButton<LoopMode>(
         segments: LoopMode.values
-            .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+            .map(
+              (m) => ButtonSegment(
+                value: m,
+                label: Text(_loopModeLabel(l10n, m)),
+              ),
+            )
             .toList(),
         selected: {_s.loopMode},
         onSelectionChanged: (s) => setState(() {
@@ -354,28 +361,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _hwDecTile() {
+    final l10n = AppLocalizations.of(context);
     final hwAccelEnabled =
         HardwareAccelerationService.shouldEnableHardwareAcceleration(_s.hwDec);
     final hwReason = HardwareAccelerationService.debugStatusReason(_s.hwDec);
 
     return ListTile(
-      title: const Text('Hardware acceleration'),
+      title: Text(l10n.settingsHardwareAcceleration),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Requires restart to take effect'),
+          Text(l10n.settingsHardwareAccelerationRestartNote),
           if (_s.debugModeEnabled) ...[
             const SizedBox(height: 4),
             Text(
-              'Debug: HW acceleration active: ${hwAccelEnabled ? 'Yes' : 'No'}',
+              l10n.settingsHwAccelDebugActive(hwAccelEnabled ? 'Yes' : 'No'),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w600,
               ),
             ),
             Text(
-              'Debug: $hwReason',
+              l10n.settingsHwAccelDebugReason(hwReason),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -384,10 +392,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: DropdownButton<String>(
         value: _s.hwDec,
         underline: const SizedBox.shrink(),
-        items: const [
-          DropdownMenuItem(value: 'auto', child: Text('Auto')),
-          DropdownMenuItem(value: 'auto-safe', child: Text('Safe')),
-          DropdownMenuItem(value: 'no', child: Text('Off')),
+        items: [
+          DropdownMenuItem(value: 'auto', child: Text(l10n.settingsHwDecAuto)),
+          DropdownMenuItem(
+            value: 'auto-safe',
+            child: Text(l10n.settingsHwDecSafe),
+          ),
+          DropdownMenuItem(value: 'no', child: Text(l10n.settingsHwDecOff)),
         ],
         onChanged: (v) {
           if (v != null) {
@@ -411,13 +422,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _themeModeTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Theme'),
+      title: Text(l10n.settingsTheme),
       trailing: SegmentedButton<ThemeMode>(
-        segments: const [
-          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
-          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-          ButtonSegment(value: ThemeMode.system, label: Text('System')),
+        segments: [
+          ButtonSegment(
+            value: ThemeMode.dark,
+            label: Text(l10n.settingsThemeDark),
+          ),
+          ButtonSegment(
+            value: ThemeMode.light,
+            label: Text(l10n.settingsThemeLight),
+          ),
+          ButtonSegment(
+            value: ThemeMode.system,
+            label: Text(l10n.settingsThemeSystem),
+          ),
         ],
         selected: {_s.themeMode},
         onSelectionChanged: (s) => setState(() {
@@ -432,8 +453,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _accentColorTile(ColorScheme colorScheme) {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Accent color'),
+      title: Text(l10n.settingsAccentColor),
       trailing: Wrap(
         spacing: 6,
         children: AccentColor.values.map((ac) {
@@ -472,19 +494,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _windowOpacityTile() {
+    final l10n = AppLocalizations.of(context);
     final opacity = _s.windowOpacity.clamp(0.65, 1.0);
     final percent = (opacity * 100).round();
     final windowsBlurMode = Platform.isWindows && _s.windowBlurEnabled;
 
     return ListTile(
       leading: _experimentalWarningIcon(),
-      title: const Text('Window opacity'),
+      title: Text(l10n.settingsWindowOpacity),
       subtitle: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (windowsBlurMode)
-            const Text('With blur on (Windows), this adjusts UI translucency.'),
+            Text(l10n.settingsWindowOpacityBlurNote),
           Slider(
             value: opacity,
             min: 0.65,
@@ -501,11 +524,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-      trailing: Text('$percent%'),
+      trailing: Text(l10n.settingsPercent(percent)),
     );
   }
 
   Widget _windowBlurTile() {
+    final l10n = AppLocalizations.of(context);
     if (!_s.experimentalFeaturesEnabled) {
       return const SizedBox.shrink();
     }
@@ -517,13 +541,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return SwitchListTile(
       secondary: _experimentalWarningIcon(),
-      title: const Text('Background blur'),
+      title: Text(l10n.settingsBackgroundBlur),
       subtitle: Text(
         Platform.isLinux
             ? (_s.linuxCompositorBlurExperimental
-                  ? 'Experimental: requires compositor support'
-                  : 'Not available on Linux unless experimental mode is enabled')
-            : 'Applies native blur behind app content',
+                  ? l10n.settingsBlurLinuxExperimentalOn
+                  : l10n.settingsBlurLinuxExperimentalOff)
+            : l10n.settingsBlurNativeSubtitle,
       ),
       value: effectiveEnabled,
       onChanged: isSupported
@@ -536,6 +560,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _windowBlurStrengthTile() {
+    final l10n = AppLocalizations.of(context);
     if (!_s.experimentalFeaturesEnabled) {
       return const SizedBox.shrink();
     }
@@ -548,15 +573,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return ListTile(
       leading: _experimentalWarningIcon(),
-      title: const Text('Glass strength'),
+      title: Text(l10n.settingsGlassStrength),
       subtitle: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             Platform.isWindows
-                ? 'Adjusts native blur intensity'
-                : 'Adjusts native glass material intensity',
+                ? l10n.settingsBlurIntensityWindows
+                : l10n.settingsBlurIntensityMac,
           ),
           Slider(
             value: strength,
@@ -576,20 +601,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-      trailing: Text('$percent%'),
+      trailing: Text(l10n.settingsPercent(percent)),
     );
   }
 
   Widget _linuxCompositorBlurTile() {
+    final l10n = AppLocalizations.of(context);
     if (!_s.experimentalFeaturesEnabled) {
       return const SizedBox.shrink();
     }
     return SwitchListTile(
       secondary: _experimentalWarningIcon(),
-      title: const Text('Experimental Linux compositor blur'),
-      subtitle: const Text(
-        'Enables transparent window path for compositors that support blur (for example KDE blur rules)',
-      ),
+      title: Text(l10n.settingsLinuxCompositorBlur),
+      subtitle: Text(l10n.settingsLinuxCompositorBlurSubtitle),
       value: _s.linuxCompositorBlurExperimental,
       onChanged: (v) => setState(() {
         _s.linuxCompositorBlurExperimental = v;
@@ -602,10 +626,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _experimentalFeaturesTile() {
+    final l10n = AppLocalizations.of(context);
     return SwitchListTile(
       secondary: _experimentalWarningIcon(),
-      title: const Text('Enable Experimental Features'),
-      subtitle: const Text('Experimental features are very unstable.'),
+      title: Text(l10n.settingsExperimentalEnable),
+      subtitle: Text(l10n.settingsExperimentalUnstable),
       value: _s.experimentalFeaturesEnabled,
       onChanged: (v) {
         setState(() {
@@ -665,10 +690,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _debugLogPanel() => DebugLogPanel(debugLog: widget.debugLog);
 
   Widget _recentFilesTile() {
+    final l10n = AppLocalizations.of(context);
     final count = _s.recentFiles.length;
     return ListTile(
-      title: const Text('Recent files'),
-      subtitle: Text('$count file${count == 1 ? '' : 's'}'),
+      title: Text(l10n.settingsRecentFiles),
+      subtitle: Text(l10n.settingsRecentFilesCount(count)),
       trailing: TextButton(
         onPressed: count > 0
             ? () => setState(() {
@@ -676,7 +702,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _log('recent_files_cleared');
               })
             : null,
-        child: const Text('Clear'),
+        child: Text(l10n.actionClear),
       ),
     );
   }
@@ -684,16 +710,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checkingUpdate = false;
 
   Widget _updateChannelTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Update channel'),
-      subtitle: const Text(
-        'Auto matches your current version (stable or beta).',
-      ),
+      title: Text(l10n.settingsUpdateChannel),
+      subtitle: Text(l10n.settingsUpdateChannelSubtitle),
       trailing: SegmentedButton<UpdateChannel>(
-        segments: const [
-          ButtonSegment(value: UpdateChannel.auto, label: Text('Auto')),
-          ButtonSegment(value: UpdateChannel.stable, label: Text('Stable')),
-          ButtonSegment(value: UpdateChannel.beta, label: Text('Beta')),
+        segments: [
+          ButtonSegment(
+            value: UpdateChannel.auto,
+            label: Text(l10n.settingsUpdateChannelAuto),
+          ),
+          ButtonSegment(
+            value: UpdateChannel.stable,
+            label: Text(l10n.settingsUpdateChannelStable),
+          ),
+          ButtonSegment(
+            value: UpdateChannel.beta,
+            label: Text(l10n.settingsUpdateChannelBeta),
+          ),
         ],
         selected: {_s.updateChannel},
         onSelectionChanged: (s) => setState(() {
@@ -710,8 +744,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _checkForUpdatesTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Check for updates'),
+      title: Text(l10n.settingsCheckForUpdates),
       trailing: _checkingUpdate
           ? const SizedBox(
               width: 24,
@@ -720,7 +755,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             )
           : FilledButton.tonal(
               onPressed: _doCheckForUpdate,
-              child: const Text('Check now'),
+              child: Text(l10n.settingsCheckNow),
             ),
     );
   }
@@ -740,7 +775,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           severity: DebugSeverity.warn,
         );
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to check for updates.')),
+          SnackBar(content: Text(AppLocalizations.of(context).snackUpdateCheckFailed)),
         );
         return;
       }
@@ -768,7 +803,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         _log('manual_update_not_available', category: DebugLogCategory.update);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are on the latest version.')),
+          SnackBar(content: Text(AppLocalizations.of(context).snackUpdateLatest)),
         );
       }
     } catch (e) {
@@ -780,7 +815,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to check for updates.')),
+        SnackBar(content: Text(AppLocalizations.of(context).snackUpdateCheckFailed)),
       );
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
@@ -788,45 +823,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _keyboardShortcutsTile() {
+    final l10n = AppLocalizations.of(context);
     final openShortcut = Platform.isMacOS ? '⌘O' : 'Ctrl+O';
     final reopenShortcut = Platform.isMacOS ? '⌘R' : 'Ctrl+R';
     return ListTile(
-      title: const Text('Keyboard shortcuts'),
+      title: Text(l10n.settingsKeyboardShortcuts),
       leading: const Icon(Icons.keyboard),
       onTap: () {
         _log('keyboard_shortcuts_opened', category: DebugLogCategory.ui);
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Keyboard Shortcuts'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ShortcutRow(openShortcut, 'Open File'),
-                _ShortcutRow(reopenShortcut, 'Reopen Last'),
-                const _ShortcutRow('Space', 'Play / Pause'),
-                const _ShortcutRow('←  →', 'Seek ±5 seconds'),
-                const _ShortcutRow('↑  ↓', 'Volume ±5%'),
-                const _ShortcutRow('M', 'Mute / Unmute'),
-                const _ShortcutRow('F', 'Toggle Fullscreen'),
-                const _ShortcutRow('Esc', 'Exit Fullscreen'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
+          builder: (dialogContext) {
+            final dialogL10n = AppLocalizations.of(dialogContext);
+            return AlertDialog(
+              title: Text(dialogL10n.settingsKeyboardShortcuts),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ShortcutRow(openShortcut, dialogL10n.settingsShortcutOpenFile),
+                  _ShortcutRow(
+                    reopenShortcut,
+                    dialogL10n.settingsShortcutReopenLast,
+                  ),
+                  _ShortcutRow('Space', dialogL10n.settingsShortcutPlayPause),
+                  _ShortcutRow('←  →', dialogL10n.settingsShortcutSeek),
+                  _ShortcutRow('↑  ↓', dialogL10n.settingsShortcutVolume),
+                  _ShortcutRow('M', dialogL10n.settingsShortcutMute),
+                  _ShortcutRow('F', dialogL10n.settingsShortcutFullscreen),
+                  _ShortcutRow('Esc', dialogL10n.settingsShortcutExitFullscreen),
+                ],
               ),
-            ],
-          ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(dialogL10n.actionClose),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
   Widget _helpFaqTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Help'),
+      title: Text(l10n.settingsHelp),
       leading: const Icon(Icons.help_outline),
       trailing: const Icon(Icons.open_in_new),
       onTap: () => _openExternalLink(
@@ -839,8 +882,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _supportProjectTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Support this project'),
+      title: Text(l10n.settingsSupportProject),
       leading: const Icon(Icons.favorite_border),
       trailing: const Icon(Icons.open_in_new),
       onTap: () => _openExternalLink(
@@ -907,29 +951,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _resetTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Reset to defaults'),
+      title: Text(l10n.settingsResetDefaults),
       leading: const Icon(Icons.restore),
       onTap: () async {
         _log('reset_settings_prompt_opened');
         final confirm = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Reset Settings'),
-            content: const Text(
-              'This will reset all settings to their default values. Continue?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Reset'),
-              ),
-            ],
-          ),
+          builder: (dialogContext) {
+            final dialogL10n = AppLocalizations.of(dialogContext);
+            return AlertDialog(
+              title: Text(dialogL10n.settingsResetTitle),
+              content: Text(dialogL10n.settingsResetConfirm),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(dialogL10n.actionCancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(dialogL10n.actionReset),
+                ),
+              ],
+            );
+          },
         );
         if (confirm == true) {
           _log('reset_settings_confirmed');
@@ -937,7 +983,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (mounted) {
             setState(() {});
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Settings reset to defaults.')),
+              SnackBar(content: Text(l10n.snackSettingsReset)),
             );
           }
         } else {
@@ -948,8 +994,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _licensesTile() {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
-      title: const Text('Open source licenses'),
+      title: Text(l10n.settingsOpenSourceLicenses),
       leading: const Icon(Icons.description_outlined),
       onTap: _openLicenses,
     );
@@ -988,6 +1035,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _aboutTile() {
+    final l10n = AppLocalizations.of(context);
     return FutureBuilder<String>(
       future: UpdateService.currentVersionFromPlatform(),
       builder: (context, snapshot) {
@@ -996,12 +1044,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: GestureDetector(
             onTap: _promptToggleDebugMode,
             behavior: HitTestBehavior.opaque,
-            child: const Text('About Dacx'),
+            child: Text(l10n.settingsAboutDacx),
           ),
-          subtitle: Text('Version $version • GPLv3'),
+          subtitle: Text(l10n.settingsAboutVersion(version)),
           trailing: IconButton(
             icon: const Icon(Icons.open_in_new),
-            tooltip: 'View on GitHub',
+            tooltip: l10n.settingsViewOnGitHub,
             onPressed: () async {
               final uri = Uri.parse('https://github.com/BurntToasters/Dacx');
               _log(
@@ -1032,28 +1080,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _promptToggleDebugMode() async {
+    final l10n = AppLocalizations.of(context);
     final currentlyEnabled = _s.debugModeEnabled;
-    final actionLabel = currentlyEnabled ? 'Disable' : 'Enable';
+    final actionLabel =
+        currentlyEnabled ? l10n.settingsActionDisable : l10n.settingsActionEnable;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$actionLabel Debug Mode?'),
-        content: Text(
-          currentlyEnabled
-              ? 'Do you want to disable hidden debug mode?'
-              : 'Do you want to enable hidden debug mode? (Debug mode uses more system resources and may cause performance degradation while enabled)',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext);
+        return AlertDialog(
+          title: Text(dialogL10n.settingsDebugModeTitle(actionLabel)),
+          content: Text(
+            currentlyEnabled
+                ? dialogL10n.settingsDebugModeDisablePrompt
+                : dialogL10n.settingsDebugModeEnablePrompt,
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(actionLabel),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(dialogL10n.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(actionLabel),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirm != true || !mounted) {
@@ -1078,7 +1131,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _s.debugModeEnabled ? 'Debug mode enabled.' : 'Debug mode disabled.',
+          _s.debugModeEnabled
+              ? l10n.snackDebugModeEnabled
+              : l10n.snackDebugModeDisabled,
         ),
       ),
     );

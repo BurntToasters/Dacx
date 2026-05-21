@@ -8,6 +8,7 @@ import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/screens/settings_screen.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/settings_service.dart';
+import 'package:dacx/services/update_service.dart';
 import 'package:dacx/theme/window_visuals.dart';
 
 Future<({SettingsService settings, DebugLogService debugLog})> _buildServices({
@@ -19,6 +20,9 @@ Future<({SettingsService settings, DebugLogService debugLog})> _buildServices({
   final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
   return (settings: settings, debugLog: debugLog);
 }
+
+UpdateService _updates(DebugLogService log) =>
+    UpdateService(debugLog: log, debugSource: 'settings_test');
 
 ThemeData _theme() {
   final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey);
@@ -68,6 +72,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );
@@ -88,6 +93,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );
@@ -118,6 +124,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );
@@ -163,6 +170,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );
@@ -188,6 +196,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );
@@ -227,6 +236,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );
@@ -260,6 +270,7 @@ void main() {
           home: SettingsScreen(
             settings: services.settings,
             debugLog: services.debugLog,
+            updateService: _updates(services.debugLog),
           ),
         ),
       );

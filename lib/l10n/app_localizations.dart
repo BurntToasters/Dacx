@@ -148,11 +148,11 @@ abstract class AppLocalizations {
   /// **'Allow multiple windows'**
   String get settingsAllowMultipleWindows;
 
-  /// No description provided for @settingsCheckForUpdates.
+  /// No description provided for @settingsCheckForUpdatesOnLaunch.
   ///
   /// In en, this message translates to:
   /// **'Check for updates on launch'**
-  String get settingsCheckForUpdates;
+  String get settingsCheckForUpdatesOnLaunch;
 
   /// No description provided for @settingsTheme.
   ///
@@ -208,6 +208,420 @@ abstract class AppLocalizations {
   /// **'Loop mode'**
   String get settingsLoopMode;
 
+  /// No description provided for @settingsResumeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remember playback position for each file'**
+  String get settingsResumeSubtitle;
+
+  /// No description provided for @settingsOsdSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show title and time overlay during playback'**
+  String get settingsOsdSubtitle;
+
+  /// No description provided for @settingsMediaSessionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish playback to MPRIS / SMTC / Now Playing'**
+  String get settingsMediaSessionSubtitle;
+
+  /// No description provided for @settingsAllowMultipleWindowsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When off (default), opening a file from your OS reuses the running Dacx window. Press Ctrl/Cmd+N to open an extra window on demand.'**
+  String get settingsAllowMultipleWindowsSubtitle;
+
+  /// No description provided for @settingsSectionPlayback.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback'**
+  String get settingsSectionPlayback;
+
+  /// No description provided for @settingsSectionAppearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsSectionAppearance;
+
+  /// No description provided for @settingsSectionGeneral.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get settingsSectionGeneral;
+
+  /// No description provided for @settingsSectionExperimental.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental'**
+  String get settingsSectionExperimental;
+
+  /// No description provided for @settingsSectionDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug'**
+  String get settingsSectionDebug;
+
+  /// No description provided for @settingsBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get settingsBack;
+
+  /// No description provided for @settingsHwDecAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get settingsHwDecAuto;
+
+  /// No description provided for @settingsHwDecSafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe'**
+  String get settingsHwDecSafe;
+
+  /// No description provided for @settingsHwDecOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settingsHwDecOff;
+
+  /// No description provided for @settingsHwAccelDebugActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug: HW acceleration active: {state}'**
+  String settingsHwAccelDebugActive(String state);
+
+  /// No description provided for @settingsHwAccelDebugReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug: {reason}'**
+  String settingsHwAccelDebugReason(String reason);
+
+  /// No description provided for @settingsLoopOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settingsLoopOff;
+
+  /// No description provided for @settingsLoopSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'Single'**
+  String get settingsLoopSingle;
+
+  /// No description provided for @settingsLoopAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Loop'**
+  String get settingsLoopAll;
+
+  /// No description provided for @settingsWindowOpacity.
+  ///
+  /// In en, this message translates to:
+  /// **'Window opacity'**
+  String get settingsWindowOpacity;
+
+  /// No description provided for @settingsWindowOpacityBlurNote.
+  ///
+  /// In en, this message translates to:
+  /// **'With blur on (Windows), this adjusts UI translucency.'**
+  String get settingsWindowOpacityBlurNote;
+
+  /// No description provided for @settingsPercent.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String settingsPercent(int percent);
+
+  /// No description provided for @settingsBackgroundBlur.
+  ///
+  /// In en, this message translates to:
+  /// **'Background blur'**
+  String get settingsBackgroundBlur;
+
+  /// No description provided for @settingsBlurLinuxExperimentalOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental: requires compositor support'**
+  String get settingsBlurLinuxExperimentalOn;
+
+  /// No description provided for @settingsBlurLinuxExperimentalOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available on Linux unless experimental mode is enabled'**
+  String get settingsBlurLinuxExperimentalOff;
+
+  /// No description provided for @settingsBlurNativeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies native blur behind app content'**
+  String get settingsBlurNativeSubtitle;
+
+  /// No description provided for @settingsGlassStrength.
+  ///
+  /// In en, this message translates to:
+  /// **'Glass strength'**
+  String get settingsGlassStrength;
+
+  /// No description provided for @settingsBlurIntensityWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjusts native blur intensity'**
+  String get settingsBlurIntensityWindows;
+
+  /// No description provided for @settingsBlurIntensityMac.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjusts native glass material intensity'**
+  String get settingsBlurIntensityMac;
+
+  /// No description provided for @settingsLinuxCompositorBlur.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental Linux compositor blur'**
+  String get settingsLinuxCompositorBlur;
+
+  /// No description provided for @settingsLinuxCompositorBlurSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enables transparent window path for compositors that support blur (for example KDE blur rules)'**
+  String get settingsLinuxCompositorBlurSubtitle;
+
+  /// No description provided for @settingsExperimentalEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Experimental Features'**
+  String get settingsExperimentalEnable;
+
+  /// No description provided for @settingsExperimentalUnstable.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental features are very unstable.'**
+  String get settingsExperimentalUnstable;
+
+  /// No description provided for @settingsRecentFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent files'**
+  String get settingsRecentFiles;
+
+  /// No description provided for @settingsRecentFilesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 files} =1{1 file} other{{count} files}}'**
+  String settingsRecentFilesCount(int count);
+
+  /// No description provided for @settingsUpdateChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Update channel'**
+  String get settingsUpdateChannel;
+
+  /// No description provided for @settingsUpdateChannelSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto matches your current version (stable or beta).'**
+  String get settingsUpdateChannelSubtitle;
+
+  /// No description provided for @settingsUpdateChannelAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get settingsUpdateChannelAuto;
+
+  /// No description provided for @settingsUpdateChannelStable.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable'**
+  String get settingsUpdateChannelStable;
+
+  /// No description provided for @settingsUpdateChannelBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Beta'**
+  String get settingsUpdateChannelBeta;
+
+  /// No description provided for @settingsCheckForUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get settingsCheckForUpdates;
+
+  /// No description provided for @settingsCheckNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Check now'**
+  String get settingsCheckNow;
+
+  /// No description provided for @snackUpdateCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check for updates.'**
+  String get snackUpdateCheckFailed;
+
+  /// No description provided for @snackUpdateLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'You are on the latest version.'**
+  String get snackUpdateLatest;
+
+  /// No description provided for @settingsKeyboardShortcuts.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get settingsKeyboardShortcuts;
+
+  /// No description provided for @settingsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get settingsHelp;
+
+  /// No description provided for @settingsSupportProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Support this project'**
+  String get settingsSupportProject;
+
+  /// No description provided for @settingsResetDefaults.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to defaults'**
+  String get settingsResetDefaults;
+
+  /// No description provided for @settingsResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Settings'**
+  String get settingsResetTitle;
+
+  /// No description provided for @settingsResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This will reset all settings to their default values. Continue?'**
+  String get settingsResetConfirm;
+
+  /// No description provided for @snackSettingsReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings reset to defaults.'**
+  String get snackSettingsReset;
+
+  /// No description provided for @settingsOpenSourceLicenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Open source licenses'**
+  String get settingsOpenSourceLicenses;
+
+  /// No description provided for @settingsAboutDacx.
+  ///
+  /// In en, this message translates to:
+  /// **'About Dacx'**
+  String get settingsAboutDacx;
+
+  /// No description provided for @settingsAboutVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} • GPLv3'**
+  String settingsAboutVersion(String version);
+
+  /// No description provided for @settingsViewOnGitHub.
+  ///
+  /// In en, this message translates to:
+  /// **'View on GitHub'**
+  String get settingsViewOnGitHub;
+
+  /// No description provided for @settingsDebugModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{action} Debug Mode?'**
+  String settingsDebugModeTitle(String action);
+
+  /// No description provided for @settingsDebugModeDisablePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Do you want to disable hidden debug mode?'**
+  String get settingsDebugModeDisablePrompt;
+
+  /// No description provided for @settingsDebugModeEnablePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Do you want to enable hidden debug mode? (Debug mode uses more system resources and may cause performance degradation while enabled)'**
+  String get settingsDebugModeEnablePrompt;
+
+  /// No description provided for @settingsActionEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get settingsActionEnable;
+
+  /// No description provided for @settingsActionDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable'**
+  String get settingsActionDisable;
+
+  /// No description provided for @snackDebugModeEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug mode enabled.'**
+  String get snackDebugModeEnabled;
+
+  /// No description provided for @snackDebugModeDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug mode disabled.'**
+  String get snackDebugModeDisabled;
+
+  /// No description provided for @settingsShortcutOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open File'**
+  String get settingsShortcutOpenFile;
+
+  /// No description provided for @settingsShortcutReopenLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen Last'**
+  String get settingsShortcutReopenLast;
+
+  /// No description provided for @settingsShortcutPlayPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Play / Pause'**
+  String get settingsShortcutPlayPause;
+
+  /// No description provided for @settingsShortcutSeek.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek ±5 seconds'**
+  String get settingsShortcutSeek;
+
+  /// No description provided for @settingsShortcutVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume ±5%'**
+  String get settingsShortcutVolume;
+
+  /// No description provided for @settingsShortcutMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute / Unmute'**
+  String get settingsShortcutMute;
+
+  /// No description provided for @settingsShortcutFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle Fullscreen'**
+  String get settingsShortcutFullscreen;
+
+  /// No description provided for @settingsShortcutExitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit Fullscreen'**
+  String get settingsShortcutExitFullscreen;
+
   /// No description provided for @snackCouldNotReadDroppedFile.
   ///
   /// In en, this message translates to:
@@ -238,6 +652,12 @@ abstract class AppLocalizations {
   /// **'Unable to open file picker.'**
   String get snackUnableToOpenFilePicker;
 
+  /// Shown when a guarded player operation fails (seek, volume, etc.).
+  ///
+  /// In en, this message translates to:
+  /// **'Playback failed: {detail}'**
+  String snackPlaybackOperationFailed(String detail);
+
   /// Shown when the OS file picker raises an error.
   ///
   /// In en, this message translates to:
@@ -255,6 +675,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'File not found. It may have moved or been deleted.'**
   String get snackFileNotFound;
+
+  /// No description provided for @snackFileLoadPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission denied. Check file access and try again.'**
+  String get snackFileLoadPermissionDenied;
+
+  /// No description provided for @snackFileLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open file. Try another file.'**
+  String get snackFileLoadFailed;
+
+  /// No description provided for @snackQueueTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue is full ({max} items). Skipped {count} file(s).'**
+  String snackQueueTruncated(int max, int count);
 
   /// No description provided for @snackUnsupportedFileType.
   ///

@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 /// In-memory playback queue. Persistence is intentionally omitted: queue lives
 /// for the session. The `index` is `-1` when the queue is empty.
 class PlaylistService extends ChangeNotifier {
+  /// Maximum tracks kept in memory for one session (bulk folder drops).
+  static const int maxQueueItems = 1000;
+
   final List<String> _items = [];
   int _index = -1;
   bool _shuffle = false;
@@ -30,10 +33,16 @@ class PlaylistService extends ChangeNotifier {
   }
 
   /// Replaces the queue and starts at [startIndex] (default 0).
-  void replace(List<String> paths, {int startIndex = 0}) {
+  /// Returns how many paths were dropped because of [maxQueueItems].
+  int replace(List<String> paths, {int startIndex = 0}) {
+    final filtered = paths.where((p) => p.trim().isNotEmpty).toList();
+    final capped = filtered.length > maxQueueItems
+        ? filtered.sublist(0, maxQueueItems)
+        : filtered;
+    final dropped = filtered.length - capped.length;
     _items
       ..clear()
-      ..addAll(paths.where((p) => p.trim().isNotEmpty));
+      ..addAll(capped);
     if (_items.isEmpty) {
       _index = -1;
     } else {
@@ -41,17 +50,26 @@ class PlaylistService extends ChangeNotifier {
     }
     if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
+    return dropped;
   }
 
   /// Appends [paths] to the queue.
-  void addAll(List<String> paths) {
+  /// Returns how many paths were dropped because of [maxQueueItems].
+  int addAll(List<String> paths) {
     final filtered = paths.where((p) => p.trim().isNotEmpty).toList();
-    if (filtered.isEmpty) return;
+    if (filtered.isEmpty) return 0;
+    final room = maxQueueItems - _items.length;
+    if (room <= 0) return filtered.length;
+    final toAdd = filtered.length > room
+        ? filtered.sublist(0, room)
+        : filtered;
+    final dropped = filtered.length - toAdd.length;
     final wasEmpty = _items.isEmpty;
-    _items.addAll(filtered);
+    _items.addAll(toAdd);
     if (wasEmpty) _index = 0;
     if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
+    return dropped;
   }
 
   /// Inserts [path] right after the current item.

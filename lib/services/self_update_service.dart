@@ -185,7 +185,8 @@ class SelfUpdateService {
     return null;
   }
 
-  static bool _isAllowedHost(String url) {
+  /// Whether [url] may be used for self-update downloads (GitHub hosts only).
+  static bool isAllowedDownloadUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return false;
     return _allowedHosts.contains(uri.host.toLowerCase());
@@ -276,7 +277,7 @@ class SelfUpdateService {
     File outFile, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
-    if (!_isAllowedHost(url)) {
+    if (!isAllowedDownloadUrl(url)) {
       throw StateError('Refusing to download from non-allowlisted host: $url');
     }
     await outFile.parent.create(recursive: true);
@@ -308,7 +309,7 @@ class SelfUpdateService {
 
   /// Fetches [url] as text. Throws on HTTP error.
   Future<String> _fetchText(String url) async {
-    if (!_isAllowedHost(url)) {
+    if (!isAllowedDownloadUrl(url)) {
       throw StateError('Refusing to fetch from non-allowlisted host: $url');
     }
     final resp = await _httpGet(
@@ -321,7 +322,7 @@ class SelfUpdateService {
   }
 
   Future<List<int>> _fetchBytes(String url) async {
-    if (!_isAllowedHost(url)) {
+    if (!isAllowedDownloadUrl(url)) {
       throw StateError('Refusing to fetch from non-allowlisted host: $url');
     }
     final resp = await _httpGet(
@@ -439,7 +440,7 @@ class SelfUpdateService {
       );
     }
 
-    final manifestHash = _hashFromWindowsManifest(manifestBytes, asset.name);
+    final manifestHash = hashFromWindowsManifest(manifestBytes, asset.name);
     if (manifestHash == null) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.checksumMismatch,
@@ -552,7 +553,7 @@ class SelfUpdateService {
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
-  static String? _hashFromWindowsManifest(
+  static String? hashFromWindowsManifest(
     List<int> manifestBytes,
     String assetName,
   ) {

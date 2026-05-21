@@ -35,12 +35,22 @@ void main() {
 
     test('addAll appends and seeds index when empty', () {
       final s = PlaylistService();
-      s.addAll(['a', 'b']);
+      expect(s.addAll(['a', 'b']), 0);
       expect(s.length, 2);
       expect(s.index, 0);
-      s.addAll(['c']);
+      expect(s.addAll(['c']), 0);
       expect(s.length, 3);
       expect(s.index, 0);
+    });
+
+    test('replace and addAll cap at maxQueueItems', () {
+      final s = PlaylistService();
+      final many = List.generate(1005, (i) => '/track$i.mp3');
+      expect(s.replace(many), 5);
+      expect(s.length, PlaylistService.maxQueueItems);
+
+      expect(s.addAll(List.generate(10, (i) => '/extra$i.mp3')), 10);
+      expect(s.length, PlaylistService.maxQueueItems);
     });
 
     test('playNext inserts after current', () {
