@@ -139,6 +139,16 @@ if [[ -d "$HELPER_OUT" ]]; then
     --sign "$APPLE_SIGNING_IDENTITY" "$HELPER_OUT"
 fi
 
+NOTICES_SRC="${ROOT}/build/THIRD_PARTY_NOTICES.txt"
+if [[ ! -f "$NOTICES_SRC" ]]; then
+  echo "Generating third-party notices..."
+  node "${ROOT}/scripts/generate-licenses.js"
+fi
+if [[ -f "$NOTICES_SRC" ]]; then
+  cp "$NOTICES_SRC" "${APP_BUNDLE}/Contents/Resources/THIRD_PARTY_NOTICES.txt"
+  cp "${ROOT}/LICENSE" "${APP_BUNDLE}/Contents/Resources/LICENSE"
+fi
+
 run_codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS_FILE" \
   --sign "$APPLE_SIGNING_IDENTITY" \

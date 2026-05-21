@@ -33,6 +33,19 @@ Dacx is a **local desktop media player**. It does not implement user accounts or
 
 Release signing keys and `.env` secrets must remain on maintainer release machines only.
 
+## Flatpak sandbox
+
+Official Flatpak builds use narrowed filesystem access: standard XDG media/download
+locations only. The manifest does **not** request `--filesystem=host`; opening
+arbitrary paths relies on the Freedesktop file portal (same as the in-app file
+picker). Third-party license text is shipped under `/app/share/doc/dacx/`.
+
+## Third-party notices
+
+Release artifacts include `THIRD_PARTY_NOTICES.txt` and `LICENSE` (generated via
+`npm run licenses` during `release:prepare`). See `docs/NATIVE_DEPENDENCIES.md`
+for bundled native runtime notes (libmpv / media_kit).
+
 ## Release VM hardening
 
 Official Windows release builds should set in `.env`:

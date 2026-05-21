@@ -17,6 +17,9 @@ npm run test:all
 
 This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage (55% floor), and a build smoke. CI on `main`, `beta`, and `next-*` runs a subset plus multi-OS build smoke.
 
+Before packaging a release, `release:prepare` runs `npm run licenses` to refresh
+`build/THIRD_PARTY_NOTICES.txt` (copied into installers by `package-release.js`).
+
 ## Pull requests
 
 - Target `beta` or `main` as agreed with maintainers.

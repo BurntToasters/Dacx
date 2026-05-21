@@ -19,6 +19,7 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 ## Unreleased
 * **macOS:** Self-update verification uses `codesign` only (removed deprecated `spctl`); fixes false "internal error in Code Signing subsystem" when assessing bundles inside the sandbox container (beta 6+).
 * **Stability:** Settings screen wraps list tiles in `Material` (fixes widget tests on Flutter 3.44); `npm run test:all` uses FVM-pinned Flutter/Dart; VS Code SDK path aligned with `.fvmrc`; dropped flaky device-bound `integration_test` (307 VM tests remain).
+* **Compliance:** `THIRD_PARTY_NOTICES.txt` + `LICENSE` bundled in Windows/macOS/Linux/Flatpak releases (`npm run licenses`); Flatpak drops `--filesystem=host` and broad XDG document/desktop mounts.
 
 ## Changes in `v0.8.0-beta.8:`
 * **Win:** Addressed multiple issues with the new self-updater on windows:
