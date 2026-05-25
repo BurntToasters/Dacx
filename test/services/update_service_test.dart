@@ -354,11 +354,11 @@ void main() {
     );
 
     test('auto on prerelease hits releases list endpoint', () async {
-      Uri? requestedUri;
+      final requestedUris = <Uri>[];
       final svc = UpdateService(
         packageInfoLoader: () async => info('0.7.4-beta.1'),
         httpGet: (uri, {headers}) async {
-          requestedUri = uri;
+          requestedUris.add(uri);
           return http.Response(
             '[{"tag_name":"v0.7.4-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.7.4-beta.2","body":"notes","prerelease":true,"draft":false}]',
             200,
@@ -366,20 +366,26 @@ void main() {
         },
       );
       final update = await svc.checkForUpdate();
-      expect(requestedUri.toString(), contains('/releases'));
-      expect(requestedUri.toString(), isNot(contains('/releases/latest')));
+      expect(
+        requestedUris.any((u) {
+          final s = u.toString();
+          return s.contains('/releases') && !s.contains('/releases/latest');
+        }),
+        isTrue,
+        reason: 'beta channel must hit the releases list endpoint',
+      );
       expect(update?.version, '0.7.4-beta.2');
     });
 
     test(
       'auto uses effective current version so normalized macOS beta checks beta channel',
       () async {
-        Uri? requestedUri;
+        final requestedUris = <Uri>[];
         final svc = UpdateService(
           packageInfoLoader: () async => info('0.8.0.1'),
           currentVersionLoader: (packageInfo) async => '0.8.0-beta.1',
           httpGet: (uri, {headers}) async {
-            requestedUri = uri;
+            requestedUris.add(uri);
             return http.Response(
               '[{"tag_name":"v0.8.0-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.2","body":"notes","prerelease":true,"draft":false}]',
               200,
@@ -389,8 +395,14 @@ void main() {
 
         final update = await svc.checkForUpdate();
 
-        expect(requestedUri.toString(), contains('/releases'));
-        expect(requestedUri.toString(), isNot(contains('/releases/latest')));
+        expect(
+          requestedUris.any((u) {
+            final s = u.toString();
+            return s.contains('/releases') && !s.contains('/releases/latest');
+          }),
+          isTrue,
+          reason: 'beta channel must hit the releases list endpoint',
+        );
         expect(update?.version, '0.8.0-beta.2');
       },
     );

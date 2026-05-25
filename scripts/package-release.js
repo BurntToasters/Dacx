@@ -70,6 +70,29 @@ if (!platform) {
 const releaseDir = path.join(root, "release");
 fs.mkdirSync(releaseDir, { recursive: true });
 
+const THIRD_PARTY_NOTICES = "THIRD_PARTY_NOTICES.txt";
+const noticesBuildPath = path.join(root, "build", THIRD_PARTY_NOTICES);
+const licensePath = path.join(root, "LICENSE");
+
+function ensureThirdPartyNotices() {
+  if (fs.existsSync(noticesBuildPath)) return;
+  console.log("  Generating third-party notices...");
+  runSilent(`node "${path.join(root, "scripts", "generate-licenses.js")}"`);
+  if (!fs.existsSync(noticesBuildPath)) {
+    console.error(`Missing ${path.relative(root, noticesBuildPath)} after generate-licenses.js`);
+    process.exit(1);
+  }
+}
+
+function installLegalFilesInDir(destDir) {
+  ensureThirdPartyNotices();
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(noticesBuildPath, path.join(destDir, THIRD_PARTY_NOTICES));
+  if (fs.existsSync(licensePath)) {
+    fs.copyFileSync(licensePath, path.join(destDir, "LICENSE"));
+  }
+}
+
 function run(cmd, opts = {}) {
   console.log(`  $ ${cmd}`);
   return execSync(cmd, { stdio: "inherit", cwd: root, ...opts });
@@ -617,6 +640,7 @@ function packageWindows() {
   }
 
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
+  installLegalFilesInDir(buildDir);
 
   // Defensive sweep: if a previous run was hard-killed between writing the
   // portable marker and its `finally` cleanup, the leftover file would be
@@ -1075,6 +1099,8 @@ function packageMac() {
   }
 
   ensureMacAudioFileIconInBundle(appBundle);
+  const macResources = path.join(appBundle, "Contents", "Resources");
+  installLegalFilesInDir(macResources);
 
   // 1. Zip (may already exist from mac-codesign.sh)
   const codesignZipPattern = /^dacx-(?:.*-)?macos\.zip$/i;
@@ -1139,6 +1165,7 @@ function packageLinux() {
   const desktopFile = path.join(packagingDir, "dacx.desktop");
   // Use the first PNG icon found in assets, or fall back to a placeholder path
   const iconFile = findIcon();
+  installLegalFilesInDir(buildDir);
 
   // 1. Portable tarball
   const tarName = "Dacx-Linux-x86_64.tar.gz";

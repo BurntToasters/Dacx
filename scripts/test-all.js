@@ -177,7 +177,7 @@ function main() {
     null,
     results,
   );
-  runCommand("pub-get", "flutter", ["pub", "get"], null, results);
+  runCommand("pub-get", "fvm", ["flutter", "pub", "get"], null, results);
   runCommand("static", "node", ["scripts/check-static.js"], null, results);
   runCommand("hygiene", "node", ["scripts/check-hygiene.js"], null, results);
   runCommand(
@@ -187,16 +187,16 @@ function main() {
     null,
     results,
   );
-  runCommand("analyze", "dart", ["analyze"], null, results);
+  runCommand("analyze", "fvm", ["dart", "analyze"], null, results);
   runCommand(
     "format",
-    "dart",
-    ["format", "--set-exit-if-changed", "lib/", "test/"],
+    "fvm",
+    ["dart", "format", "--set-exit-if-changed", "lib/", "test/"],
     null,
     results,
   );
   if (process.env.DACX_SKIP_COVERAGE === "1") {
-    runCommand("test", "flutter", ["test"], parseTest, results);
+    runCommand("test", "fvm", ["flutter", "test"], parseTest, results);
     results.coverage.status = "skipped";
     console.log(
       `${colors.blue}⏭  coverage skipped (DACX_SKIP_COVERAGE=1)${colors.reset}\n`,
@@ -204,8 +204,8 @@ function main() {
   } else {
     runCommand(
       "test",
-      "flutter",
-      ["test", "--coverage"],
+      "fvm",
+      ["flutter", "test", "--coverage"],
       parseTest,
       results,
     );

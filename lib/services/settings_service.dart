@@ -6,8 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/update_channel.dart';
 import 'instance_mode_service.dart';
-import 'update_service.dart';
 
 enum AccentColor {
   blueGrey(Colors.blueGrey, 'Blue Grey'),
@@ -43,9 +43,27 @@ class SettingsService extends ChangeNotifier {
     _runMigrationsIfNeeded();
   }
 
+  @override
+  void dispose() {
+    _resumePersistTimer?.cancel();
+    _resumePersistTimer = null;
+    _persistResumePositionsToPrefs();
+    super.dispose();
+  }
+
+  /// Writes any pending resume-position cache to disk immediately.
+  void flushResumePositions() {
+    _resumePersistTimer?.cancel();
+    _resumePersistTimer = null;
+    _persistResumePositionsToPrefs();
+  }
+
   List<double>? _eqBandsCache;
   Map<String, List<String>>? _keybindsCache;
   Map<String, _ResumeEntry>? _resumePositionsCache;
+  Timer? _resumePersistTimer;
+  int _resumeAccessCounter = 0;
+  static const Duration _resumePersistDebounce = Duration(milliseconds: 800);
 
   /// Bump this and append a new entry to [_migrations] whenever a stored
   /// settings key is added/removed/renamed/retyped in a way that needs to
@@ -89,7 +107,10 @@ class SettingsService extends ChangeNotifier {
               prefs.setString('resume_positions_v2', jsonEncode(upgraded));
             }
             prefs.remove('resume_positions_v1');
-          } catch (_) {
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('Dacx: resume_positions_v1 migration failed: $e');
+            }
             prefs.remove('resume_positions_v1');
           }
         },
@@ -157,6 +178,51 @@ class SettingsService extends ChangeNotifier {
   static const _kResumePositions = 'resume_positions_v2';
   static const _kPlaylistShuffle = 'playlist_shuffle';
   static const _kAllowMultipleInstances = 'allow_multiple_instances';
+
+  /// Persisted preference keys. Renaming requires a migration; keep in sync with
+  /// [test/services/frozen_identifiers_test.dart].
+  static const Set<String> frozenPreferenceKeys = {
+    _kSchemaVersion,
+    _kVolume,
+    _kSpeed,
+    _kLoopMode,
+    _kUpdateChannel,
+    _kAutoPlay,
+    _kTheme,
+    _kAccent,
+    _kAlwaysOnTop,
+    _kRememberWindow,
+    _kWindowWidth,
+    _kWindowHeight,
+    _kWindowX,
+    _kWindowY,
+    _kRecentFiles,
+    _kFileBookmarks,
+    _kLastOpenDirectory,
+    _kUpdateCheck,
+    _kLastUpdateCheck,
+    _kHwDec,
+    _kWindowOpacity,
+    _kWindowBlurEnabled,
+    _kWindowBlurStrength,
+    _kExperimentalFeaturesEnabled,
+    _kLinuxCompositorBlurExperimental,
+    _kDebugModeEnabled,
+    _kEqEnabled,
+    _kEqPreset,
+    _kEqBands,
+    _kScreenshotDir,
+    _kScreenshotFormat,
+    _kOsdEnabled,
+    _kSeekPreviewEnabled,
+    _kMultiAudioMix,
+    _kMediaSession,
+    _kKeybinds,
+    _kResumeEnabled,
+    _kResumePositions,
+    _kPlaylistShuffle,
+    _kAllowMultipleInstances,
+  };
 
   /// Maximum playback-resume entries kept (per file). LRU pruned.
   static const int maxResumeEntries = 100;
@@ -320,7 +386,10 @@ class SettingsService extends ChangeNotifier {
     if (segments.any((s) => s == '..')) return false;
     try {
       return Directory(value).existsSync();
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: directory path check failed: $e');
+      }
       return false;
     }
   }
@@ -365,7 +434,11 @@ class SettingsService extends ChangeNotifier {
         });
         return result;
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: file bookmarks decode failed: $e');
+      }
+    }
     return <String, String>{};
   }
 
@@ -550,7 +623,10 @@ class SettingsService extends ChangeNotifier {
           }
           result = out.sublist(0, eqBandCount);
         }
-      } catch (_) {
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Dacx: EQ bands decode failed: $e');
+        }
         result = List<double>.filled(eqBandCount, 0);
       }
     }
@@ -654,7 +730,10 @@ class SettingsService extends ChangeNotifier {
           });
           result = Map<String, List<String>>.unmodifiable(out);
         }
-      } catch (_) {
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Dacx: keybinds decode failed: $e');
+        }
         result = const {};
       }
     }
@@ -749,14 +828,35 @@ class SettingsService extends ChangeNotifier {
     // eviction even when many other files are saved between visits.
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - entry.lastAccessMs > 1000) {
+      final nextAccess = entry.lastAccessMs >= _resumeAccessCounter
+          ? entry.lastAccessMs + 1
+          : ++_resumeAccessCounter;
+      _resumeAccessCounter = nextAccess;
       positions[normalized] = _ResumeEntry(
         positionMs: entry.positionMs,
-        lastAccessMs: now,
+        lastAccessMs: nextAccess,
       );
       _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
-      _prefs.setString(_kResumePositions, _encodeResumePositions(positions));
+      _scheduleResumePersist();
     }
     return entry.positionMs;
+  }
+
+  void _scheduleResumePersist() {
+    _resumePersistTimer?.cancel();
+    _resumePersistTimer = Timer(_resumePersistDebounce, () {
+      _resumePersistTimer = null;
+      _persistResumePositionsToPrefs();
+    });
+  }
+
+  void _persistResumePositionsToPrefs() {
+    final positions = _resumePositionsCache ?? _readResumePositions();
+    if (positions.isEmpty) {
+      _prefs.remove(_kResumePositions);
+      return;
+    }
+    _prefs.setString(_kResumePositions, _encodeResumePositions(positions));
   }
 
   /// Stores [positionMs] for [path]. Pass null/0 to clear.
@@ -767,9 +867,10 @@ class SettingsService extends ChangeNotifier {
     if (positionMs == null || positionMs <= 0) {
       if (positions.remove(normalized) == null) return;
     } else {
+      final nextAccess = ++_resumeAccessCounter;
       positions[normalized] = _ResumeEntry(
         positionMs: positionMs,
-        lastAccessMs: DateTime.now().millisecondsSinceEpoch,
+        lastAccessMs: nextAccess,
       );
     }
     if (positions.length > maxResumeEntries) {
@@ -782,11 +883,7 @@ class SettingsService extends ChangeNotifier {
       }
     }
     _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
-    if (positions.isEmpty) {
-      _prefs.remove(_kResumePositions);
-    } else {
-      _prefs.setString(_kResumePositions, _encodeResumePositions(positions));
-    }
+    _scheduleResumePersist();
   }
 
   String _encodeResumePositions(Map<String, _ResumeEntry> positions) {
@@ -798,6 +895,8 @@ class SettingsService extends ChangeNotifier {
   }
 
   void clearAllResumePositions() {
+    _resumePersistTimer?.cancel();
+    _resumePersistTimer = null;
     _resumePositionsCache = <String, _ResumeEntry>{};
     _prefs.remove(_kResumePositions);
     notifyListeners();
@@ -805,6 +904,9 @@ class SettingsService extends ChangeNotifier {
 
   /// Clears all stored preferences and reverts to defaults.
   Future<void> resetAll() async {
+    _resumePersistTimer?.cancel();
+    _resumePersistTimer = null;
+    _resumeAccessCounter = 0;
     _eqBandsCache = null;
     _keybindsCache = null;
     _resumePositionsCache = null;
@@ -838,7 +940,10 @@ class SettingsService extends ChangeNotifier {
   bool _recentFilePathExists(String path) {
     try {
       return File(path).existsSync();
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: recent file exists check failed: $e');
+      }
       return false;
     }
   }

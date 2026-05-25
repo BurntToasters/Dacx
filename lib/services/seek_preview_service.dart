@@ -35,6 +35,7 @@ class SeekPreviewService {
   bool _busy = false;
 
   final Queue<int> _prefetchQueue = Queue<int>();
+  final Set<int> _prefetchScheduled = {};
   bool _prefetching = false;
 
   bool get enabled => _enabled;
@@ -72,6 +73,7 @@ class SeekPreviewService {
     _debounceTimer = null;
     _cache.clear();
     _prefetchQueue.clear();
+    _prefetchScheduled.clear();
     await _ensurePlayer();
     final p = _player;
     if (p == null) return;
@@ -238,12 +240,12 @@ class SeekPreviewService {
       final behind = aroundKey - i * _quantumMs;
       if (ahead >= 0 &&
           _cache.get(ahead) == null &&
-          !_prefetchQueue.contains(ahead)) {
+          _prefetchScheduled.add(ahead)) {
         _prefetchQueue.add(ahead);
       }
       if (behind >= 0 &&
           _cache.get(behind) == null &&
-          !_prefetchQueue.contains(behind)) {
+          _prefetchScheduled.add(behind)) {
         _prefetchQueue.add(behind);
       }
     }
@@ -261,6 +263,7 @@ class SeekPreviewService {
           _prefetchQueue.isNotEmpty &&
           _pendingCompleter == null) {
         final key = _prefetchQueue.removeFirst();
+        _prefetchScheduled.remove(key);
         if (_cache.get(key) != null) continue;
         await _captureAt(key);
         await Future<void>.delayed(Duration.zero);
@@ -279,6 +282,7 @@ class SeekPreviewService {
     _pendingCompleter = null;
     _pendingKey = null;
     _prefetchQueue.clear();
+    _prefetchScheduled.clear();
     _cache.clear();
     final p = _player;
     _controller = null;

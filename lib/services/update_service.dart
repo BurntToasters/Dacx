@@ -5,8 +5,11 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/update_channel.dart';
 import 'debug_log_service.dart';
 import 'trusted_http.dart';
+
+export '../models/update_channel.dart';
 
 typedef PackageInfoLoader = Future<PackageInfo> Function();
 typedef CurrentVersionLoader = Future<String> Function(PackageInfo packageInfo);
@@ -14,8 +17,6 @@ typedef HttpGet =
     Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
 typedef LaunchUrlFn = Future<bool> Function(Uri uri, {LaunchMode mode});
-
-enum UpdateChannel { auto, stable, beta }
 
 class UpdateService {
   static const String _owner = 'BurntToasters';
@@ -123,6 +124,19 @@ class UpdateService {
     String infoPlistPath,
     String key,
   ) async {
+    if (Platform.isMacOS) {
+      try {
+        final result = await Process.run('/usr/libexec/PlistBuddy', [
+          '-c',
+          'Print :$key',
+          infoPlistPath,
+        ]);
+        if (result.exitCode == 0) {
+          final value = (result.stdout as String).trim();
+          if (value.isNotEmpty) return value;
+        }
+      } catch (_) {}
+    }
     try {
       return parseBundleInfoString(
         await File(infoPlistPath).readAsString(),
@@ -159,9 +173,40 @@ class UpdateService {
         },
       );
 
-      final release = resolved == UpdateChannel.beta
-          ? await _fetchLatestPrerelease()
-          : await _fetchLatestStable();
+      _Release? release;
+      var effectiveChannel = resolved;
+      if (resolved == UpdateChannel.beta) {
+        final results = await Future.wait([
+          _fetchLatestPrerelease(),
+          _fetchLatestStable(),
+        ]);
+        final betaRelease = results[0];
+        final stableRelease = results[1];
+        var stableWins = false;
+        if (betaRelease != null && stableRelease != null) {
+          final betaVer = betaRelease.tagName
+              .replaceFirst(RegExp(r'^v'), '')
+              .trim();
+          final stableVer = stableRelease.tagName
+              .replaceFirst(RegExp(r'^v'), '')
+              .trim();
+          if (_versionPattern.hasMatch(stableVer) &&
+              compareVersions(stableVer, betaVer) > 0) {
+            release = stableRelease;
+            stableWins = true;
+          } else {
+            release = betaRelease;
+          }
+        } else if (stableRelease != null) {
+          release = stableRelease;
+          stableWins = true;
+        } else {
+          release = betaRelease;
+        }
+        if (stableWins) effectiveChannel = UpdateChannel.stable;
+      } else {
+        release = await _fetchLatestStable();
+      }
       if (release == null) return null;
 
       final latestVersion = release.tagName
@@ -174,7 +219,7 @@ class UpdateService {
           'check_invalid_payload',
           severity: DebugSeverity.warn,
           detailsBuilder: () => {
-            'tag_name': release.tagName,
+            'tag_name': release!.tagName,
             'latest_version': latestVersion,
             'url': release.htmlUrl,
           },
@@ -189,10 +234,10 @@ class UpdateService {
           detailsBuilder: () => {
             'latest_version': latestVersion,
             'current_version': currentVersion,
-            'resolved_channel': resolved.name,
+            'resolved_channel': effectiveChannel.name,
           },
         );
-        final viewUrl = resolved == UpdateChannel.beta
+        final viewUrl = effectiveChannel == UpdateChannel.beta
             ? release.htmlUrl
             : 'https://rosie.run/dacx/update?from=v$currentVersion';
         return UpdateInfo(
@@ -209,7 +254,7 @@ class UpdateService {
         detailsBuilder: () => {
           'latest_version': latestVersion,
           'current_version': currentVersion,
-          'resolved_channel': resolved.name,
+          'resolved_channel': effectiveChannel.name,
         },
       );
       return null;

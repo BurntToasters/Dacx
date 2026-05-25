@@ -120,7 +120,27 @@ if (fs.existsSync(metainfoPath)) {
   }
 }
 
-// 5. Optional shellcheck
+// 5. Flatpak sandbox policy
+const flatpakManifest = path.join(root, "flatpak", "run.rosie.dacx.yaml");
+if (fs.existsSync(flatpakManifest)) {
+  const flatpak = fs.readFileSync(flatpakManifest, "utf8");
+  const flatpakActive = flatpak
+    .split("\n")
+    .map((line) => line.replace(/#.*$/, "").trim())
+    .join("\n");
+  if (/--filesystem=host\b/.test(flatpakActive)) {
+    failures.push(
+      `${rel(flatpakManifest)} must not use --filesystem=host (use XDG dirs + portal file picker)`,
+    );
+  }
+  if (!flatpak.includes("THIRD_PARTY_NOTICES.txt")) {
+    failures.push(
+      `${rel(flatpakManifest)} must install build/THIRD_PARTY_NOTICES.txt into the bundle`,
+    );
+  }
+}
+
+// 6. Optional shellcheck
 const shFiles = fs
   .readdirSync(scriptsDir)
   .filter((f) => f.endsWith(".sh"))

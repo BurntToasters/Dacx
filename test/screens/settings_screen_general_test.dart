@@ -30,12 +30,15 @@ ThemeData _theme() {
   );
 }
 
-Widget _wrap(SettingsService s, DebugLogService log) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  theme: _theme(),
-  home: SettingsScreen(settings: s, debugLog: log),
-);
+Widget _wrap(SettingsService s, DebugLogService log) {
+  final updates = UpdateService(debugLog: log, debugSource: 'settings_test');
+  return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: _theme(),
+    home: SettingsScreen(settings: s, debugLog: log, updateService: updates),
+  );
+}
 
 Future<void> _scrollTo(WidgetTester tester, Finder f) async {
   await tester.scrollUntilVisible(f, 300);
