@@ -603,7 +603,8 @@ class SelfUpdateService {
           ts.isAfter(now.add(const Duration(hours: 1)))) {
         return const SelfUpdateResult(
           SelfUpdateOutcome.signatureInvalid,
-          message: 'Windows update manifest released_at is invalid or out of range.',
+          message:
+              'Windows update manifest released_at is invalid or out of range.',
         );
       }
     }

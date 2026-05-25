@@ -234,7 +234,10 @@ TeamIdentifier=ABCDE12345
 
         expect(script, contains('Get-Process -Id \$DacxPid'));
         expect(script, contains('WaitForExit(600000)'));
-        expect(script, contains('[Microsoft.PowerShell.Commands.ProcessCommandException]'));
+        expect(
+          script,
+          contains('[Microsoft.PowerShell.Commands.ProcessCommandException]'),
+        );
         expect(script, contains('Add-Content'));
         expect(script, isNot(contains('Start-Sleep -Seconds 1')));
         expect(script, contains('Get-FileHash -Algorithm SHA256'));

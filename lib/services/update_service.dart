@@ -126,10 +126,11 @@ class UpdateService {
   ) async {
     if (Platform.isMacOS) {
       try {
-        final result = await Process.run(
-          '/usr/libexec/PlistBuddy',
-          ['-c', 'Print :$key', infoPlistPath],
-        );
+        final result = await Process.run('/usr/libexec/PlistBuddy', [
+          '-c',
+          'Print :$key',
+          infoPlistPath,
+        ]);
         if (result.exitCode == 0) {
           final value = (result.stdout as String).trim();
           if (value.isNotEmpty) return value;
@@ -183,10 +184,12 @@ class UpdateService {
         final stableRelease = results[1];
         var stableWins = false;
         if (betaRelease != null && stableRelease != null) {
-          final betaVer =
-              betaRelease.tagName.replaceFirst(RegExp(r'^v'), '').trim();
-          final stableVer =
-              stableRelease.tagName.replaceFirst(RegExp(r'^v'), '').trim();
+          final betaVer = betaRelease.tagName
+              .replaceFirst(RegExp(r'^v'), '')
+              .trim();
+          final stableVer = stableRelease.tagName
+              .replaceFirst(RegExp(r'^v'), '')
+              .trim();
           if (_versionPattern.hasMatch(stableVer) &&
               compareVersions(stableVer, betaVer) > 0) {
             release = stableRelease;
