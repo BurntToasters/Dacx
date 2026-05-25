@@ -397,6 +397,7 @@ function generateWindowsUpdateManifest(files) {
     app: "Dacx",
     platform: "Windows-x64",
     version: VERSION,
+    released_at: new Date().toISOString(),
     assets: {
       [path.basename(msi)]: sha256(msi),
     },

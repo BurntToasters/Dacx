@@ -134,12 +134,12 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
       expect(SelfUpdateService.parseChecksumsFile(nonHex, 'Dacx.msi'), isNull);
     });
 
-    test('handles single-space separator (non-strict)', () {
+    test('rejects single-space separator (strict POSIX two-space required)', () {
       const singleSpace =
           'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234 Dacx.msi\n';
       expect(
         SelfUpdateService.parseChecksumsFile(singleSpace, 'Dacx.msi'),
-        'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+        isNull,
       );
     });
 
@@ -233,9 +233,14 @@ TeamIdentifier=ABCDE12345
         final script = SelfUpdateService.buildWindowsWatchdogPowerShellScript();
 
         expect(script, contains('Get-Process -Id \$DacxPid'));
-        expect(script, contains('Start-Sleep -Seconds 1'));
+        expect(script, contains('WaitForExit(600000)'));
+        expect(script, contains('[Microsoft.PowerShell.Commands.ProcessCommandException]'));
+        expect(script, contains('Add-Content'));
+        expect(script, isNot(contains('Start-Sleep -Seconds 1')));
         expect(script, contains('Get-FileHash -Algorithm SHA256'));
         expect(script, contains("Start-Process -FilePath 'msiexec.exe'"));
+        expect(script, contains('-Verb RunAs'));
+        expect(script, contains('-UseShellExecute'));
         expect(script, isNot(contains('tasklist')));
         expect(script, isNot(contains('find "%DACX_PID%"')));
       },

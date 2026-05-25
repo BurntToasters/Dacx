@@ -86,6 +86,8 @@ class SelfUpdateService {
     'objects.githubusercontent.com',
   };
 
+  static bool _installInFlight = false;
+
   final DebugLogService? _debugLog;
   final HttpGet _httpGet;
   final HttpStreamFn _httpStream;
@@ -173,13 +175,12 @@ class SelfUpdateService {
     for (final rawLine in const LineSplitter().convert(text)) {
       final line = rawLine.trim();
       if (line.isEmpty || line.startsWith('#')) continue;
-      // Split on whitespace; first token is hash, last is filename.
-      final parts = line.split(RegExp(r'\s+'));
-      if (parts.length < 2) continue;
-      final hash = parts.first;
-      final name = parts.last;
-      if (hash.length != 64) continue;
-      if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(hash)) continue;
+      final spIdx = line.indexOf('  ');
+      if (spIdx != 64) continue;
+      final hash = line.substring(0, 64);
+      if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(hash)) continue;
+      final nameRaw = line.substring(66).trim();
+      final name = nameRaw.startsWith('*') ? nameRaw.substring(1) : nameRaw;
       if (p.basename(name) == target) return hash.toLowerCase();
     }
     return null;
@@ -198,7 +199,7 @@ class SelfUpdateService {
       final line = rawLine.trim();
       final idx = line.indexOf('=');
       if (idx <= 0 || idx == line.length - 1) continue;
-      result[line.substring(0, idx)] = line.substring(idx + 1);
+      result.putIfAbsent(line.substring(0, idx), () => line.substring(idx + 1));
     }
     return result;
   }
@@ -344,14 +345,22 @@ class SelfUpdateService {
     if (!isSupported()) {
       return const SelfUpdateResult(SelfUpdateOutcome.unsupportedPlatform);
     }
+    if (_installInFlight) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.spawnFailed,
+        message: 'An update is already in progress.',
+      );
+    }
+    _installInFlight = true;
+    SelfUpdateResult result;
     try {
       if (Platform.isWindows) {
-        return await _applyWindows(info, onProgress: onProgress);
+        result = await _applyWindows(info, onProgress: onProgress);
+      } else if (Platform.isMacOS) {
+        result = await _applyMacos(info, onProgress: onProgress);
+      } else {
+        result = const SelfUpdateResult(SelfUpdateOutcome.unsupportedPlatform);
       }
-      if (Platform.isMacOS) {
-        return await _applyMacos(info, onProgress: onProgress);
-      }
-      return const SelfUpdateResult(SelfUpdateOutcome.unsupportedPlatform);
     } catch (e, st) {
       _log(
         'self_update_failed',
@@ -359,11 +368,34 @@ class SelfUpdateService {
         severity: DebugSeverity.error,
         detailsBuilder: () => {'stack': st.toString()},
       );
-      return SelfUpdateResult(
+      result = SelfUpdateResult(
         SelfUpdateOutcome.spawnFailed,
         message: e.toString(),
       );
     }
+    if (result.outcome != SelfUpdateOutcome.spawned) {
+      _installInFlight = false;
+    }
+    return result;
+  }
+
+  Future<void> _cleanUpdateCache() async {
+    try {
+      final dir = updateCacheDir();
+      if (!dir.existsSync()) return;
+      for (final entity in dir.listSync()) {
+        final name = p.basename(entity.path).toLowerCase();
+        if (entity is File &&
+            (name.endsWith('.msi') ||
+                name.endsWith('.zip') ||
+                name.endsWith('.ps1') ||
+                name.endsWith('.vbs'))) {
+          entity.deleteSync();
+        } else if (entity is Directory && name == 'extracted') {
+          entity.deleteSync(recursive: true);
+        }
+      }
+    } catch (_) {}
   }
 
   // ─────────────────────────────────────────────── Windows path
@@ -372,6 +404,7 @@ class SelfUpdateService {
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
+    await _cleanUpdateCache();
     final asset =
         pickAssetByPattern(
           info.assets,
@@ -461,23 +494,27 @@ class SelfUpdateService {
       }
     }
 
-    // Hidden watchdog polls until our PID exits, then runs msiexec.
     final scriptPath = File(p.join(cacheDir.path, 'apply-update.ps1'));
     await scriptPath.writeAsString(buildWindowsWatchdogPowerShellScript());
+    final psArgs = [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      scriptPath.path,
+      pid.toString(),
+      msiPath.path,
+      normalizeCertificateThumbprint(expectedWindowsSignerThumbprint),
+      actualHash,
+    ];
     try {
-      await _processStart('powershell.exe', [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        scriptPath.path,
-        pid.toString(),
-        msiPath.path,
-        normalizeCertificateThumbprint(expectedWindowsSignerThumbprint),
-        actualHash,
-      ], mode: ProcessStartMode.detached);
+      await _processStart(
+        'powershell.exe',
+        psArgs,
+        mode: ProcessStartMode.detached,
+      );
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.spawnFailed,
@@ -542,6 +579,33 @@ class SelfUpdateService {
         SelfUpdateOutcome.versionMismatch,
         message: 'expected $version, got "${decoded['version']}"',
       );
+    }
+    final app = decoded['app'];
+    if (app is! String || app.toLowerCase() != 'dacx') {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: 'Windows update manifest app field is invalid.',
+      );
+    }
+    final platform = decoded['platform'];
+    if (platform is! String || platform.toLowerCase() != 'windows-x64') {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: 'Windows update manifest platform field is invalid.',
+      );
+    }
+    final releasedAt = decoded['released_at'];
+    if (releasedAt is String) {
+      final ts = DateTime.tryParse(releasedAt)?.toUtc();
+      final now = DateTime.now().toUtc();
+      if (ts == null ||
+          ts.isBefore(DateTime.utc(2024)) ||
+          ts.isAfter(now.add(const Duration(hours: 1)))) {
+        return const SelfUpdateResult(
+          SelfUpdateOutcome.signatureInvalid,
+          message: 'Windows update manifest released_at is invalid or out of range.',
+        );
+      }
     }
     final assets = decoded['assets'];
     if (assets is! Map || assets[assetName] is! String) {
@@ -629,29 +693,57 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-while (Get-Process -Id $DacxPid -ErrorAction SilentlyContinue) {
-  Start-Sleep -Seconds 1
+$LogDir = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'Dacx', 'updates')
+$null = [System.IO.Directory]::CreateDirectory($LogDir)
+$LogFile = [System.IO.Path]::Combine($LogDir, 'watchdog.log')
+function Log($msg) {
+  $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+  Add-Content -LiteralPath $LogFile -Value "$ts $msg" -ErrorAction SilentlyContinue
 }
 
+Log "started pid=$DacxPid msi=$DacxMsi"
+
+try {
+  $dacxProc = Get-Process -Id $DacxPid -ErrorAction Stop
+  if (-not $dacxProc.WaitForExit(600000)) { Log "timeout waiting for pid=$DacxPid"; exit 5 }
+} catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
+  Log "pid=$DacxPid already gone"
+} catch {
+  Log "wait-error: $_"
+  exit 2
+}
+
+Log "dacx exited, verifying sha256"
 $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $DacxMsi).Hash.ToLowerInvariant()
 if ($actualSha256 -ine $ExpectedSha256) {
+  Log "sha256 mismatch expected=$ExpectedSha256 actual=$actualSha256"
   exit 12
 }
 
 if ($ExpectedThumbprint -ne '') {
   $sig = Get-AuthenticodeSignature -LiteralPath $DacxMsi
   if ($sig.Status -ne 'Valid') {
+    Log "authenticode status=$($sig.Status)"
     exit 10
   }
   $thumb = $sig.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', ''
   $expected = $ExpectedThumbprint -replace '[^0-9A-Fa-f]', ''
   if ($thumb -ine $expected) {
+    Log "authenticode thumbprint mismatch expected=$expected actual=$thumb"
     exit 11
   }
 }
 
+Log "launching msiexec"
 $msiArgs = @('/i', $DacxMsi, '/passive', '/norestart')
-$install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
+try {
+  $install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Verb RunAs -UseShellExecute -Wait -PassThru
+} catch {
+  Log "msiexec launch failed: $_"
+  exit 1223
+}
+if ($null -eq $install) { Log "msiexec process was null"; exit 1 }
+Log "msiexec exited code=$($install.ExitCode)"
 exit $install.ExitCode
 ''';
   }
@@ -662,6 +754,7 @@ exit $install.ExitCode
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
+    await _cleanUpdateCache();
     if (expectedTeamId.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.gatekeeperRejected,

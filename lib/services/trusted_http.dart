@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -61,20 +62,26 @@ Future<void> _hydrateWindowsCertificateStore(SecurityContext context) async {
   );
 }
 
-IOClient? _windowsIoClient;
-var _windowsTrustPrimed = false;
+Completer<IOClient?>? _windowsClientCompleter;
 
 Future<void> primeWindowsTlsTrust() async {
-  if (!Platform.isWindows || _windowsTrustPrimed) return;
-  _windowsTrustPrimed = true;
-  final context = SecurityContext(withTrustedRoots: true);
-  await _hydrateWindowsCertificateStore(context);
-  _windowsIoClient = IOClient(HttpClient(context: context));
+  if (!Platform.isWindows) return;
+  await _ensureWindowsClient();
 }
 
-Future<http.Client> _windowsHttpClient() async {
-  await primeWindowsTlsTrust();
-  return _windowsIoClient ?? IOClient();
+Future<IOClient?> _ensureWindowsClient() async {
+  if (_windowsClientCompleter != null) return _windowsClientCompleter!.future;
+  final completer = Completer<IOClient?>();
+  _windowsClientCompleter = completer;
+  try {
+    final context = SecurityContext(withTrustedRoots: true);
+    await _hydrateWindowsCertificateStore(context);
+    completer.complete(IOClient(HttpClient(context: context)));
+  } catch (_) {
+    _windowsClientCompleter = null;
+    completer.complete(null);
+  }
+  return completer.future;
 }
 
 /// Default GET for update/download code. Uses Schannel-backed roots on Windows.
@@ -82,8 +89,8 @@ Future<http.Response> platformHttpGet(Uri uri, {Map<String, String>? headers}) {
   if (!Platform.isWindows) {
     return http.get(uri, headers: headers);
   }
-  return _windowsHttpClient().then(
-    (client) => client.get(uri, headers: headers),
+  return _ensureWindowsClient().then(
+    (client) => (client ?? IOClient()).get(uri, headers: headers),
   );
 }
 
@@ -91,7 +98,9 @@ Future<http.StreamedResponse> platformHttpSend(http.BaseRequest request) {
   if (!Platform.isWindows) {
     return request.send();
   }
-  return _windowsHttpClient().then((client) => client.send(request));
+  return _ensureWindowsClient().then(
+    (client) => (client ?? IOClient()).send(request),
+  );
 }
 
 HttpGet get platformHttpGetFn => platformHttpGet;

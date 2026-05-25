@@ -92,7 +92,7 @@ final class UpdateBridge {
         // missing .xpc bundle taking too long to report, etc.). The handler
         // only spawns a worker — milliseconds in the happy path.
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
-            sendOnce(["accepted": false, "error": "XPC install timed out"])
+            sendOnce(["accepted": false, "error": "XPC update helper did not respond — check that the .xpc bundle is present inside the app"])
         }
 
         let parentPID = getpid()
