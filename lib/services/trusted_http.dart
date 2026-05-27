@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
@@ -27,6 +28,15 @@ void applyTrustedCertificatesFromBase64Lines(
     } catch (_) {
       // Skip malformed or duplicate entries.
     }
+  }
+}
+
+Future<void> _hydrateBundledMozillaRoots(SecurityContext context) async {
+  try {
+    final pem = await rootBundle.load('assets/cacert.pem');
+    context.setTrustedCertificatesBytes(pem.buffer.asUint8List());
+  } catch (_) {
+    // Asset missing or malformed; fall back to OS store hydration only.
   }
 }
 
@@ -75,6 +85,7 @@ Future<IOClient?> _ensureWindowsClient() async {
   _windowsClientCompleter = completer;
   try {
     final context = SecurityContext(withTrustedRoots: true);
+    await _hydrateBundledMozillaRoots(context);
     await _hydrateWindowsCertificateStore(context);
     completer.complete(IOClient(HttpClient(context: context)));
   } catch (_) {

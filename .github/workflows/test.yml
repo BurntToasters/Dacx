@@ -137,7 +137,6 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libepoxy-dev libmpv-dev mpv libunwind-dev
 
       - name: Flutter pub get
-        shell: bash
         run: fvm flutter pub get
 
       - name: Build smoke
