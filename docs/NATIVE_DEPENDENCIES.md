@@ -17,6 +17,10 @@ Windows/macOS **release bundles** include the Flutter engine and media_kit
 prebuilt libraries produced by `flutter build`. Exact versions match the pinned
 Flutter SDK (`.fvmrc`) and `pubspec.lock` at build time.
 
+Windows release artifacts also bundle required MSVC runtime files
+(`vcruntime`/`msvcp`) app-local so clean machines can launch without manually
+installing the Visual C++ Redistributable first.
+
 For the full text of third-party Dart/Flutter package licenses, see
 `THIRD_PARTY_NOTICES.txt` in the release artifact or run `npm run licenses` when
 building from source.
