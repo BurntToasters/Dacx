@@ -46,8 +46,9 @@ jobs:
       - name: Install fvm and pinned Flutter
         run: |
           dart pub global activate fvm
-          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.pub-cache/bin:$PATH"
+          PUB_BIN="${PUB_CACHE:-$HOME/.pub-cache}/bin"
+          echo "$PUB_BIN" >> "$GITHUB_PATH"
+          export PATH="$PUB_BIN:$PATH"
           npm run setup:flutter
 
       - name: Install Flutter dependencies
@@ -118,15 +119,15 @@ jobs:
         shell: bash
         run: |
           dart pub global activate fvm
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            # Backslashes in $LOCALAPPDATA break bash (e.g. \r in \runneradmin).
+          if [ -n "$PUB_CACHE" ]; then
+            PUB_BIN="${PUB_CACHE//\\//}/bin"
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
             PUB_BIN="${LOCALAPPDATA//\\//}/Pub/Cache/bin"
-            echo "$PUB_BIN" >> "$GITHUB_PATH"
-            export PATH="$PUB_BIN:$PATH"
           else
-            echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-            export PATH="$HOME/.pub-cache/bin:$PATH"
+            PUB_BIN="$HOME/.pub-cache/bin"
           fi
+          echo "$PUB_BIN" >> "$GITHUB_PATH"
+          export PATH="$PUB_BIN:$PATH"
           npm run setup:flutter
 
       - name: Install Linux desktop deps
