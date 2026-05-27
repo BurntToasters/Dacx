@@ -117,6 +117,22 @@ function removeIfExists(filePath) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+function assertWindowsRuntimeDllsPresent(buildDir) {
+  const files = fs.readdirSync(buildDir).map((name) => name.toLowerCase());
+  const hasVcruntime = files.some((name) => /^vcruntime\d+.*\.dll$/.test(name));
+  const hasMsvcp = files.some((name) => /^msvcp\d+.*\.dll$/.test(name));
+
+  if (hasVcruntime && hasMsvcp) return;
+
+  console.error("Missing MSVC runtime DLLs in Windows build output.");
+  console.error(`Checked: ${buildDir}`);
+  console.error("Expected files matching vcruntime*.dll and msvcp*.dll.");
+  console.error(
+    "Fix Windows build packaging before shipping MSI/ZIP (clean machines will fail to launch).",
+  );
+  process.exit(1);
+}
+
 function ensureWindowsAudioFileIcon(buildDir) {
   if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
     console.warn(
@@ -639,6 +655,7 @@ function packageWindows() {
     process.exit(1);
   }
 
+  assertWindowsRuntimeDllsPresent(buildDir);
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
   installLegalFilesInDir(buildDir);
 
