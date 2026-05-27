@@ -77,9 +77,20 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
 # Bundle MSVC runtime files app-local so clean Windows installs can launch
 # without requiring a preinstalled Visual C++ Redistributable.
+# Some toolchains can report stale/NOTFOUND runtime paths; install only files
+# that actually exist to avoid INSTALL.vcxproj failures.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS TRUE)
 include(InstallRequiredSystemLibraries)
-if(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
-  install(FILES ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+set(DACX_SYSTEM_RUNTIME_LIBS "")
+foreach(runtime_lib IN LISTS CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+  if(runtime_lib AND EXISTS "${runtime_lib}")
+    list(APPEND DACX_SYSTEM_RUNTIME_LIBS "${runtime_lib}")
+  endif()
+endforeach()
+if(DACX_SYSTEM_RUNTIME_LIBS)
+  list(REMOVE_DUPLICATES DACX_SYSTEM_RUNTIME_LIBS)
+  install(FILES ${DACX_SYSTEM_RUNTIME_LIBS}
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
