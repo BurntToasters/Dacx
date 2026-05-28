@@ -20,12 +20,6 @@ typedef HttpGet =
     Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef ProcessRunFn =
     Future<ProcessResult> Function(String executable, List<String> arguments);
-typedef ProcessStartFn =
-    Future<Process> Function(
-      String executable,
-      List<String> arguments, {
-      ProcessStartMode mode,
-    });
 
 enum SelfUpdateOutcome {
   unsupportedPlatform,
@@ -92,19 +86,16 @@ class SelfUpdateService {
   final HttpGet _httpGet;
   final HttpStreamFn _httpStream;
   final ProcessRunFn _processRun;
-  final ProcessStartFn _processStart;
 
   SelfUpdateService({
     DebugLogService? debugLog,
     HttpGet? httpGet,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
-    ProcessStartFn? processStart,
   }) : _debugLog = debugLog,
        _httpGet = httpGet ?? platformHttpGetFn,
        _httpStream = httpStream ?? platformHttpStreamFn,
-       _processRun = processRun ?? Process.run,
-       _processStart = processStart ?? Process.start;
+       _processRun = processRun ?? Process.run;
 
   void _log(
     String event, {
@@ -496,29 +487,38 @@ class SelfUpdateService {
 
     final scriptPath = File(p.join(cacheDir.path, 'apply-update.ps1'));
     await scriptPath.writeAsString(buildWindowsWatchdogPowerShellScript());
-    final psArgs = [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-File',
-      scriptPath.path,
-      '-DacxPid',
-      pid.toString(),
-      '-DacxMsi',
-      msiPath.path,
-      '-ExpectedThumbprint',
-      normalizeCertificateThumbprint(expectedWindowsSignerThumbprint),
-      '-ExpectedSha256',
-      actualHash,
-    ];
+
+    final thumb = normalizeCertificateThumbprint(
+      expectedWindowsSignerThumbprint,
+    );
+    final bootstrapPath = File(p.join(cacheDir.path, 'spawn-watchdog.ps1'));
+    await bootstrapPath.writeAsString(
+      buildWindowsBootstrapPowerShellScript(
+        scriptPath: scriptPath.path,
+        dacxPid: pid,
+        msiPath: msiPath.path,
+        thumbprint: thumb,
+        sha256: actualHash,
+      ),
+    );
+
     try {
-      await _processStart(
-        'powershell.exe',
-        psArgs,
-        mode: ProcessStartMode.detached,
-      );
+      final bootstrapResult = await _processRun('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        bootstrapPath.path,
+      ]);
+      if (bootstrapResult.exitCode != 0) {
+        return SelfUpdateResult(
+          SelfUpdateOutcome.spawnFailed,
+          message:
+              'bootstrap exit ${bootstrapResult.exitCode}: ${bootstrapResult.stderr}',
+        );
+      }
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.spawnFailed,
@@ -755,6 +755,46 @@ try {
 if ($null -eq $install) { Log "msiexec process was null"; exit 1 }
 Log "msiexec exited code=$($install.ExitCode)"
 exit $install.ExitCode
+''';
+  }
+
+  /// Bootstrap script: spawns the watchdog via WMI `Win32_Process.Create` so it
+  /// runs as a child of the WMI service and escapes any Windows Job Object the
+  /// parent app belongs to. Without this, `dacx.exe`'s job (Windows GUI Process
+  /// Lifetime Management) would kill the watchdog the moment we call `exit(0)`.
+  @visibleForTesting
+  static String buildWindowsBootstrapPowerShellScript({
+    required String scriptPath,
+    required int dacxPid,
+    required String msiPath,
+    required String thumbprint,
+    required String sha256,
+  }) {
+    String esc(String s) => s.replaceAll('"', '\\"');
+    final cmd =
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden '
+        '-File "${esc(scriptPath)}" '
+        '-DacxPid $dacxPid '
+        '-DacxMsi "${esc(msiPath)}" '
+        '-ExpectedThumbprint "${esc(thumbprint)}" '
+        '-ExpectedSha256 $sha256';
+    final cmdLiteral = cmd.replaceAll("'", "''");
+    return '''
+\$ErrorActionPreference = 'Stop'
+\$LogDir = [System.IO.Path]::Combine(\$env:LOCALAPPDATA, 'Dacx', 'updates')
+\$null = [System.IO.Directory]::CreateDirectory(\$LogDir)
+\$LogFile = [System.IO.Path]::Combine(\$LogDir, 'bootstrap.log')
+function Log(\$msg) {
+  \$ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+  Add-Content -LiteralPath \$LogFile -Value "\$ts \$msg" -ErrorAction SilentlyContinue
+}
+trap { Log "fatal: \$_"; exit 99 }
+\$cmd = '$cmdLiteral'
+Log "spawning via WMI: \$cmd"
+\$result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = \$cmd }
+Log "WMI ReturnValue=\$(\$result.ReturnValue) ProcessId=\$(\$result.ProcessId)"
+if (\$result.ReturnValue -ne 0) { exit \$result.ReturnValue }
+exit 0
 ''';
   }
 
