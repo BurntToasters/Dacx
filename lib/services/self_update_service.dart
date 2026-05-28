@@ -738,7 +738,7 @@ if ($ExpectedThumbprint -ne '') {
 Log "launching msiexec"
 $msiArgs = @('/i', $DacxMsi, '/passive', '/norestart')
 try {
-  $install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Verb RunAs -UseShellExecute -Wait -PassThru
+  $install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Verb RunAs -Wait -PassThru
 } catch {
   Log "msiexec launch failed: $_"
   exit 1223

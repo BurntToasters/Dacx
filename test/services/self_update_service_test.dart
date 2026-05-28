@@ -243,7 +243,7 @@ TeamIdentifier=ABCDE12345
         expect(script, contains('Get-FileHash -Algorithm SHA256'));
         expect(script, contains("Start-Process -FilePath 'msiexec.exe'"));
         expect(script, contains('-Verb RunAs'));
-        expect(script, contains('-UseShellExecute'));
+        expect(script, isNot(contains('-UseShellExecute')));
         expect(script, isNot(contains('tasklist')));
         expect(script, isNot(contains('find "%DACX_PID%"')));
       },
