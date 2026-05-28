@@ -89,10 +89,12 @@ SOURCES=("$PROTOCOL_SRC" "$IMPL_SRC" "$SERVICE_SRC")
 
 xcrun swiftc -O -target arm64-apple-macos15 \
   -framework Foundation \
+  -framework CryptoKit \
   -o "$TMP/${EXEC_NAME}-arm64" "${SOURCES[@]}"
 
 xcrun swiftc -O -target x86_64-apple-macos15 \
   -framework Foundation \
+  -framework CryptoKit \
   -o "$TMP/${EXEC_NAME}-x86_64" "${SOURCES[@]}"
 
 lipo -create -output "$EXEC_PATH" \

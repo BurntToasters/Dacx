@@ -68,7 +68,6 @@ class SelfUpdateService {
     defaultValue: '',
   );
   static const String _macInstallPath = '/Applications/Dacx.app';
-  static const String _macBundleIdentifier = 'run.rosie.dacx';
   static const String _windowsManifestName =
       'Dacx-update-manifest-Windows-x64.json';
   static const String _windowsManifestSignatureName =
@@ -182,17 +181,6 @@ class SelfUpdateService {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return false;
     return _allowedHosts.contains(uri.host.toLowerCase());
-  }
-
-  static Map<String, String> parseCodesignDetails(String text) {
-    final result = <String, String>{};
-    for (final rawLine in const LineSplitter().convert(text)) {
-      final line = rawLine.trim();
-      final idx = line.indexOf('=');
-      if (idx <= 0 || idx == line.length - 1) continue;
-      result.putIfAbsent(line.substring(0, idx), () => line.substring(idx + 1));
-    }
-    return result;
   }
 
   static String normalizeCertificateThumbprint(String value) {
@@ -804,7 +792,6 @@ exit 0
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
-    await _cleanUpdateCache();
     if (expectedTeamId.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.gatekeeperRejected,
@@ -812,8 +799,6 @@ exit 0
             'Self-update is misconfigured: DACX_APPLE_TEAM_ID was not set at build time.',
       );
     }
-    // Match either `Dacx-macOS.zip` or `Dacx-<version>-macos.zip` (the
-    // mac-codesign.sh produces the version-suffixed name).
     final asset =
         pickAsset(info.assets, '-macos.zip') ??
         pickAsset(info.assets, 'macos.zip') ??
@@ -829,12 +814,12 @@ exit 0
       return const SelfUpdateResult(SelfUpdateOutcome.missingChecksums);
     }
 
-    final cacheDir = updateCacheDir();
-    final zipFile = File(p.join(cacheDir.path, asset.name));
-
-    String checksumsBody;
+    // Fetch the small checksums file in Dart (fast, testable) to get the
+    // expected SHA256 hex. The heavy work — download, verify, extract,
+    // codesign, swap — all happens in the unsandboxed XPC helper so that no
+    // files are stamped with com.apple.provenance from our sandbox.
+    final String checksumsBody;
     try {
-      await _downloadTo(asset.downloadUrl, zipFile, onProgress: onProgress);
       checksumsBody = await _fetchText(checksums.downloadUrl);
     } catch (e) {
       return SelfUpdateResult(
@@ -850,59 +835,12 @@ exit 0
         message: 'No entry for asset in SHA256SUMS file',
       );
     }
-    final actualHash = await _computeSha256(zipFile);
-    if (actualHash != expectedHash) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.checksumMismatch,
-        message: 'expected $expectedHash, got $actualHash',
-      );
-    }
-
-    final extractDir = Directory(p.join(cacheDir.path, 'extracted'));
-    if (extractDir.existsSync()) {
-      extractDir.deleteSync(recursive: true);
-    }
-    await extractDir.create(recursive: true);
-    final dittoResult = await _processRun('/usr/bin/ditto', [
-      '-x',
-      '-k',
-      '--sequesterRsrc',
-      zipFile.path,
-      extractDir.path,
-    ]);
-    if (dittoResult.exitCode != 0) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.extractionFailed,
-        message: dittoResult.stderr.toString(),
-      );
-    }
-
-    final extractedAppPath = p.join(extractDir.path, 'Dacx.app');
-    if (!Directory(extractedAppPath).existsSync()) {
-      return const SelfUpdateResult(
-        SelfUpdateOutcome.extractionFailed,
-        message: 'Dacx.app not found inside extracted zip',
-      );
-    }
-    // Downloaded zips may carry quarantine; strip before codesign verification.
-    await _processRun('/usr/bin/xattr', [
-      '-dr',
-      'com.apple.quarantine',
-      extractedAppPath,
-    ]);
-
-    final validation = await _validateMacBundle(
-      extractedAppPath,
-      expectedVersion: info.version,
-    );
-    if (validation.outcome != SelfUpdateOutcome.spawned) {
-      return validation;
-    }
 
     try {
       final reply = await _macUpdateChannel
-          .invokeMapMethod<String, dynamic>('installUpdate', {
-            'newAppPath': extractedAppPath,
+          .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
+            'zipUrl': asset.downloadUrl,
+            'checksumHex': expectedHash,
             'installedAppPath': _macInstallPath,
             'expectedTeamId': expectedTeamId,
             'expectedVersion': info.version,
@@ -914,9 +852,22 @@ exit 0
         final message = (err != null && err.trim().isNotEmpty)
             ? err
             : 'XPC update helper rejected install';
-        if (message.contains('codesign:')) {
+        if (message.contains('codesign:') || message.contains('gatekeeper:')) {
           return SelfUpdateResult(
             SelfUpdateOutcome.signatureInvalid,
+            message: message,
+          );
+        }
+        if (message.contains('SHA256 mismatch') ||
+            message.contains('checksumHex')) {
+          return SelfUpdateResult(
+            SelfUpdateOutcome.checksumMismatch,
+            message: message,
+          );
+        }
+        if (message.contains('ditto')) {
+          return SelfUpdateResult(
+            SelfUpdateOutcome.extractionFailed,
             message: message,
           );
         }
@@ -940,7 +891,7 @@ exit 0
       'self_update_spawned',
       detailsBuilder: () => {
         'platform': 'macos',
-        'extracted': extractedAppPath,
+        'zip_url': asset.downloadUrl,
         'install_path': _macInstallPath,
       },
     );
@@ -950,100 +901,6 @@ exit 0
   static const MethodChannel _macUpdateChannel = MethodChannel(
     'run.rosie.dacx/update',
   );
-
-  /// Pre-install signature checks on the extracted bundle (`codesign` only).
-  ///
-  /// The unsandboxed XPC update helper repeats `codesign --verify --deep
-  /// --strict` before swapping `/Applications/Dacx.app`.
-  Future<SelfUpdateResult> _validateMacBundle(
-    String appPath, {
-    required String expectedVersion,
-  }) async {
-    // 1. Verify the full nested code signature. This uses the built-in
-    // codesign tool only; no Xcode/CLT-only stapler dependency at runtime.
-    final verify = await _processRun('/usr/bin/codesign', [
-      '--verify',
-      '--deep',
-      '--strict',
-      '--verbose=2',
-      appPath,
-    ]);
-    if (verify.exitCode != 0) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.signatureInvalid,
-        message: verify.stderr.toString(),
-      );
-    }
-
-    // 2. Read signed code metadata and make sure this is Dacx from our team.
-    final dv = await _processRun('/usr/bin/codesign', [
-      '-dv',
-      '--verbose=4',
-      appPath,
-    ]);
-    if (dv.exitCode != 0) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.signatureInvalid,
-        message: dv.stderr.toString(),
-      );
-    }
-    final dvOutput = '${dv.stdout}\n${dv.stderr}';
-    final details = parseCodesignDetails(dvOutput);
-    final actualIdentifier = details['Identifier'] ?? '';
-    if (actualIdentifier != _macBundleIdentifier) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.bundleIdentifierMismatch,
-        message: 'expected $_macBundleIdentifier, got "$actualIdentifier"',
-      );
-    }
-    final actualTeamId = details['TeamIdentifier'] ?? '';
-    if (actualTeamId != expectedTeamId) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.teamIdMismatch,
-        message: 'expected $expectedTeamId, got "$actualTeamId"',
-      );
-    }
-
-    final version = await _readMacBundleReleaseVersion(appPath);
-    if (version == null) {
-      return const SelfUpdateResult(
-        SelfUpdateOutcome.versionMismatch,
-        message: 'DacxReleaseVersion not found in bundle Info.plist',
-      );
-    }
-    if (version.source != 'DacxReleaseVersion' &&
-        expectedVersion.contains('-')) {
-      return const SelfUpdateResult(
-        SelfUpdateOutcome.versionMismatch,
-        message:
-            'Prerelease macOS updates must include DacxReleaseVersion in bundle Info.plist',
-      );
-    }
-    if (version.value != expectedVersion) {
-      return SelfUpdateResult(
-        SelfUpdateOutcome.versionMismatch,
-        message: 'expected $expectedVersion, got "${version.value}"',
-      );
-    }
-
-    return const SelfUpdateResult(SelfUpdateOutcome.spawned);
-  }
-
-  Future<({String value, String source})?> _readMacBundleReleaseVersion(
-    String appPath,
-  ) async {
-    final infoPlist = p.join(appPath, 'Contents', 'Info.plist');
-    for (final key in const [
-      'DacxReleaseVersion',
-      'CFBundleShortVersionString',
-    ]) {
-      final value = await UpdateService.readBundleInfoString(infoPlist, key);
-      if (value != null) {
-        return (value: value, source: key);
-      }
-    }
-    return null;
-  }
 }
 
 /// Persists "an update was just spawned" so the next launch can show a
