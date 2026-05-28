@@ -144,3 +144,8 @@ jobs:
         env:
           CI: "true"
         run: npm run check:build-smoke
+
+      - name: Build macOS XPC update helper
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: npm run check:mac:xpc-helper

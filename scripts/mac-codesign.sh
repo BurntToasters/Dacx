@@ -38,12 +38,21 @@ run_codesign() {
   fi
 }
 
-# Apple recommends codesign (and stapler validate when stapled) over spctl --assess.
 verify_macos_codesign() {
   local path="$1"
   codesign --verify --deep --strict --verbose=2 "$path"
   if command -v xcrun >/dev/null 2>&1; then
     xcrun stapler validate "$path"
+  fi
+}
+
+verify_macos_app_distribution() {
+  local path="$1"
+  verify_macos_codesign "$path"
+  if command -v syspolicy_check >/dev/null 2>&1; then
+    syspolicy_check distribution "$path" --verbose
+  else
+    spctl --assess --type execute --verbose=2 "$path"
   fi
 }
 
@@ -232,8 +241,8 @@ if [[ "$ZIP_RELEASE_VERSION" != "$PKG_VERSION" ]]; then
 fi
 
 echo "Verifying codesign on zip payload..."
-if ! verify_macos_codesign "$ZIP_VERIFY_APP"; then
-  echo "ERROR: codesign/stapler validation failed for app extracted from final zip"
+if ! verify_macos_app_distribution "$ZIP_VERIFY_APP"; then
+  echo "ERROR: codesign/stapler/distribution validation failed for app extracted from final zip"
   exit 1
 fi
 
@@ -275,8 +284,8 @@ echo "Stapling DMG..."
 xcrun stapler staple "$DMG_PATH"
 
 echo "Verifying codesign on stapled .app..."
-if ! verify_macos_codesign "$APP_BUNDLE"; then
-  echo "ERROR: codesign/stapler validation failed for $APP_BUNDLE"
+if ! verify_macos_app_distribution "$APP_BUNDLE"; then
+  echo "ERROR: codesign/stapler/distribution validation failed for $APP_BUNDLE"
   exit 1
 fi
 echo "Verifying codesign on stapled DMG..."

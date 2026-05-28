@@ -39,6 +39,7 @@
     "setup:mac": "node scripts/setup.js mac",
     "setup:linux": "node scripts/setup.js linux",
     "check:mac:toolchain": "node scripts/check-mac-toolchain.js",
+    "check:mac:xpc-helper": "bash scripts/check-mac-xpc-helper.sh",
     "licenses": "node scripts/generate-licenses.js",
     "notices": "npm run licenses",
     "build": "fvm flutter build",
