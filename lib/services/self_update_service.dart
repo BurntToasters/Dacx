@@ -504,9 +504,13 @@ class SelfUpdateService {
       'Hidden',
       '-File',
       scriptPath.path,
+      '-DacxPid',
       pid.toString(),
+      '-DacxMsi',
       msiPath.path,
+      '-ExpectedThumbprint',
       normalizeCertificateThumbprint(expectedWindowsSignerThumbprint),
+      '-ExpectedSha256',
       actualHash,
     ];
     try {
@@ -688,7 +692,7 @@ class SelfUpdateService {
 param(
   [Parameter(Mandatory=$true)][int]$DacxPid,
   [Parameter(Mandatory=$true)][string]$DacxMsi,
-  [Parameter(Mandatory=$true)][string]$ExpectedThumbprint,
+  [Parameter(Mandatory=$false)][AllowEmptyString()][string]$ExpectedThumbprint = '',
   [Parameter(Mandatory=$true)][string]$ExpectedSha256
 )
 
@@ -702,7 +706,12 @@ function Log($msg) {
   Add-Content -LiteralPath $LogFile -Value "$ts $msg" -ErrorAction SilentlyContinue
 }
 
-Log "started pid=$DacxPid msi=$DacxMsi"
+trap {
+  Log "fatal: $_"
+  exit 99
+}
+
+Log "started pid=$DacxPid msi=$DacxMsi thumb=$ExpectedThumbprint sha=$ExpectedSha256"
 
 try {
   $dacxProc = Get-Process -Id $DacxPid -ErrorAction Stop
