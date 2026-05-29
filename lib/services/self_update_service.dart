@@ -13,6 +13,7 @@ import 'debug_log_service.dart';
 import 'trusted_http.dart';
 import 'update_trust_config.dart';
 import 'update_service.dart';
+import 'windows_process_ffi.dart';
 
 typedef HttpStreamFn =
     Future<http.StreamedResponse> Function(http.BaseRequest request);
@@ -20,6 +21,8 @@ typedef HttpGet =
     Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef ProcessRunFn =
     Future<ProcessResult> Function(String executable, List<String> arguments);
+typedef WindowsSpawnFn =
+    Future<WindowsSpawnResult> Function(String commandLine);
 
 enum SelfUpdateOutcome {
   unsupportedPlatform,
@@ -85,16 +88,22 @@ class SelfUpdateService {
   final HttpGet _httpGet;
   final HttpStreamFn _httpStream;
   final ProcessRunFn _processRun;
+  final WindowsSpawnFn _windowsSpawn;
 
   SelfUpdateService({
     DebugLogService? debugLog,
     HttpGet? httpGet,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
+    WindowsSpawnFn? windowsSpawn,
   }) : _debugLog = debugLog,
        _httpGet = httpGet ?? platformHttpGetFn,
        _httpStream = httpStream ?? platformHttpStreamFn,
-       _processRun = processRun ?? Process.run;
+       _processRun = processRun ?? Process.run,
+       _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn;
+
+  static Future<WindowsSpawnResult> _defaultWindowsSpawn(String commandLine) =>
+      WindowsProcessFfi.runAsync(commandLine);
 
   void _log(
     String event, {
@@ -491,20 +500,18 @@ class SelfUpdateService {
     );
 
     try {
-      final bootstrapResult = await _processRun('powershell.exe', [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        bootstrapPath.path,
-      ]);
-      if (bootstrapResult.exitCode != 0) {
+      final commandLine = buildBootstrapCommandLine(bootstrapPath.path);
+      final spawn = await _windowsSpawn(commandLine);
+      if (!spawn.launched) {
         return SelfUpdateResult(
           SelfUpdateOutcome.spawnFailed,
-          message:
-              'bootstrap exit ${bootstrapResult.exitCode}: ${bootstrapResult.stderr}',
+          message: spawn.error ?? 'CreateProcessW failed',
+        );
+      }
+      if (spawn.exitCode != null && spawn.exitCode != 0) {
+        return SelfUpdateResult(
+          SelfUpdateOutcome.spawnFailed,
+          message: 'bootstrap exit ${spawn.exitCode}',
         );
       }
     } catch (e) {
@@ -672,6 +679,15 @@ class SelfUpdateService {
       );
     }
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
+  }
+
+  /// Builds the full command line passed to `CreateProcessW` to launch the
+  /// bootstrap script with no console window. The script path is quoted so
+  /// spaces in `%LOCALAPPDATA%` are handled.
+  @visibleForTesting
+  static String buildBootstrapCommandLine(String bootstrapPath) {
+    return 'powershell.exe -NoProfile -ExecutionPolicy Bypass '
+        '-WindowStyle Hidden -File "$bootstrapPath"';
   }
 
   @visibleForTesting

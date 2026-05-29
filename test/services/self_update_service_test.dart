@@ -215,6 +215,25 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
     );
   });
 
+  group('SelfUpdateService.buildBootstrapCommandLine', () {
+    test('launches powershell hidden with a quoted script path', () {
+      final cmd = SelfUpdateService.buildBootstrapCommandLine(
+        r'C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1',
+      );
+
+      expect(cmd, startsWith('powershell.exe'));
+      expect(cmd, contains('-NoProfile'));
+      expect(cmd, contains('-ExecutionPolicy Bypass'));
+      expect(cmd, contains('-WindowStyle Hidden'));
+      expect(
+        cmd,
+        contains(
+          r'-File "C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1"',
+        ),
+      );
+    });
+  });
+
   group('SelfUpdateService Ed25519 helpers', () {
     test('verifies a known RFC 8032 signature vector', () async {
       final publicKey = base64Encode(

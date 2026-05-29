@@ -108,6 +108,20 @@ void main(List<String> args) async {
     }
   }
 
+  Future<void> nudgeWindowSurface() async {
+    if (!Platform.isWindows) return;
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final size = await windowManager.getSize();
+      await windowManager.setSize(Size(size.width + 1, size.height + 1));
+      await windowManager.setSize(size);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: window surface nudge failed: $e');
+      }
+    }
+  }
+
   Future<void> showWindowIfReady() async {
     if (windowShown ||
         !windowReady.isCompleted ||
@@ -117,6 +131,7 @@ void main(List<String> args) async {
     windowShown = true;
     await windowManager.show();
     await windowManager.focus();
+    await nudgeWindowSurface();
   }
 
   unawaited(
