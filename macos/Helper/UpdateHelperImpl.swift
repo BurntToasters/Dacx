@@ -317,17 +317,19 @@ func sha256Hex(of fileUrl: URL) -> String? {
 
 // MARK: - Quarantine / provenance cleanup
 
-/// Recursively removes `com.apple.quarantine` and `com.apple.provenance`
-/// from [path]. Since the helper is un-sandboxed, files it extracts do NOT
-/// receive these xattrs — this is a belt-and-suspenders strip for any residual
-/// xattrs picked up during intermediate steps.
-func stripSandboxOriginXattrs(_ path: String) {
-    for attr in ["com.apple.quarantine", "com.apple.provenance"] {
-        let (code, output) = runCommand("/usr/bin/xattr", ["-dr", attr, path])
-        if code != 0 {
-            dacxLog("xattr -dr \(attr) \(path) exit=\(code): \(output)")
-        }
+@discardableResult
+func stripQuarantine(_ path: String) -> Bool {
+    let (code, output) = runCommand("/usr/bin/xattr", ["-dr", "com.apple.quarantine", path])
+    if code != 0 {
+        dacxLog("xattr -dr com.apple.quarantine \(path) exit=\(code): \(output)")
     }
+    return !quarantineRemains(path)
+}
+
+func quarantineRemains(_ path: String) -> Bool {
+    let (code, output) = runCommand("/usr/bin/xattr", ["-lr", path])
+    if code != 0 { return true }
+    return output.contains("com.apple.quarantine")
 }
 
 // MARK: - kqueue parent-exit wait
@@ -430,9 +432,11 @@ func performSwap(newAppPath: String,
         return .failed("move new app to install-path failed: \(error)")
     }
 
-    // Strip any residual sandbox-origin xattrs. Files downloaded + extracted
-    // by the un-sandboxed helper should already be clean, but strip anyway.
-    stripSandboxOriginXattrs(installedAppPath)
+    if !stripQuarantine(installedAppPath) {
+        dacxLog("post-move quarantine strip failed; rolling back")
+        restoreBackup()
+        return .failed("could not clear com.apple.quarantine from installed bundle")
+    }
 
     if let failure = validateBundle(installedAppPath, expectedTeamId: expectedTeamId, expectedVersion: expectedVersion) {
         dacxLog("post-move validation failed: \(failure); rolling back")
@@ -554,23 +558,23 @@ func runWorkerInstall() -> Int32 {
     }
 
     if args.relaunch {
-        // Detached worker has no WindowServer session; `launchctl asuser` re-enters
-        // the user's GUI bootstrap so `open` can resolve the bundle (-10810 fix).
-        let uid = getuid()
-        let openResult = runCommand("/bin/launchctl", [
-            "asuser", String(uid),
-            "/usr/bin/open", args.installedAppPath,
-        ])
-        if openResult.0 != 0 {
-            dacxLog("worker: launchctl-asuser relaunch failed (\(openResult.0)): \(openResult.1); trying direct open")
-            let fallback = runCommand("/usr/bin/open", [args.installedAppPath])
-            if fallback.0 != 0 {
-                dacxLog("worker: direct-open relaunch also failed (\(fallback.0)): \(fallback.1)")
-            }
-        }
+        relaunchInUserSession(args.installedAppPath)
     }
 
     return 0
+}
+
+func relaunchInUserSession(_ appPath: String) {
+    let asuser = runCommand("/bin/launchctl", [
+        "asuser", String(getuid()),
+        "/usr/bin/open", appPath,
+    ])
+    if asuser.0 == 0 { return }
+    dacxLog("worker: launchctl-asuser relaunch failed (\(asuser.0)): \(asuser.1); trying direct open")
+    let direct = runCommand("/usr/bin/open", [appPath])
+    if direct.0 != 0 {
+        dacxLog("worker: direct-open relaunch failed (\(direct.0)): \(direct.1)")
+    }
 }
 
 func installNeedsRoot(installedAppPath: String) -> Bool {
@@ -809,6 +813,11 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
             let extractedAppPath = extractDir.appendingPathComponent("Dacx.app").path
             guard bundleExists(extractedAppPath) else {
                 reply(false, "Dacx.app not found inside extracted zip")
+                return
+            }
+            if !stripQuarantine(extractedAppPath) {
+                dacxLog("installFromUrl: quarantine still present on extracted bundle after strip")
+                reply(false, "could not clear com.apple.quarantine from extracted bundle")
                 return
             }
             dacxLog("installFromUrl: extracted to \(extractedAppPath); validating bundle")
