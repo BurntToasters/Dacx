@@ -1,7 +1,7 @@
 name: dacx
 description: "Quick, lightweight cross-platform media player."
 publish_to: 'none'
-version: 0.8.0-beta.15+800
+version: 0.8.0-beta.16+800
 
 environment:
   sdk: ^3.10.7
@@ -12,6 +12,7 @@ dependencies:
   crypto: ^3.0.7
   cryptography: ^2.7.0
   desktop_drop: ^0.7.1
+  ffi: ^2.1.0
   file_picker: ^11.0.2
   flutter:
     sdk: flutter

@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.8.0-beta.15",
+  "version": "0.8.0-beta.16",
   "private": true,
   "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
   "license": "GPL-3.0-only",
@@ -39,6 +39,7 @@
     "setup:mac": "node scripts/setup.js mac",
     "setup:linux": "node scripts/setup.js linux",
     "check:mac:toolchain": "node scripts/check-mac-toolchain.js",
+    "check:mac:xpc-helper": "bash scripts/check-mac-xpc-helper.sh",
     "licenses": "node scripts/generate-licenses.js",
     "notices": "npm run licenses",
     "build": "fvm flutter build",

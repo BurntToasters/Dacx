@@ -98,7 +98,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Verifying signature…'), findsOneWidget);
+      expect(find.text('Verifying signature...'), findsOneWidget);
 
       result.complete(const SelfUpdateResult(SelfUpdateOutcome.downloadFailed));
       await tester.pumpAndSettle();

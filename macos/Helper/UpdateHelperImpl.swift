@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 import os.log
 
 let kDacxBundleIdentifier = "run.rosie.dacx"
@@ -7,12 +8,10 @@ let kDacxBundleIdentifier = "run.rosie.dacx"
 private let helperLog = OSLog(subsystem: "run.rosie.dacx", category: "update-helper")
 
 func dacxLog(_ s: String) {
-    // Detached workers close stdio to /dev/null, so route through unified
-    // logging — events show up in Console.app and `log show`.
     os_log("%{public}@", log: helperLog, type: .info, s)
 }
 
-// MARK: - Validation primitives (ported from DacxUpdateHelper.swift)
+// MARK: - Shell helpers
 
 @discardableResult
 func runCommand(_ executable: String, _ args: [String]) -> (Int32, String) {
@@ -25,16 +24,33 @@ func runCommand(_ executable: String, _ args: [String]) -> (Int32, String) {
     task.standardError = errPipe
     do {
         try task.run()
+        let group = DispatchGroup()
+        var outData = Data()
+        var errData = Data()
+
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+
         task.waitUntilExit()
+        group.wait()
+        let combined = (String(data: outData, encoding: .utf8) ?? "")
+            + (String(data: errData, encoding: .utf8) ?? "")
+        return (task.terminationStatus, combined)
     } catch {
         return (-1, "spawn failed: \(error)")
     }
-    let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-    let combined = (String(data: outData, encoding: .utf8) ?? "")
-        + (String(data: errData, encoding: .utf8) ?? "")
-    return (task.terminationStatus, combined)
 }
+
+// MARK: - Codesign helpers
 
 func codesignDetails(of appPath: String) -> [String: String]? {
     let (code, output) = runCommand("/usr/bin/codesign", ["-dv", "--verbose=4", appPath])
@@ -70,8 +86,11 @@ func releaseVersion(of appPath: String) -> DacxBundleVersion? {
     return nil
 }
 
+// MARK: - Validation
+
 enum ValidationFailure: Error, CustomStringConvertible {
     case codesign(String)
+    case gatekeeper(String)
     case bundleIdentifierMismatch(String)
     case teamMismatch(String)
     case versionMismatch(String)
@@ -79,11 +98,32 @@ enum ValidationFailure: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .codesign(let m): return "codesign: \(m)"
+        case .gatekeeper(let m): return "gatekeeper: \(m)"
         case .bundleIdentifierMismatch(let m): return "bundle id mismatch: \(m)"
         case .teamMismatch(let m): return "team id mismatch: \(m)"
         case .versionMismatch(let m): return "version mismatch: \(m)"
         }
     }
+}
+
+func gatekeeperAssessment(of appPath: String) -> ValidationFailure? {
+    if FileManager.default.isExecutableFile(atPath: "/usr/bin/syspolicy_check") {
+        let assess = runCommand("/usr/bin/syspolicy_check", [
+            "distribution", appPath, "--verbose",
+        ])
+        if assess.0 != 0 {
+            return .gatekeeper(assess.1)
+        }
+        return nil
+    }
+
+    let assess = runCommand("/usr/sbin/spctl", [
+        "--assess", "--type", "execute", "--verbose=2", appPath,
+    ])
+    if assess.0 != 0 {
+        return .gatekeeper(assess.1)
+    }
+    return nil
 }
 
 func validateBundle(_ appPath: String, expectedTeamId: String, expectedVersion: String) -> ValidationFailure? {
@@ -115,7 +155,7 @@ func validateBundle(_ appPath: String, expectedTeamId: String, expectedVersion: 
     if actualVersion.value != expectedVersion {
         return .versionMismatch("expected \(expectedVersion), got \(actualVersion.value)")
     }
-    return nil
+    return gatekeeperAssessment(of: appPath)
 }
 
 func validateInstalledBundle(_ appPath: String, expectedTeamId: String) -> ValidationFailure? {
@@ -146,13 +186,152 @@ func bundleExists(_ path: String) -> Bool {
     return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
 }
 
+// MARK: - Install lock / cleanup
+
+private let updateInstallLockPath = NSTemporaryDirectory() + "run.rosie.dacx.update.lock"
+
+// Do not unlink the lockfile on release. flock() locks the open inode, so
+// deleting the path can let a third process create and lock a different inode
+// while another updater still holds the original lock.
+struct UpdateInstallLock {
+    let fd: Int32
+
+    func closeForInheritedWorker() {
+        close(fd)
+    }
+
+    func release() {
+        flock(fd, LOCK_UN)
+        close(fd)
+    }
+}
+
+struct UpdateInstallLockFailure: Error, CustomStringConvertible {
+    let description: String
+}
+
+func acquireUpdateInstallLock() -> Result<UpdateInstallLock, UpdateInstallLockFailure> {
+    let fd = open(updateInstallLockPath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+    if fd == -1 {
+        return .failure(UpdateInstallLockFailure(description: "could not open update lock: \(String(cString: strerror(errno)))"))
+    }
+    if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+        let message = errno == EWOULDBLOCK
+            ? "another update is already being prepared"
+            : "could not acquire update lock: \(String(cString: strerror(errno)))"
+        close(fd)
+        return .failure(UpdateInstallLockFailure(description: message))
+    }
+
+    ftruncate(fd, 0)
+    let metadata = "pid=\(getpid()) started=\(Date().timeIntervalSince1970)\n"
+    metadata.withCString { ptr in
+        _ = write(fd, ptr, strlen(ptr))
+    }
+    return .success(UpdateInstallLock(fd: fd))
+}
+
+func releaseInheritedUpdateLock(fd: Int32?) {
+    guard let fd = fd, fd >= 0 else { return }
+    flock(fd, LOCK_UN)
+    close(fd)
+}
+
+func cleanupPath(_ path: String?) {
+    guard let path = path, !path.isEmpty else { return }
+    do {
+        if FileManager.default.fileExists(atPath: path) {
+            try FileManager.default.removeItem(atPath: path)
+        }
+    } catch {
+        dacxLog("cleanup failed for \(path): \(error)")
+    }
+}
+
+// MARK: - Download
+
+/// Downloads [url] synchronously to a stable temp path.
+struct DownloadFailure: Error, CustomStringConvertible {
+    let description: String
+}
+
+func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
+    let destDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("dacx-update-\(UUID().uuidString)", isDirectory: true)
+    do {
+        try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+    } catch {
+        return .failure(DownloadFailure(description: "could not create temp dir: \(error)"))
+    }
+    let destFile = destDir.appendingPathComponent(url.lastPathComponent)
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Result<URL, DownloadFailure> = .failure(DownloadFailure(description: "download did not complete"))
+
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 600
+    let task = URLSession.shared.downloadTask(with: request) { tmpUrl, response, error in
+        defer { semaphore.signal() }
+        if let error = error {
+            result = .failure(DownloadFailure(description: "download error: \(error.localizedDescription)"))
+            return
+        }
+        guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            result = .failure(DownloadFailure(description: "HTTP \(code) from \(url)"))
+            return
+        }
+        guard let tmpUrl = tmpUrl else {
+            result = .failure(DownloadFailure(description: "no temp file from URLSession"))
+            return
+        }
+        do {
+            if FileManager.default.fileExists(atPath: destFile.path) {
+                try FileManager.default.removeItem(at: destFile)
+            }
+            try FileManager.default.moveItem(at: tmpUrl, to: destFile)
+            result = .success(destFile)
+        } catch {
+            result = .failure(DownloadFailure(description: "could not move download to stable path: \(error)"))
+        }
+    }
+    task.resume()
+    semaphore.wait()
+    return result
+}
+
+// MARK: - SHA256
+
+/// Streams [fileUrl] through CryptoKit SHA256 and returns the lowercase hex digest.
+func sha256Hex(of fileUrl: URL) -> String? {
+    guard let handle = try? FileHandle(forReadingFrom: fileUrl) else { return nil }
+    defer { try? handle.close() }
+    var hasher = SHA256()
+    while true {
+        let chunk = handle.readData(ofLength: 65536)
+        if chunk.isEmpty { break }
+        hasher.update(data: chunk)
+    }
+    return hasher.finalize().map { String(format: "%02hhx", $0) }.joined()
+}
+
+// MARK: - Quarantine / provenance cleanup
+
+/// Recursively removes `com.apple.quarantine` and `com.apple.provenance`
+/// from [path]. Since the helper is un-sandboxed, files it extracts do NOT
+/// receive these xattrs — this is a belt-and-suspenders strip for any residual
+/// xattrs picked up during intermediate steps.
+func stripSandboxOriginXattrs(_ path: String) {
+    for attr in ["com.apple.quarantine", "com.apple.provenance"] {
+        let (code, output) = runCommand("/usr/bin/xattr", ["-dr", attr, path])
+        if code != 0 {
+            dacxLog("xattr -dr \(attr) \(path) exit=\(code): \(output)")
+        }
+    }
+}
+
 // MARK: - kqueue parent-exit wait
 
-/// Blocks until the supplied PID exits or `timeoutSeconds` elapses. Returns
-/// `true` if the process has exited (either kevent reported NOTE_EXIT or the
-/// PID was already gone at registration), `false` if we timed out / errored
-/// out with the parent still alive — callers MUST treat `false` as "do not
-/// proceed with the swap; the parent is still running."
 func waitForPidExit(_ pid: pid_t, timeoutSeconds: Int = 45) -> Bool {
     let kq = kqueue()
     if kq == -1 {
@@ -173,8 +352,6 @@ func waitForPidExit(_ pid: pid_t, timeoutSeconds: Int = 45) -> Bool {
         kevent(kq, ptr, 1, nil, 0, nil)
     }
     if regResult == -1 {
-        // EV_ADD on an unknown PID returns ESRCH — the parent is already gone,
-        // which is exactly what we were waiting for.
         if errno == ESRCH {
             dacxLog("parent pid \(pid) already gone")
             return true
@@ -188,16 +365,9 @@ func waitForPidExit(_ pid: pid_t, timeoutSeconds: Int = 45) -> Bool {
     let waitResult = withUnsafeMutablePointer(to: &triggered) { tPtr in
         kevent(kq, nil, 0, tPtr, 1, &timeout)
     }
-    if waitResult > 0 {
-        return true
-    }
+    if waitResult > 0 { return true }
     if waitResult == 0 {
-        // Final probe before declaring timeout — the parent may have exited
-        // between registration and now without firing the event for some
-        // reason (signal interruption, etc.).
-        if kill(pid, 0) != 0 && errno == ESRCH {
-            return true
-        }
+        if kill(pid, 0) != 0 && errno == ESRCH { return true }
         dacxLog("timed out waiting for parent pid \(pid)")
         return false
     }
@@ -218,6 +388,8 @@ func performSwap(newAppPath: String,
                  expectedVersion: String) -> SwapStatus {
     let fm = FileManager.default
 
+    dacxLog("performSwap begin: new=\(newAppPath) installed=\(installedAppPath) team=\(expectedTeamId) version=\(expectedVersion)")
+
     guard bundleExists(installedAppPath) else {
         return .failed("install-path \(installedAppPath) is missing")
     }
@@ -230,6 +402,7 @@ func performSwap(newAppPath: String,
     if let failure = validateBundle(newAppPath, expectedTeamId: expectedTeamId, expectedVersion: expectedVersion) {
         return .failed("pre-move validation failed: \(failure)")
     }
+    dacxLog("pre-move validation passed; proceeding with swap")
 
     let backupPath = installedAppPath + ".bak"
     if fm.fileExists(atPath: backupPath) {
@@ -257,12 +430,18 @@ func performSwap(newAppPath: String,
         return .failed("move new app to install-path failed: \(error)")
     }
 
+    // Strip any residual sandbox-origin xattrs. Files downloaded + extracted
+    // by the un-sandboxed helper should already be clean, but strip anyway.
+    stripSandboxOriginXattrs(installedAppPath)
+
     if let failure = validateBundle(installedAppPath, expectedTeamId: expectedTeamId, expectedVersion: expectedVersion) {
+        dacxLog("post-move validation failed: \(failure); rolling back")
         restoreBackup()
         return .failed("post-move validation failed: \(failure)")
     }
 
     try? fm.removeItem(atPath: backupPath)
+    dacxLog("swap complete; new bundle installed at \(installedAppPath)")
     return .ok
 }
 
@@ -275,6 +454,8 @@ struct WorkerArgs {
     let expectedVersion: String
     let parentPID: pid_t
     let relaunch: Bool
+    let cleanupDir: String?
+    let updateLockFD: Int32?
 }
 
 func readWorkerArgsFromEnv() -> WorkerArgs? {
@@ -287,12 +468,15 @@ func readWorkerArgsFromEnv() -> WorkerArgs? {
         let pidStr = env["DACX_PARENT_PID"], let pidVal = pid_t(pidStr)
     else { return nil }
     let relaunch = (env["DACX_RELAUNCH"] ?? "0") == "1"
+    let lockFD = env["DACX_UPDATE_LOCK_FD"].flatMap { Int32($0) }
     return WorkerArgs(newAppPath: newApp,
                       installedAppPath: installed,
                       expectedTeamId: team,
                       expectedVersion: version,
                       parentPID: pidVal,
-                      relaunch: relaunch)
+                      relaunch: relaunch,
+                      cleanupDir: env["DACX_CLEANUP_DIR"],
+                      updateLockFD: lockFD)
 }
 
 func shellQuoteSingle(_ s: String) -> String {
@@ -305,8 +489,6 @@ func appleScriptQuote(_ s: String) -> String {
         .replacingOccurrences(of: "\"", with: "\\\"") + "\""
 }
 
-/// Re-exec self via osascript admin-prompt, passing the same args via env and
-/// `DACX_UPDATE_ROOT=1` so the root copy goes straight to the swap path.
 func runRootInstallViaOSAScript(selfPath: String, args: WorkerArgs) -> Int32 {
     let envParts: [String] = [
         "DACX_UPDATE_ROOT=1",
@@ -328,12 +510,14 @@ func runRootInstallViaOSAScript(selfPath: String, args: WorkerArgs) -> Int32 {
 
 // MARK: - Worker entry points
 
-/// Runs the install flow as the original user (post-parent-exit). May escalate
-/// to a root osascript re-exec when the destination isn't writable.
 func runWorkerInstall() -> Int32 {
     guard let args = readWorkerArgsFromEnv() else {
         dacxLog("worker: missing required env vars")
         return 2
+    }
+    defer {
+        cleanupPath(args.cleanupDir)
+        releaseInheritedUpdateLock(fd: args.updateLockFD)
     }
 
     dacxLog("worker: waiting for parent pid \(args.parentPID) to exit")
@@ -344,10 +528,7 @@ func runWorkerInstall() -> Int32 {
     }
     dacxLog("worker: parent exited, beginning install")
 
-    let needsRoot: Bool = {
-        if getuid() == 0 { return false }
-        return access(args.installedAppPath, W_OK) != 0
-    }()
+    let needsRoot = installNeedsRoot(installedAppPath: args.installedAppPath)
 
     if needsRoot {
         let selfPath = Bundle.main.executablePath
@@ -373,17 +554,46 @@ func runWorkerInstall() -> Int32 {
     }
 
     if args.relaunch {
-        let openResult = runCommand("/usr/bin/open", [args.installedAppPath])
+        // Detached worker has no WindowServer session; `launchctl asuser` re-enters
+        // the user's GUI bootstrap so `open` can resolve the bundle (-10810 fix).
+        let uid = getuid()
+        let openResult = runCommand("/bin/launchctl", [
+            "asuser", String(uid),
+            "/usr/bin/open", args.installedAppPath,
+        ])
         if openResult.0 != 0 {
-            dacxLog("worker: relaunch failed (\(openResult.0)): \(openResult.1)")
+            dacxLog("worker: launchctl-asuser relaunch failed (\(openResult.0)): \(openResult.1); trying direct open")
+            let fallback = runCommand("/usr/bin/open", [args.installedAppPath])
+            if fallback.0 != 0 {
+                dacxLog("worker: direct-open relaunch also failed (\(fallback.0)): \(fallback.1)")
+            }
         }
     }
 
     return 0
 }
 
-/// Runs the install flow as root (re-exec'd via osascript). Skips the parent
-/// wait and the relaunch — the user-side worker handles those.
+func installNeedsRoot(installedAppPath: String) -> Bool {
+    if getuid() == 0 { return false }
+
+    let installDir = URL(fileURLWithPath: installedAppPath)
+        .deletingLastPathComponent()
+        .path
+    if access(installDir, W_OK) != 0 {
+        dacxLog("worker: install directory \(installDir) is not writable without elevation")
+        return true
+    }
+
+    let backupPath = installedAppPath + ".bak"
+    if FileManager.default.fileExists(atPath: backupPath),
+       access(backupPath, W_OK) != 0 {
+        dacxLog("worker: existing backup \(backupPath) is not writable without elevation")
+        return true
+    }
+
+    return false
+}
+
 func runRootInstall() -> Int32 {
     guard let args = readWorkerArgsFromEnv() else {
         dacxLog("root: missing required env vars")
@@ -403,6 +613,55 @@ func runRootInstall() -> Int32 {
     }
 }
 
+// MARK: - Spawn detached worker
+
+func spawnDetachedWorker(executablePath: String, env: [String: String], inheritedFD: Int32? = nil) -> String? {
+    var fileActions: posix_spawn_file_actions_t? = nil
+    posix_spawn_file_actions_init(&fileActions)
+    defer { posix_spawn_file_actions_destroy(&fileActions) }
+
+    let devNull = "/dev/null"
+    posix_spawn_file_actions_addopen(&fileActions, 0, devNull, O_RDONLY, 0)
+    posix_spawn_file_actions_addopen(&fileActions, 1, devNull, O_WRONLY, 0)
+    posix_spawn_file_actions_addopen(&fileActions, 2, devNull, O_WRONLY, 0)
+    if let inheritedFD = inheritedFD, inheritedFD >= 0 {
+        posix_spawn_file_actions_addinherit_np(&fileActions, inheritedFD)
+    }
+
+    var attrs: posix_spawnattr_t? = nil
+    posix_spawnattr_init(&attrs)
+    defer { posix_spawnattr_destroy(&attrs) }
+    let flags = Int16(POSIX_SPAWN_SETSID) | Int16(0x4000)
+    posix_spawnattr_setflags(&attrs, flags)
+
+    let argv: [UnsafeMutablePointer<CChar>?] = [
+        strdup(executablePath),
+        nil,
+    ]
+    defer { for ptr in argv { if ptr != nil { free(ptr) } } }
+
+    let envpStrings: [String] = env.map { "\($0.key)=\($0.value)" }
+    let envp: [UnsafeMutablePointer<CChar>?] = envpStrings.map { strdup($0) } + [nil]
+    defer { for ptr in envp { if ptr != nil { free(ptr) } } }
+
+    var pid: pid_t = 0
+    let rc = posix_spawn(&pid, executablePath, &fileActions, &attrs, argv, envp)
+    if rc != 0 {
+        return "rc=\(rc) (\(String(cString: strerror(rc))))"
+    }
+    return nil
+}
+
+// MARK: - Allowed hosts
+
+private let allowedHosts: Set<String> = [
+    "github.com",
+    "www.github.com",
+    "objects.githubusercontent.com",
+]
+
+private let helperOperationDeadlineSeconds: TimeInterval = 840
+
 // MARK: - XPC service implementation
 
 @objc final class UpdateHelperImpl: NSObject, UpdateHelperProtocol {
@@ -417,109 +676,176 @@ func runRootInstall() -> Int32 {
         self.init(verifiedCallerPID: 0)
     }
 
-    func install(newAppPath: String,
-                 installedAppPath: String,
-                 expectedTeamId: String,
-                 expectedVersion: String,
-                 parentPID: Int32,
-                 relaunch: Bool,
-                 reply: @escaping (Bool, String?) -> Void) {
+    func installFromUrl(zipUrl: String,
+                        checksumHex: String,
+                        installedAppPath: String,
+                        expectedTeamId: String,
+                        expectedVersion: String,
+                        parentPID: Int32,
+                        relaunch: Bool,
+                        reply: @escaping (Bool, String?) -> Void) {
 
-        if newAppPath.isEmpty || installedAppPath.isEmpty
-            || expectedTeamId.isEmpty || expectedVersion.isEmpty {
-            reply(false, "missing required arguments")
-            return
-        }
-        if verifiedCallerPID <= 0 {
+        guard verifiedCallerPID > 0 else {
             reply(false, "caller PID not verified by XPC layer")
             return
         }
-        let effectiveParentPID = verifiedCallerPID
-        if parentPID != 0 && parentPID != effectiveParentPID {
-            dacxLog("caller-supplied parentPID=\(parentPID) differs from XPC-verified pid=\(effectiveParentPID); using verified pid")
+        guard !zipUrl.isEmpty, !checksumHex.isEmpty,
+              !installedAppPath.isEmpty, !expectedTeamId.isEmpty,
+              !expectedVersion.isEmpty else {
+            reply(false, "missing required arguments")
+            return
         }
-        if installedAppPath != "/Applications/Dacx.app" {
+        guard installedAppPath == "/Applications/Dacx.app" else {
             reply(false, "installed path must be /Applications/Dacx.app")
             return
         }
-        if !newAppPath.hasPrefix("/") || newAppPath.contains("/..") {
-            reply(false, "new app path must be an absolute path without ..")
+        guard let parsedUrl = URL(string: zipUrl),
+              parsedUrl.scheme == "https",
+              allowedHosts.contains(parsedUrl.host ?? "") else {
+            reply(false, "zipUrl must be https and on an allowed host (github.com / objects.githubusercontent.com)")
             return
         }
-        if !newAppPath.hasSuffix("/Dacx.app") && !newAppPath.hasSuffix("/Dacx.app/") {
-            reply(false, "new app path must end in /Dacx.app")
+        guard checksumHex.count == 64,
+              checksumHex.allSatisfy({ $0.isHexDigit }) else {
+            reply(false, "checksumHex must be 64 hex characters")
             return
         }
-        if !bundleExists(newAppPath) {
-            reply(false, "new app bundle not found at \(newAppPath)")
-            return
-        }
+
+        let effectivePID = verifiedCallerPID
 
         guard let selfPath = Bundle.main.executablePath else {
             reply(false, "could not resolve XPC executable path")
             return
         }
-
-        let env: [String: String] = [
-            "DACX_UPDATE_WORKER": "1",
-            "DACX_NEW_APP": newAppPath,
-            "DACX_INSTALLED_APP": installedAppPath,
-            "DACX_TEAM_ID": expectedTeamId,
-            "DACX_VERSION": expectedVersion,
-            "DACX_PARENT_PID": String(effectiveParentPID),
-            "DACX_RELAUNCH": relaunch ? "1" : "0",
-        ]
-
-        let spawnResult = spawnDetachedWorker(executablePath: selfPath, env: env)
-        if let err = spawnResult {
-            reply(false, "posix_spawn failed: \(err)")
+        let installLock: UpdateInstallLock
+        switch acquireUpdateInstallLock() {
+        case .failure(let error):
+            reply(false, error.description)
             return
+        case .success(let lock):
+            installLock = lock
         }
-        reply(true, nil)
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let startedAt = Date()
+            var workerAccepted = false
+            var downloadDirPath: String?
+            var preSpawnCleanupPaths: [String] = []
+
+            defer {
+                if workerAccepted {
+                    cleanupPath(downloadDirPath)
+                    installLock.closeForInheritedWorker()
+                } else {
+                    for path in preSpawnCleanupPaths.reversed() {
+                        cleanupPath(path)
+                    }
+                    installLock.release()
+                }
+            }
+
+            func abortIfExpired(_ phase: String) -> Bool {
+                let elapsed = Date().timeIntervalSince(startedAt)
+                if elapsed <= helperOperationDeadlineSeconds { return false }
+                let seconds = Int(helperOperationDeadlineSeconds)
+                dacxLog("installFromUrl: timed out during \(phase) after \(Int(elapsed))s")
+                reply(false, "update helper timed out during \(phase) after \(seconds)s")
+                return true
+            }
+
+            dacxLog("installFromUrl: downloading \(zipUrl)")
+
+            // 1. Download
+            let downloadResult = downloadToTemp(parsedUrl)
+            let zipFileUrl: URL
+            switch downloadResult {
+            case .failure(let err):
+                dacxLog("installFromUrl: download failed: \(err)")
+                reply(false, "download failed: \(err)")
+                return
+            case .success(let url):
+                zipFileUrl = url
+            }
+            downloadDirPath = zipFileUrl.deletingLastPathComponent().path
+            preSpawnCleanupPaths.append(zipFileUrl.deletingLastPathComponent().path)
+            if abortIfExpired("download") { return }
+            dacxLog("installFromUrl: download complete, verifying SHA256")
+
+            // 2. SHA256 verify
+            guard let actualHex = sha256Hex(of: zipFileUrl) else {
+                reply(false, "could not compute SHA256 of downloaded file")
+                return
+            }
+            if abortIfExpired("checksum verification") { return }
+            if actualHex.lowercased() != checksumHex.lowercased() {
+                dacxLog("installFromUrl: SHA256 mismatch expected=\(checksumHex) actual=\(actualHex)")
+                reply(false, "SHA256 mismatch: expected \(checksumHex), got \(actualHex)")
+                return
+            }
+            dacxLog("installFromUrl: SHA256 verified; extracting")
+
+            // 3. Extract with ditto (un-sandboxed — no com.apple.provenance stamped)
+            let extractDir = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("dacx-extract-\(UUID().uuidString)", isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: extractDir,
+                                                        withIntermediateDirectories: true)
+                preSpawnCleanupPaths.append(extractDir.path)
+            } catch {
+                reply(false, "could not create extraction directory: \(error)")
+                return
+            }
+            let (dittoCode, dittoOutput) = runCommand("/usr/bin/ditto", [
+                "-x", "-k", "--sequesterRsrc",
+                zipFileUrl.path,
+                extractDir.path,
+            ])
+            if dittoCode != 0 {
+                reply(false, "ditto extraction failed: \(dittoOutput)")
+                return
+            }
+            if abortIfExpired("extraction") { return }
+
+            let extractedAppPath = extractDir.appendingPathComponent("Dacx.app").path
+            guard bundleExists(extractedAppPath) else {
+                reply(false, "Dacx.app not found inside extracted zip")
+                return
+            }
+            dacxLog("installFromUrl: extracted to \(extractedAppPath); validating bundle")
+
+            // 4. Validate extracted bundle before spawning worker
+            if let failure = validateBundle(extractedAppPath,
+                                            expectedTeamId: expectedTeamId,
+                                            expectedVersion: expectedVersion) {
+                dacxLog("installFromUrl: bundle validation failed: \(failure)")
+                reply(false, "bundle validation failed: \(failure)")
+                return
+            }
+            if abortIfExpired("bundle validation") { return }
+            dacxLog("installFromUrl: bundle valid; spawning worker")
+
+            // 5. Spawn detached worker — it waits for parent PID exit, then swaps
+            let env: [String: String] = [
+                "DACX_UPDATE_WORKER": "1",
+                "DACX_NEW_APP": extractedAppPath,
+                "DACX_INSTALLED_APP": installedAppPath,
+                "DACX_TEAM_ID": expectedTeamId,
+                "DACX_VERSION": expectedVersion,
+                "DACX_PARENT_PID": String(effectivePID),
+                "DACX_RELAUNCH": relaunch ? "1" : "0",
+                "DACX_CLEANUP_DIR": extractDir.path,
+                "DACX_UPDATE_LOCK_FD": String(installLock.fd),
+            ]
+            if let err = spawnDetachedWorker(executablePath: selfPath,
+                                             env: env,
+                                             inheritedFD: installLock.fd) {
+                reply(false, "posix_spawn failed: \(err)")
+                return
+            }
+
+            workerAccepted = true
+            dacxLog("installFromUrl: worker spawned; replying accepted=true")
+            reply(true, nil)
+        }
     }
-}
-
-/// Spawns the worker via `posix_spawn` with a new session, env-vars, and
-/// std-fds redirected to /dev/null so it survives the XPC service being reaped
-/// once the connecting app quits.
-func spawnDetachedWorker(executablePath: String, env: [String: String]) -> String? {
-    var fileActions: posix_spawn_file_actions_t? = nil
-    posix_spawn_file_actions_init(&fileActions)
-    defer { posix_spawn_file_actions_destroy(&fileActions) }
-
-    let devNull = "/dev/null"
-    posix_spawn_file_actions_addopen(&fileActions, 0, devNull, O_RDONLY, 0)
-    posix_spawn_file_actions_addopen(&fileActions, 1, devNull, O_WRONLY, 0)
-    posix_spawn_file_actions_addopen(&fileActions, 2, devNull, O_WRONLY, 0)
-
-    var attrs: posix_spawnattr_t? = nil
-    posix_spawnattr_init(&attrs)
-    defer { posix_spawnattr_destroy(&attrs) }
-    // SETSID: new session, detaches from any controlling terminal so the
-    //   worker survives parent reap.
-    // CLOEXEC_DEFAULT (Darwin-only, 0x4000): close every inherited fd EXCEPT
-    //   the ones explicitly listed in file_actions (we open 0/1/2 to
-    //   /dev/null below). Stops the worker from holding on to the XPC
-    //   service's listener / connection fds after we detach.
-    let flags = Int16(POSIX_SPAWN_SETSID) | Int16(0x4000)
-    posix_spawnattr_setflags(&attrs, flags)
-
-    // Build argv. Single arg: argv[0] = executable path.
-    let argv: [UnsafeMutablePointer<CChar>?] = [
-        strdup(executablePath),
-        nil,
-    ]
-    defer { for ptr in argv { if ptr != nil { free(ptr) } } }
-
-    // Build envp from the supplied env (worker process inherits nothing else).
-    let envpStrings: [String] = env.map { "\($0.key)=\($0.value)" }
-    let envp: [UnsafeMutablePointer<CChar>?] = envpStrings.map { strdup($0) } + [nil]
-    defer { for ptr in envp { if ptr != nil { free(ptr) } } }
-
-    var pid: pid_t = 0
-    let rc = posix_spawn(&pid, executablePath, &fileActions, &attrs, argv, envp)
-    if rc != 0 {
-        return "rc=\(rc) (\(String(cString: strerror(rc))))"
-    }
-    return nil
 }

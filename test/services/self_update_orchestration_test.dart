@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dacx/services/self_update_service.dart';
 import 'package:dacx/services/update_service.dart';
+import 'package:dacx/services/windows_process_ffi.dart';
 
 void main() {
   group('SelfUpdateService.isAllowedDownloadUrl', () {
@@ -105,6 +106,16 @@ void main() {
         ),
       );
       expect(result.outcome, SelfUpdateOutcome.missingAsset);
+    });
+  });
+
+  group('WindowsProcessFfi.runAsync', () {
+    test('returns a not-launched guard result on non-Windows hosts', () async {
+      if (Platform.isWindows) return;
+
+      final result = await WindowsProcessFfi.runAsync('powershell.exe -NoExit');
+      expect(result.launched, isFalse);
+      expect(result.error, contains('Windows-only'));
     });
   });
 }

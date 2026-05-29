@@ -140,6 +140,13 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
     final downloaded = progress?.downloadedBytes ?? 0;
     final total = progress?.totalBytes;
     final showVerifying = fraction == 1.0;
+    final statusText = Platform.isMacOS && progress == null
+        ? 'Downloading and verifying in the update helper...'
+        : showVerifying
+        ? 'Verifying signature...'
+        : total != null
+        ? 'Downloading ${_formatMb(downloaded)} / ${_formatMb(total)}'
+        : 'Downloading...';
 
     return PopScope(
       canPop: false,
@@ -151,14 +158,7 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
           children: [
             LinearProgressIndicator(value: fraction),
             const SizedBox(height: 12),
-            Text(
-              showVerifying
-                  ? 'Verifying signature…'
-                  : total != null
-                  ? 'Downloading ${_formatMb(downloaded)} / ${_formatMb(total)}'
-                  : 'Downloading…',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(statusText, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 4),
             Text(
               'Dacx will close to apply the update.',

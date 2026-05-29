@@ -162,41 +162,6 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
     });
   });
 
-  group('SelfUpdateService.parseCodesignDetails', () {
-    test('extracts codesign key/value metadata from stderr-style output', () {
-      const output = '''
-Executable=/Applications/Dacx.app/Contents/MacOS/Dacx
-Identifier=run.rosie.dacx
-Format=app bundle with Mach-O universal (x86_64 arm64)
-TeamIdentifier=ABCDE12345
-Runtime Version=15.0.0
-''';
-
-      expect(SelfUpdateService.parseCodesignDetails(output), {
-        'Executable': '/Applications/Dacx.app/Contents/MacOS/Dacx',
-        'Identifier': 'run.rosie.dacx',
-        'Format': 'app bundle with Mach-O universal (x86_64 arm64)',
-        'TeamIdentifier': 'ABCDE12345',
-        'Runtime Version': '15.0.0',
-      });
-    });
-
-    test('ignores malformed metadata lines', () {
-      const output = '''
-not a key value line
-=missing-key
-Identifier=run.rosie.dacx
-empty=
-TeamIdentifier=ABCDE12345
-''';
-
-      expect(SelfUpdateService.parseCodesignDetails(output), {
-        'Identifier': 'run.rosie.dacx',
-        'TeamIdentifier': 'ABCDE12345',
-      });
-    });
-  });
-
   group('SelfUpdateService Authenticode helpers', () {
     test('normalizes certificate thumbprints', () {
       expect(
@@ -248,6 +213,25 @@ TeamIdentifier=ABCDE12345
         expect(script, isNot(contains('find "%DACX_PID%"')));
       },
     );
+  });
+
+  group('SelfUpdateService.buildBootstrapCommandLine', () {
+    test('launches powershell hidden with a quoted script path', () {
+      final cmd = SelfUpdateService.buildBootstrapCommandLine(
+        r'C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1',
+      );
+
+      expect(cmd, startsWith('powershell.exe'));
+      expect(cmd, contains('-NoProfile'));
+      expect(cmd, contains('-ExecutionPolicy Bypass'));
+      expect(cmd, contains('-WindowStyle Hidden'));
+      expect(
+        cmd,
+        contains(
+          r'-File "C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1"',
+        ),
+      );
+    });
   });
 
   group('SelfUpdateService Ed25519 helpers', () {
