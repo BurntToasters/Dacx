@@ -35,6 +35,7 @@ class SeekPreviewService {
   bool _busy = false;
 
   final Queue<int> _prefetchQueue = Queue<int>();
+  final Set<int> _prefetchScheduled = {};
   bool _prefetching = false;
 
   bool get enabled => _enabled;
@@ -72,6 +73,7 @@ class SeekPreviewService {
     _debounceTimer = null;
     _cache.clear();
     _prefetchQueue.clear();
+    _prefetchScheduled.clear();
     await _ensurePlayer();
     final p = _player;
     if (p == null) return;
@@ -80,11 +82,15 @@ class SeekPreviewService {
       try {
         await p.setVolume(0);
       } catch (e) {
-        debugPrint('Dacx: seek-preview setVolume failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: seek-preview setVolume failed: $e');
+        }
       }
       _loadedPath = normalized;
     } catch (e) {
-      debugPrint('Dacx: seek-preview open failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview open failed: $e');
+      }
       _loadedPath = null;
     }
   }
@@ -112,7 +118,9 @@ class SeekPreviewService {
       try {
         await platform.setProperty(name, value);
       } catch (e) {
-        debugPrint('Dacx: seek-preview setProperty $name failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: seek-preview setProperty $name failed: $e');
+        }
       }
     }
 
@@ -203,7 +211,9 @@ class SeekPreviewService {
     try {
       await p.seek(Duration(milliseconds: key));
     } catch (e) {
-      debugPrint('Dacx: seek-preview seek failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview seek failed: $e');
+      }
     }
     if (_disposed) return null;
     await Future<void>.delayed(_frameSettleDelay);
@@ -212,7 +222,9 @@ class SeekPreviewService {
     try {
       bytes = await p.screenshot(format: 'image/jpeg');
     } catch (e) {
-      debugPrint('Dacx: seek-preview screenshot failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview screenshot failed: $e');
+      }
       bytes = null;
     }
     if (_disposed) return null;
@@ -228,12 +240,12 @@ class SeekPreviewService {
       final behind = aroundKey - i * _quantumMs;
       if (ahead >= 0 &&
           _cache.get(ahead) == null &&
-          !_prefetchQueue.contains(ahead)) {
+          _prefetchScheduled.add(ahead)) {
         _prefetchQueue.add(ahead);
       }
       if (behind >= 0 &&
           _cache.get(behind) == null &&
-          !_prefetchQueue.contains(behind)) {
+          _prefetchScheduled.add(behind)) {
         _prefetchQueue.add(behind);
       }
     }
@@ -251,6 +263,7 @@ class SeekPreviewService {
           _prefetchQueue.isNotEmpty &&
           _pendingCompleter == null) {
         final key = _prefetchQueue.removeFirst();
+        _prefetchScheduled.remove(key);
         if (_cache.get(key) != null) continue;
         await _captureAt(key);
         await Future<void>.delayed(Duration.zero);
@@ -269,6 +282,7 @@ class SeekPreviewService {
     _pendingCompleter = null;
     _pendingKey = null;
     _prefetchQueue.clear();
+    _prefetchScheduled.clear();
     _cache.clear();
     final p = _player;
     _controller = null;
@@ -279,7 +293,9 @@ class SeekPreviewService {
       try {
         await p.dispose();
       } catch (e) {
-        debugPrint('Dacx: seek-preview teardown dispose failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: seek-preview teardown dispose failed: $e');
+        }
       }
     }
   }

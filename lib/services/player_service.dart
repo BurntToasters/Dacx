@@ -31,7 +31,6 @@ class PlayerService {
       if (!_errorController.isClosed) {
         _errorController.add(PlayerErrorEvent(op, e, st));
       }
-      rethrow;
     }
   }
 
@@ -47,8 +46,10 @@ class PlayerService {
     }
   }
 
-  Future<void> open(String filePath, {bool play = true}) =>
-      _guard('open', () => player.open(Media(filePath), play: play));
+  Future<void> open(String filePath, {bool play = true}) async {
+    if (_disposed) return;
+    await player.open(Media(filePath), play: play);
+  }
 
   Future<void> playPause() => _guard('playPause', player.playOrPause);
 
@@ -121,7 +122,7 @@ class PlayerService {
 
   /// Adds an external audio file as a parallel audio source (mpv `audio-add`).
   /// Use `select` to make it active.
-  Future<bool> addExternalAudio(String path, {bool auto = true}) =>
+  Future<bool> addExternalAudio(String path) =>
       setProperty('audio-files-add', path);
 
   /// Loads an external subtitle file (mpv `sub-add`).

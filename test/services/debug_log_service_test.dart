@@ -125,5 +125,35 @@ void main() {
       expect(detailsBuilt, isFalse);
       expect(service.entryCount, 0);
     });
+
+    test('logLazy evaluates builders when enabled', () {
+      final service = DebugLogService(isEnabled: () => true);
+
+      service.logLazy(
+        category: DebugLogCategory.update,
+        event: 'check',
+        messageBuilder: () => 'checking',
+        detailsBuilder: () => {'channel': 'beta'},
+      );
+
+      expect(service.entryCount, 1);
+      expect(service.entries.single.message, 'checking');
+      expect(service.entries.single.details, {'channel': 'beta'});
+    });
+
+    test('exportText redacts a whole-message path', () {
+      final service = DebugLogService(isEnabled: () => true);
+
+      service.log(
+        category: DebugLogCategory.system,
+        event: 'open_file',
+        message: '/home/burnt/Videos/movie.mp4',
+      );
+
+      final output = service.exportText();
+
+      expect(output, contains('<path:movie.mp4>'));
+      expect(output, isNot(contains('/home/burnt/Videos/movie.mp4')));
+    });
   });
 }

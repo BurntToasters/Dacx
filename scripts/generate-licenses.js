@@ -96,6 +96,42 @@ function detectLicenseType(text) {
   return "Other";
 }
 
+const NOTICES_FILE = "THIRD_PARTY_NOTICES.txt";
+const NATIVE_DEPS_DOC = "docs/NATIVE_DEPENDENCIES.md";
+
+function writeThirdPartyNotices(licenses, outDir) {
+  const lines = [
+    "Dacx — Third-Party Notices",
+    "==========================",
+    "",
+    "Dacx (run.rosie.dacx) is licensed under the GNU General Public License",
+    "v3.0 or later. The full license text is in the LICENSE file shipped with",
+    "this distribution.",
+    "",
+    "This file lists open-source components used in or with Dacx. For bundled",
+    "native runtimes (libmpv, media_kit binaries, Flutter engine), see:",
+    NATIVE_DEPS_DOC,
+    "",
+    "── Dart / Flutter package dependencies ──",
+    "",
+  ];
+
+  for (const entry of licenses) {
+    lines.push(`${entry.name}@${entry.version} (${entry.license})`);
+    lines.push("─".repeat(72));
+    if (entry.text) {
+      lines.push(entry.text);
+    } else {
+      lines.push("(License text not found in pub cache.)");
+    }
+    lines.push("");
+  }
+
+  const outPath = path.join(outDir, NOTICES_FILE);
+  fs.writeFileSync(outPath, `${lines.join("\n")}\n`, "utf-8");
+  return outPath;
+}
+
 // ── Main ─────────────────────────────────────────────────────
 
 function main() {
@@ -139,8 +175,11 @@ function main() {
   const outPath = path.join(outDir, "licenses.json");
   fs.writeFileSync(outPath, JSON.stringify(licenses, null, 2));
 
+  const noticesPath = writeThirdPartyNotices(licenses, outDir);
+
   console.log(`\n✔ ${found} licenses found, ${missing} missing.`);
   console.log(`  Output: ${path.relative(root, outPath)}`);
+  console.log(`  Output: ${path.relative(root, noticesPath)}`);
 
   // Also print a summary table
   console.log("\n  Package                          License");

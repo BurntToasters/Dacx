@@ -94,6 +94,17 @@ function main() {
 
   const manifestPath = resolveManifestPath();
 
+  const noticesPath = path.join(root, "build", "THIRD_PARTY_NOTICES.txt");
+  if (!fs.existsSync(noticesPath)) {
+    console.log("Generating third-party notices for Flatpak...");
+    run(process.execPath, [path.join(root, "scripts", "generate-licenses.js")]);
+  }
+  if (!fs.existsSync(noticesPath)) {
+    throw new Error(
+      "Missing build/THIRD_PARTY_NOTICES.txt — run npm run licenses before flatpak:bundle",
+    );
+  }
+
   run("flatpak-builder", [
     "--repo=flatpak-repo",
     "--force-clean",

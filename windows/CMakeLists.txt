@@ -43,6 +43,9 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
+  # MSVC 14.51+ turns <experimental/coroutine> usage into a hard STL error.
+  # Some Flutter Windows dependencies still include it transitively.
+  target_compile_definitions(${TARGET} PRIVATE "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
 endfunction()
 
 # Flutter library and tool build rules.
@@ -71,6 +74,26 @@ endif()
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+
+# Bundle MSVC runtime files app-local so clean Windows installs can launch
+# without requiring a preinstalled Visual C++ Redistributable.
+# Some toolchains can report stale/NOTFOUND runtime paths; install only files
+# that actually exist to avoid INSTALL.vcxproj failures.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS TRUE)
+include(InstallRequiredSystemLibraries)
+set(DACX_SYSTEM_RUNTIME_LIBS "")
+foreach(runtime_lib IN LISTS CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+  if(runtime_lib AND EXISTS "${runtime_lib}")
+    list(APPEND DACX_SYSTEM_RUNTIME_LIBS "${runtime_lib}")
+  endif()
+endforeach()
+if(DACX_SYSTEM_RUNTIME_LIBS)
+  list(REMOVE_DUPLICATES DACX_SYSTEM_RUNTIME_LIBS)
+  install(FILES ${DACX_SYSTEM_RUNTIME_LIBS}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

@@ -1,7 +1,7 @@
 name: dacx
 description: "Quick, lightweight cross-platform media player."
 publish_to: 'none'
-version: 0.7.3+703
+version: 0.8.0+800
 
 environment:
   sdk: ^3.10.7
@@ -9,7 +9,10 @@ environment:
 
 dependencies:
   anni_mpris_service: ^0.1.0
+  crypto: ^3.0.7
+  cryptography: ^2.7.0
   desktop_drop: ^0.7.1
+  ffi: ^2.1.0
   file_picker: ^11.0.2
   flutter:
     sdk: flutter
@@ -33,11 +36,11 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
-  integration_test:
-    sdk: flutter
   mocktail: ^1.0.4
   url_launcher_platform_interface: ^2.3.2
 
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - assets/cacert.pem

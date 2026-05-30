@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { compareSemverDescending } from "./semver-sort.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const failures = [];
@@ -88,16 +89,7 @@ if (fs.existsSync(metainfoPath)) {
   if (releases.length === 0) {
     failures.push("metainfo has no <release> entries");
   } else {
-    const cmp = (a, b) => {
-      const pa = a.split(/[.-]/).map((s) => parseInt(s, 10) || 0);
-      const pb = b.split(/[.-]/).map((s) => parseInt(s, 10) || 0);
-      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-        const d = (pb[i] || 0) - (pa[i] || 0);
-        if (d !== 0) return d;
-      }
-      return 0;
-    };
-    const sorted = [...releases].sort(cmp);
+    const sorted = [...releases].sort(compareSemverDescending);
     if (sorted.join(",") !== releases.join(",")) {
       failures.push(
         `metainfo <release> entries are not version-sorted descending. Got: ${releases.join(", ")}`,
@@ -120,7 +112,27 @@ if (fs.existsSync(metainfoPath)) {
   }
 }
 
-// 5. Optional shellcheck
+// 5. Flatpak sandbox policy
+const flatpakManifest = path.join(root, "flatpak", "run.rosie.dacx.yaml");
+if (fs.existsSync(flatpakManifest)) {
+  const flatpak = fs.readFileSync(flatpakManifest, "utf8");
+  const flatpakActive = flatpak
+    .split("\n")
+    .map((line) => line.replace(/#.*$/, "").trim())
+    .join("\n");
+  if (/--filesystem=host\b/.test(flatpakActive)) {
+    failures.push(
+      `${rel(flatpakManifest)} must not use --filesystem=host (use XDG dirs + portal file picker)`,
+    );
+  }
+  if (!flatpak.includes("THIRD_PARTY_NOTICES.txt")) {
+    failures.push(
+      `${rel(flatpakManifest)} must install build/THIRD_PARTY_NOTICES.txt into the bundle`,
+    );
+  }
+}
+
+// 6. Optional shellcheck
 const shFiles = fs
   .readdirSync(scriptsDir)
   .filter((f) => f.endsWith(".sh"))

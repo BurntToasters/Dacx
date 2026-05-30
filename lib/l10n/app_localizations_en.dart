@@ -36,7 +36,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAllowMultipleWindows => 'Allow multiple windows';
 
   @override
-  String get settingsCheckForUpdates => 'Check for updates on launch';
+  String get settingsCheckForUpdatesOnLaunch => 'Check for updates on launch';
 
   @override
   String get settingsTheme => 'Theme';
@@ -67,6 +67,248 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLoopMode => 'Loop mode';
 
   @override
+  String get settingsResumeSubtitle =>
+      'Remember playback position for each file';
+
+  @override
+  String get settingsOsdSubtitle =>
+      'Show title and time overlay during playback';
+
+  @override
+  String get settingsMediaSessionSubtitle =>
+      'Publish playback to MPRIS / SMTC / Now Playing';
+
+  @override
+  String get settingsAllowMultipleWindowsSubtitle =>
+      'When off (default), opening a file from your OS reuses the running Dacx window. Press Ctrl/Cmd+N to open an extra window on demand.';
+
+  @override
+  String get settingsSectionPlayback => 'Playback';
+
+  @override
+  String get settingsSectionAppearance => 'Appearance';
+
+  @override
+  String get settingsSectionGeneral => 'General';
+
+  @override
+  String get settingsSectionExperimental => 'Experimental';
+
+  @override
+  String get settingsSectionDebug => 'Debug';
+
+  @override
+  String get settingsBack => 'Back';
+
+  @override
+  String get settingsHwDecAuto => 'Auto';
+
+  @override
+  String get settingsHwDecSafe => 'Safe';
+
+  @override
+  String get settingsHwDecOff => 'Off';
+
+  @override
+  String settingsHwAccelDebugActive(String state) {
+    return 'Debug: HW acceleration active: $state';
+  }
+
+  @override
+  String settingsHwAccelDebugReason(String reason) {
+    return 'Debug: $reason';
+  }
+
+  @override
+  String get settingsLoopOff => 'Off';
+
+  @override
+  String get settingsLoopSingle => 'Single';
+
+  @override
+  String get settingsLoopAll => 'Loop';
+
+  @override
+  String get settingsWindowOpacity => 'Window opacity';
+
+  @override
+  String get settingsWindowOpacityBlurNote =>
+      'With blur on (Windows), this adjusts UI translucency.';
+
+  @override
+  String settingsPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get settingsBackgroundBlur => 'Background blur';
+
+  @override
+  String get settingsBlurLinuxExperimentalOn =>
+      'Experimental: requires compositor support';
+
+  @override
+  String get settingsBlurLinuxExperimentalOff =>
+      'Not available on Linux unless experimental mode is enabled';
+
+  @override
+  String get settingsBlurNativeSubtitle =>
+      'Applies native blur behind app content';
+
+  @override
+  String get settingsGlassStrength => 'Glass strength';
+
+  @override
+  String get settingsBlurIntensityWindows => 'Adjusts native blur intensity';
+
+  @override
+  String get settingsBlurIntensityMac =>
+      'Adjusts native glass material intensity';
+
+  @override
+  String get settingsLinuxCompositorBlur =>
+      'Experimental Linux compositor blur';
+
+  @override
+  String get settingsLinuxCompositorBlurSubtitle =>
+      'Enables transparent window path for compositors that support blur (for example KDE blur rules)';
+
+  @override
+  String get settingsExperimentalEnable => 'Enable Experimental Features';
+
+  @override
+  String get settingsExperimentalUnstable =>
+      'Experimental features are very unstable.';
+
+  @override
+  String get settingsRecentFiles => 'Recent files';
+
+  @override
+  String settingsRecentFilesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+      zero: '0 files',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsUpdateChannel => 'Update channel';
+
+  @override
+  String get settingsUpdateChannelSubtitle =>
+      'Auto matches your current version (stable or beta).';
+
+  @override
+  String get settingsUpdateChannelAuto => 'Auto';
+
+  @override
+  String get settingsUpdateChannelStable => 'Stable';
+
+  @override
+  String get settingsUpdateChannelBeta => 'Beta';
+
+  @override
+  String get settingsCheckForUpdates => 'Check for updates';
+
+  @override
+  String get settingsCheckNow => 'Check now';
+
+  @override
+  String get snackUpdateCheckFailed => 'Failed to check for updates.';
+
+  @override
+  String get snackUpdateLatest => 'You are on the latest version.';
+
+  @override
+  String get settingsKeyboardShortcuts => 'Keyboard shortcuts';
+
+  @override
+  String get settingsHelp => 'Help';
+
+  @override
+  String get settingsSupportProject => 'Support this project';
+
+  @override
+  String get settingsResetDefaults => 'Reset to defaults';
+
+  @override
+  String get settingsResetTitle => 'Reset Settings';
+
+  @override
+  String get settingsResetConfirm =>
+      'This will reset all settings to their default values. Continue?';
+
+  @override
+  String get snackSettingsReset => 'Settings reset to defaults.';
+
+  @override
+  String get settingsOpenSourceLicenses => 'Open source licenses';
+
+  @override
+  String get settingsAboutDacx => 'About Dacx';
+
+  @override
+  String settingsAboutVersion(String version) {
+    return 'Version $version • GPLv3';
+  }
+
+  @override
+  String get settingsViewOnGitHub => 'View on GitHub';
+
+  @override
+  String settingsDebugModeTitle(String action) {
+    return '$action Debug Mode?';
+  }
+
+  @override
+  String get settingsDebugModeDisablePrompt =>
+      'Do you want to disable hidden debug mode?';
+
+  @override
+  String get settingsDebugModeEnablePrompt =>
+      'Do you want to enable hidden debug mode? (Debug mode uses more system resources and may cause performance degradation while enabled)';
+
+  @override
+  String get settingsActionEnable => 'Enable';
+
+  @override
+  String get settingsActionDisable => 'Disable';
+
+  @override
+  String get snackDebugModeEnabled => 'Debug mode enabled.';
+
+  @override
+  String get snackDebugModeDisabled => 'Debug mode disabled.';
+
+  @override
+  String get settingsShortcutOpenFile => 'Open File';
+
+  @override
+  String get settingsShortcutReopenLast => 'Reopen Last';
+
+  @override
+  String get settingsShortcutPlayPause => 'Play / Pause';
+
+  @override
+  String get settingsShortcutSeek => 'Seek ±5 seconds';
+
+  @override
+  String get settingsShortcutVolume => 'Volume ±5%';
+
+  @override
+  String get settingsShortcutMute => 'Mute / Unmute';
+
+  @override
+  String get settingsShortcutFullscreen => 'Toggle Fullscreen';
+
+  @override
+  String get settingsShortcutExitFullscreen => 'Exit Fullscreen';
+
+  @override
   String get snackCouldNotReadDroppedFile =>
       'Could not read dropped file path.';
 
@@ -84,6 +326,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackUnableToOpenFilePicker => 'Unable to open file picker.';
 
   @override
+  String snackPlaybackOperationFailed(String detail) {
+    return 'Playback failed: $detail';
+  }
+
+  @override
   String snackFilePickerFailed(String detail) {
     return 'File picker failed. $detail';
   }
@@ -94,6 +341,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get snackFileNotFound =>
       'File not found. It may have moved or been deleted.';
+
+  @override
+  String get snackFileLoadPermissionDenied =>
+      'Permission denied. Check file access and try again.';
+
+  @override
+  String get snackFileLoadFailed => 'Could not open file. Try another file.';
+
+  @override
+  String snackQueueTruncated(int max, int count) {
+    return 'Queue is full ($max items). Skipped $count file(s).';
+  }
 
   @override
   String get snackUnsupportedFileType =>

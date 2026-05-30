@@ -76,6 +76,24 @@
     <mediatype>video/x-flv</mediatype>
   </provides>
   <releases>
+    <release version="0.8.0" date="2026-05-30"/>
+    <release version="0.8.0-beta.17" date="2026-05-30"/>
+    <release version="0.8.0-beta.16" date="2026-05-29"/>
+    <release version="0.8.0-beta.15" date="2026-05-28"/>
+    <release version="0.8.0-beta.14" date="2026-05-28"/>
+    <release version="0.8.0-beta.13" date="2026-05-28"/>
+    <release version="0.8.0-beta.12" date="2026-05-27"/>
+    <release version="0.8.0-beta.11" date="2026-05-27"/>
+    <release version="0.8.0-beta.10" date="2026-05-27"/>
+    <release version="0.8.0-beta.9" date="2026-05-25"/>
+    <release version="0.8.0-beta.8" date="2026-05-21"/>
+    <release version="0.8.0-beta.7" date="2026-05-16"/>
+    <release version="0.8.0-beta.6" date="2026-05-14"/>
+    <release version="0.8.0-beta.5" date="2026-05-12"/>
+    <release version="0.8.0-beta.4" date="2026-05-11"/>
+    <release version="0.8.0-beta.3" date="2026-05-10"/>
+    <release version="0.8.0-beta.2" date="2026-05-09"/>
+    <release version="0.8.0-beta.1" date="2026-05-08"/>
     <release version="0.7.3" date="2026-05-08"/>
     <release version="0.7.2" date="2026-05-07"/>
     <release version="0.7.1" date="2026-05-06"/>

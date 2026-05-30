@@ -1,4 +1,4 @@
-# x-version: 0.7.3
+# x-version: 0.8.0
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "24.08"
@@ -14,9 +14,7 @@ finish-args:
   - --filesystem=xdg-music:ro
   - --filesystem=xdg-videos:ro
   - --filesystem=xdg-download:ro
-  - --filesystem=xdg-documents:ro
-  - --filesystem=xdg-desktop:ro
-  - --filesystem=host:ro
+  # Arbitrary paths use the Freedesktop file portal (file_picker).
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.mpris.MediaPlayer2.dacx
   - --own-name=org.mpris.MediaPlayer2.dacx
@@ -30,7 +28,10 @@ modules:
       - install -d /app/share/applications
       - install -d /app/share/icons/hicolor/256x256/apps
       - install -d /app/share/metainfo
+      - install -d /app/share/doc/dacx
       - cp -r bundle/. /app/lib/dacx/
+      - install -m 644 THIRD_PARTY_NOTICES.txt /app/share/doc/dacx/THIRD_PARTY_NOTICES.txt
+      - install -m 644 LICENSE /app/share/doc/dacx/LICENSE
       - install -m 755 flatpak-dacx-launcher.sh /app/bin/dacx
       - install -m 644 run.rosie.dacx.desktop /app/share/applications/run.rosie.dacx.desktop
       - install -m 644 run.rosie.dacx.metainfo.xml /app/share/metainfo/run.rosie.dacx.metainfo.xml
@@ -49,3 +50,7 @@ modules:
       - type: file
         path: assets/icon/icon.png
         dest-filename: run.rosie.dacx.png
+      - type: file
+        path: build/THIRD_PARTY_NOTICES.txt
+      - type: file
+        path: LICENSE

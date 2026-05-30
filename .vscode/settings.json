@@ -1,4 +1,17 @@
 {
   "cmake.ignoreCMakeListsMissing": true,
-  "dart.flutterSdkPath": ".fvm/versions/3.41.9"
+  "dart.flutterSdkPath": ".fvm/versions/3.44.0",
+  "cSpell.words": [
+    "codesigning",
+    "dylibs",
+    "libexec",
+    "notarytool",
+    "prefs",
+    "Rsrc",
+    "sandboxed",
+    "Titlebar",
+    "UDZO",
+    "volname",
+    "xcrun"
+  ]
 }

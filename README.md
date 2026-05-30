@@ -33,9 +33,9 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
   
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
-| **EXE:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Windows-x64.exe)  | **DMG:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.dmg) | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb) |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Windows-x64.msi) | **ZIP:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.zip) | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm) |
-| **Portable ZIP:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Windows-x64.zip) |  | **TAR.GZ:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Windows-x64.msi) | **DMG:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.dmg) | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb) |
+| <!--**Portable ZIP:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Windows-x64.zip)--> | **ZIP:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.zip) | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm) |
+| | | **TAR.GZ:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.tar.gz) |
 
 </div>
 
@@ -80,6 +80,23 @@ npm run build:win   # Windows
 npm run build:mac   # macOS
 npm run build:linux # Linux
 ```
+
+### Signing model
+
+Only the macOS build is code-signed end-to-end (Apple Developer ID + notarization). Windows MSIs and Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key) — there is no Authenticode certificate for Windows.
+
+This means:
+
+- `scripts/flutter-build-macos.js` requires `APPLE_TEAM_ID` in `.env`. Self-update pins against the team id. Set `DACX_BUILD_DEV_NO_TEAM_ID=1` to skip for local dev:
+  ```bash
+  DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
+  ```
+- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`) *optionally* for local dev. If unset, the MSI is unsigned at the OS level and self-update relies on the Ed25519-signed update manifest. On **release VMs**, set the thumbprint in `.env` and add `DACX_REQUIRE_WINDOWS_SIGNER=1` so `npm run build:win` fails when the thumbprint is missing (see `SECURITY.md`).
+- `scripts/flutter-build-linux` is not affected by either.
+
+### macOS support
+
+The macOS build targets **macOS 15 (Sequoia) or newer**. Older macOS versions are not supported.
 
 ## License
 

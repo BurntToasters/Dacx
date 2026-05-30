@@ -20,43 +20,60 @@ import '../services/debug_log_service.dart';
 import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
+import '../services/bookmark_service.dart';
 import '../services/seek_preview_service.dart';
+import '../services/self_update_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
+import '../playback/chapter_list_loader.dart';
+import '../playback/playback_controller.dart';
+import '../playback/playback_mix_policy.dart';
+import '../playback/player_path_utils.dart';
+import '../playback/track_label.dart';
+import '../playback/subscription_bag.dart';
+import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/osd_overlay.dart';
+import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
+import 'chapter_info.dart';
 import 'settings_screen.dart';
-
-const _audioExtensions = {
-  'mp3',
-  'flac',
-  'wav',
-  'ogg',
-  'aac',
-  'm4a',
-  'wma',
-  'opus',
-  'ape',
-  'alac',
-};
 
 const _openFileMethodChannel = MethodChannel(
   'run.rosie.dacx/open_file/methods',
 );
 const _openFileEventChannel = EventChannel('run.rosie.dacx/open_file/events');
 
+const _resumeSaveInterval = Duration(seconds: 5);
+const _seekStep = Duration(seconds: 5);
+const _seekStepBack = Duration(seconds: -5);
+const _osdHideDuration = Duration(seconds: 3);
+const _updateSnackbarDuration = Duration(seconds: 10);
+const _snackbarShortDuration = Duration(seconds: 2);
+const _resumeStartThreshold = Duration(seconds: 1);
+const _bridgeRetryDelay = Duration(milliseconds: 250);
+const _settingsFwdTransition = Duration(milliseconds: 340);
+const _settingsRevTransition = Duration(milliseconds: 280);
+const _sheetTransitionDuration = Duration(milliseconds: 180);
+const _contentSwitchDuration = Duration(milliseconds: 240);
+const _animFastDuration = Duration(milliseconds: 140);
+const _seekBarSizeDuration = Duration(milliseconds: 190);
+const _mixReloadDelay = Duration(milliseconds: 200);
+const _durationPollInterval = Duration(milliseconds: 50);
+
 class PlayerScreen extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
+  final UpdateService updateService;
   final String? initialFile;
 
   const PlayerScreen({
     super.key,
     required this.settings,
     required this.debugLog,
+    required this.updateService,
     this.initialFile,
   });
 
@@ -67,8 +84,10 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final PlayerService _playerService;
   late final VideoController _videoController;
-  late final UpdateService _updateService;
   late final SeekPreviewService _seekPreviewService;
+  late final PlaybackController _playback;
+  final _subscriptions = SubscriptionBag();
+  UpdateService get _updateService => widget.updateService;
 
   SettingsService get _settings => widget.settings;
 
@@ -88,28 +107,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isPlaying = false;
   double _volume = 100.0;
   bool _isSeeking = false;
-  int _loadGen = 0;
 
-  static const _supportedExtensions = {
-    ..._audioExtensions,
-    'mp4',
-    'mkv',
-    'avi',
-    'webm',
-    'mov',
-    'wmv',
-    'flv',
-    'm4v',
-  };
-
-  final List<StreamSubscription> _subscriptions = [];
-  Future<void> _loadQueue = Future<void>.value();
   bool _isDisposed = false;
 
   // Tracks / chapters / OSD state
   Tracks? _currentTracks;
   Track? _currentTrackSelection;
-  List<_ChapterInfo> _chapters = const [];
+  List<ChapterInfo> _chapters = const [];
   bool _subtitlesVisible = true;
   bool _osdVisible = false;
   String? _osdTransientMessage;
@@ -127,6 +131,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Resume-position bookkeeping.
   Timer? _resumeSaveTimer;
   String? _resumePathInProgress;
+
+  String? _activeBookmarkToken;
 
   void _log(
     String event, {
@@ -152,14 +158,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _updateService = UpdateService(
-      debugLog: widget.debugLog,
-      debugSource: 'player_screen',
-    );
+    _playback = PlaybackController();
     _playerService = PlayerService();
     _seekPreviewService = SeekPreviewService();
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
-    _settings.pruneRecentFiles(notifyListeners: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed) return;
+      _settings.pruneRecentFiles(notifyListeners: false);
+    });
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
     final hwReason = HardwareAccelerationService.debugStatusReason(hwDec);
@@ -218,7 +224,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _applyLoopMode(_settings.loopMode);
     _applyHwDec(_settings.hwDec);
 
-    _subscriptions.addAll([
+    final streamSubs = <StreamSubscription>[
       _playerService.positionStream.listen((pos) {
         if (!mounted || _isDisposed || _isSeeking) return;
         final dMs = (pos.inMilliseconds - _position.inMilliseconds).abs();
@@ -230,7 +236,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _position = pos;
         }
         if (_settings.mediaSessionEnabled) {
-          unawaited(_mediaSession.updatePosition(pos, playing: _isPlaying));
+          _maybeUpdateMediaSessionPosition(pos);
         }
       }),
       _playerService.durationStream.listen((dur) {
@@ -258,7 +264,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (!mounted || _isDisposed) return;
         setState(() => _isPlaying = playing);
         if (_settings.mediaSessionEnabled) {
-          unawaited(_mediaSession.updatePosition(_position, playing: playing));
+          _maybeUpdateMediaSessionPosition(_position);
         }
         if (widget.debugLog.isEnabled) {
           _log(
@@ -328,9 +334,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
         }
       }),
+      _playerService.errorStream.listen((event) {
+        if (!mounted || _isDisposed) return;
+        _log(
+          'player_operation_failed',
+          message: event.toString(),
+          severity: DebugSeverity.warn,
+        );
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        if (messenger != null) {
+          final l10n = AppLocalizations.of(context);
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                l10n.snackPlaybackOperationFailed(event.error.toString()),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }),
       _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
-        unawaited(_refreshChapters());
+        unawaited(_refreshChaptersIfNeeded());
         // Cache numeric ids so the next open() can pre-set lavfi-complex.
         final aIds = tracks.audio
             .where((t) => t.id != 'auto' && t.id != 'no')
@@ -370,13 +396,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (!mounted || _isDisposed) return;
         _currentTrackSelection = track;
       }),
-    ]);
-
+    ];
+    for (final sub in streamSubs) {
+      _subscriptions.add(sub);
+    }
     _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
 
     // Periodic resume-position saver (every 5s while playing).
     _resumeSaveTimer = Timer.periodic(
-      const Duration(seconds: 5),
+      _resumeSaveInterval,
       (_) => _persistResumePosition(),
     );
 
@@ -385,6 +413,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _initializePlatformFileOpenBridge();
 
     _checkForUpdates();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showPendingUpdateNotice());
+    });
 
     // Auto-open CLI file.
     if (widget.initialFile != null) {
@@ -406,14 +437,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _persistResumePosition();
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
-    for (final sub in _subscriptions) {
-      sub.cancel();
-    }
+    _subscriptions.cancelAll();
+    _playback.dispose();
+    _releaseActiveBookmark();
     unawaited(_mediaSession.dispose());
     _playlist.dispose();
     unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
+  }
+
+  void _releaseActiveBookmark() {
+    final token = _activeBookmarkToken;
+    if (token == null || token.isEmpty) return;
+    _activeBookmarkToken = null;
+    unawaited(BookmarkService.stop(token));
+  }
+
+  Future<String> _resolveSandboxedPath(String requestedPath) async {
+    if (!BookmarkService.isSupported) return requestedPath;
+    final bookmark = _settings.fileBookmark(requestedPath);
+    if (bookmark == null || bookmark.isEmpty) return requestedPath;
+    final resolved = await BookmarkService.resolveAndStart(bookmark);
+    if (resolved == null) {
+      _settings.removeFileBookmark(requestedPath);
+      return requestedPath;
+    }
+    _releaseActiveBookmark();
+    _activeBookmarkToken = resolved.token.isNotEmpty ? resolved.token : null;
+    final bookmarkToPersist = resolved.refreshed ?? bookmark;
+    if (resolved.path != requestedPath) {
+      _settings.setFileBookmark(resolved.path, bookmarkToPersist);
+    } else if (resolved.stale && resolved.refreshed != null) {
+      _settings.setFileBookmark(requestedPath, resolved.refreshed!);
+    }
+    return resolved.path;
+  }
+
+  Future<void> _captureBookmarkFor(String path) async {
+    if (!BookmarkService.isSupported) return;
+    final bookmark = await BookmarkService.createBookmark(path);
+    if (bookmark != null && bookmark.isNotEmpty) {
+      _settings.setFileBookmark(path, bookmark);
+    }
   }
 
   void _onSettingsChanged() {
@@ -480,7 +546,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
         for (final entry in pending) {
           if (_isDisposed || !mounted) return;
-          final path = _coerceOpenPath(entry);
+          final path = PlayerPathUtils.coerceOpenPath(entry);
           if (path == null) continue;
           await _openRequestedFile(path, forcePlay: true);
         }
@@ -513,7 +579,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _openFileEventChannel.receiveBroadcastStream().listen(
         (event) {
           if (_isDisposed || !mounted) return;
-          final path = _coerceOpenPath(event);
+          final path = PlayerPathUtils.coerceOpenPath(event);
           if (path != null) {
             _log(
               'open_file_event_received',
@@ -535,7 +601,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     if (!bridgeReady) {
-      Future<void>.delayed(const Duration(milliseconds: 250), () async {
+      Future<void>.delayed(_bridgeRetryDelay, () async {
         if (_isDisposed || !mounted) return;
         try {
           final pending = await _openFileMethodChannel
@@ -549,7 +615,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
           for (final entry in pending) {
             if (_isDisposed || !mounted) return;
-            final path = _coerceOpenPath(entry);
+            final path = PlayerPathUtils.coerceOpenPath(entry);
             if (path == null) continue;
             await _openRequestedFile(path, forcePlay: true);
           }
@@ -563,13 +629,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       });
     }
-  }
-
-  String? _coerceOpenPath(dynamic value) {
-    if (value is! String) return null;
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    return trimmed;
   }
 
   Future<void> _openRequestedFile(
@@ -675,6 +734,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _log('loop_mode_applied', detailsBuilder: () => {'loop_mode': mode.name});
   }
 
+  Future<void> _showPendingUpdateNotice() async {
+    final marker = UpdatePendingMarker.readAndClear();
+    if (marker == null) return;
+    if (!mounted) return;
+    final targetVersion = marker['target_version'] as String?;
+    final startedAt = marker['started_at_ms'] as int?;
+    if (targetVersion == null) return;
+    // Drop stale markers older than 7 days.
+    if (startedAt != null) {
+      final ageMs = DateTime.now().millisecondsSinceEpoch - startedAt;
+      if (ageMs > const Duration(days: 7).inMilliseconds) return;
+    }
+    final actualVersion = await UpdateService.currentVersionFromPlatform();
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (actualVersion == targetVersion) {
+      _log(
+        'launch_update_succeeded_notice',
+        category: DebugLogCategory.update,
+        detailsBuilder: () => {'version': targetVersion},
+      );
+      messenger.showSnackBar(
+        SnackBar(content: Text('Updated to v$targetVersion')),
+      );
+    } else {
+      _log(
+        'launch_update_failed_notice',
+        category: DebugLogCategory.update,
+        severity: DebugSeverity.warn,
+        detailsBuilder: () => {
+          'target': targetVersion,
+          'actual': actualVersion,
+        },
+      );
+      messenger.showSnackBar(
+        SnackBar(content: Text('Update to v$targetVersion may have failed.')),
+      );
+    }
+  }
+
   // ── Update check with cooldown ────────────────────────────
 
   Future<void> _checkForUpdates() async {
@@ -684,7 +783,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       category: DebugLogCategory.update,
       detailsBuilder: () => {'last_check_epoch': _settings.lastUpdateCheck},
     );
-    final update = await _updateService.checkForUpdate();
+    final update = await _updateService.checkForUpdate(
+      channel: _settings.updateChannel,
+    );
     final checkSucceeded = _updateService.lastCheckSucceeded;
     if (checkSucceeded) {
       _settings.lastUpdateCheck = DateTime.now().millisecondsSinceEpoch;
@@ -721,10 +822,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         content: Text(
           AppLocalizations.of(context).snackUpdateAvailable(update.version),
         ),
-        duration: const Duration(seconds: 10),
+        duration: _updateSnackbarDuration,
         action: SnackBarAction(
-          label: 'View',
-          onPressed: () => _updateService.openReleasePage(update.url),
+          label: updateActionLabel(),
+          onPressed: () => triggerUpdateAction(
+            context: context,
+            info: update,
+            updateService: _updateService,
+            channelName: _settings.updateChannel.name,
+            debugLog: widget.debugLog,
+          ),
         ),
       ),
     );
@@ -762,6 +869,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
 
+      await _captureBookmarkFor(path.trim());
       await _loadFile(path);
     } on PlatformException catch (e) {
       _log(
@@ -801,10 +909,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadFile(String filePath, {bool forcePlay = false}) {
-    _loadQueue = _loadQueue
-        .catchError((_) {})
-        .then((_) => _loadFileInternal(filePath, forcePlay: forcePlay));
-    return _loadQueue;
+    return _playback.loadQueue.enqueue(
+      () => _loadFileInternal(filePath, forcePlay: forcePlay),
+      onError: (Object e, StackTrace st) {
+        _log(
+          'load_queue_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      },
+    );
+  }
+
+  void _maybeUpdateMediaSessionPosition(Duration pos) {
+    if (!_playback.mediaSessionThrottle.shouldSend(DateTime.now())) {
+      return;
+    }
+    unawaited(_mediaSession.updatePosition(pos, playing: _isPlaying));
+  }
+
+  Future<void> _refreshChaptersIfNeeded() async {
+    final countRaw = await _playerService.getProperty('chapter-list/count');
+    final count = int.tryParse(countRaw ?? '') ?? 0;
+    if (!_playback.chapterGate.shouldRefresh(
+      path: _currentFile,
+      chapterCount: count,
+    )) {
+      return;
+    }
+    await _refreshChapters(expectedCount: count);
   }
 
   Future<void> _loadFileInternal(
@@ -812,8 +945,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     bool forcePlay = false,
   }) async {
     if (_isDisposed) return;
-    final normalizedPath = filePath.trim();
-    if (normalizedPath.isEmpty) {
+    final requestedPath = filePath.trim();
+    if (requestedPath.isEmpty) {
       _log(
         'file_load_invalid_path',
         detailsBuilder: () => {'path': filePath},
@@ -828,6 +961,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       return;
     }
+
+    final normalizedPath = await _resolveSandboxedPath(requestedPath);
 
     if (!File(normalizedPath).existsSync()) {
       _log(
@@ -851,7 +986,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'file_load_started',
       detailsBuilder: () => {'path': normalizedPath, 'extension': ext},
     );
-    if (!_supportedExtensions.contains(ext)) {
+    if (!PlayerPathUtils.isSupportedExtension(ext)) {
       _log(
         'file_load_unsupported_extension',
         detailsBuilder: () => {'extension': ext, 'path': normalizedPath},
@@ -868,14 +1003,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       return;
     }
-    final gen = ++_loadGen;
+    final gen = _playback.beginLoad();
     if (!mounted || _isDisposed) return;
     // Persist resume position for the previous file before switching.
     _persistResumePosition();
     _resumePathInProgress = null;
+    _playback.chapterGate.invalidate();
     setState(() {
       _currentFile = normalizedPath;
-      _isAudioFile = _audioExtensions.contains(ext);
+      _chapters = const [];
+      _isAudioFile = PlayerPathUtils.isAudioExtension(ext);
       _hasVideoOutput = false;
       _hasAlbumArtTrack = false;
       _albumArtTrackId = null;
@@ -896,13 +1033,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _cachedAudioIds != null &&
           _cachedAudioIds!.length >= 2) {
         final aIds = _cachedAudioIds!;
-        final audioBranch = _buildMultiAudioMixBranch(aIds);
-        if (_cachedVideoIds != null && _cachedVideoIds!.isNotEmpty) {
-          preOpenLavfi =
-              '[vid${_cachedVideoIds!.first}] null [vo] ; $audioBranch';
-        } else {
-          preOpenLavfi = audioBranch;
-        }
+        preOpenLavfi = PlaybackMixPolicy.buildLavfiComplex(
+          audioIds: aIds,
+          videoTrackId: _cachedVideoIds?.isNotEmpty == true
+              ? _cachedVideoIds!.first
+              : null,
+        );
       }
       await _playerService.setProperty('lavfi-complex', preOpenLavfi);
       _mixActive = preOpenLavfi.isNotEmpty;
@@ -911,14 +1047,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         play: forcePlay || _settings.autoPlay,
       );
     } catch (e) {
-      final permissionDenied = _isPermissionDeniedError(e);
+      final permissionDenied = PlayerPathUtils.isPermissionDeniedError(e);
       _log(
         permissionDenied ? 'file_load_permission_denied' : 'file_load_failed',
         message: e.toString(),
         detailsBuilder: () => {'path': normalizedPath},
         severity: permissionDenied ? DebugSeverity.warn : DebugSeverity.error,
       );
-      if (gen != _loadGen) return;
+      if (!_playback.isLoadCurrent(gen)) return;
       if (mounted) {
         setState(() {
           _currentFile = null;
@@ -931,8 +1067,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           SnackBar(
             content: Text(
               permissionDenied
-                  ? 'Permission denied. Check file access and try again.'
-                  : 'Could not open file. Try another file.',
+                  ? AppLocalizations.of(context).snackFileLoadPermissionDenied
+                  : AppLocalizations.of(context).snackFileLoadFailed,
             ),
           ),
         );
@@ -940,7 +1076,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    if (gen != _loadGen || _isDisposed) return;
+    if (!_playback.isLoadCurrent(gen) || _isDisposed) return;
 
     // Load the same source into the seek preview service (no-op when the
     // feature is disabled or for audio-only files).
@@ -976,7 +1112,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
 
-    if (mounted && !_isDisposed && gen == _loadGen) {
+    if (mounted && !_isDisposed && _playback.isLoadCurrent(gen)) {
       setState(() {});
     }
 
@@ -999,7 +1135,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (details.files.isEmpty) return;
     final rawCount = details.files.length;
     final paths = details.files
-        .map((f) => _normalizeDropPath(f.path))
+        .map(
+          (f) => PlayerPathUtils.normalizeDropPath(
+            f.path,
+            windows: Platform.isWindows,
+          ),
+        )
         .where((s) => s.trim().isNotEmpty)
         .toList(growable: false);
     final droppedCount = rawCount - paths.length;
@@ -1053,22 +1194,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _isDragging = true);
   }
 
-  String _normalizeDropPath(String raw) {
-    final trimmed = raw.trim();
-    if (!trimmed.toLowerCase().startsWith('file:')) return trimmed;
-    try {
-      return Uri.parse(trimmed).toFilePath(windows: Platform.isWindows);
-    } catch (e) {
-      _log(
-        'drop_path_decode_failed',
-        message: e.toString(),
-        detailsBuilder: () => {'raw': trimmed},
-        severity: DebugSeverity.warn,
-      );
-      return trimmed;
-    }
-  }
-
   void _onDragExited() {
     if (!_isDragging) return;
     _log('drag_exited', category: DebugLogCategory.ui);
@@ -1104,22 +1229,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _settings.lastOpenDirectory = dir;
   }
 
-  bool _isPermissionDeniedError(Object error) {
-    final lower = error.toString().toLowerCase();
-    if (lower.contains('permission denied') ||
-        lower.contains('access is denied') ||
-        lower.contains('operation not permitted')) {
-      return true;
-    }
-    if (error is FileSystemException) {
-      final code = error.osError?.errorCode;
-      if (code == 1 || code == 5 || code == 13) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   // ── Navigation ────────────────────────────────────────────
 
   void _openSettings() {
@@ -1127,10 +1236,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _log('open_settings_requested', category: DebugLogCategory.ui);
     Navigator.of(context).push(
       PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 340),
-        reverseTransitionDuration: const Duration(milliseconds: 280),
-        pageBuilder: (_, _, _) =>
-            SettingsScreen(settings: _settings, debugLog: widget.debugLog),
+        transitionDuration: _settingsFwdTransition,
+        reverseTransitionDuration: _settingsRevTransition,
+        pageBuilder: (_, _, _) => SettingsScreen(
+          settings: _settings,
+          debugLog: widget.debugLog,
+          updateService: _updateService,
+        ),
         opaque: false,
         transitionsBuilder: (context, animation, _, child) {
           // Mask ramps up quickly to hide the player underneath the
@@ -1224,11 +1336,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekForward:
         _log('shortcut_seek_forward', category: DebugLogCategory.ui);
-        _seekRelative(const Duration(seconds: 5));
+        _seekRelative(_seekStep);
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekBack:
         _log('shortcut_seek_back', category: DebugLogCategory.ui);
-        _seekRelative(const Duration(seconds: -5));
+        _seekRelative(_seekStepBack);
         return KeyEventResult.handled;
       case PlayerShortcutAction.volumeUp:
         _log('shortcut_volume_up', category: DebugLogCategory.ui);
@@ -1388,7 +1500,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context).snackFullscreenRejected),
-            duration: const Duration(seconds: 2),
+            duration: _snackbarShortDuration,
           ),
         );
       }
@@ -1468,7 +1580,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           fit: StackFit.expand,
                           children: [
                             AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 240),
+                              duration: _contentSwitchDuration,
                               switchInCurve: Curves.easeOutCubic,
                               switchOutCurve: Curves.easeInCubic,
                               layoutBuilder: (currentChild, previousChildren) {
@@ -1535,7 +1647,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                         Positioned(
                                           top: 8,
                                           left: 8,
-                                          child: _CompactExitButton(
+                                          child: CompactExitButton(
                                             onPressed: () =>
                                                 unawaited(_toggleCompactMode()),
                                           ),
@@ -1547,7 +1659,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                             IgnorePointer(
                               child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 140),
+                                duration: _animFastDuration,
                                 curve: Curves.easeOutCubic,
                                 opacity: _isDragging ? 1 : 0,
                                 child: ColoredBox(
@@ -1589,7 +1701,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           AnimatedSize(
-            duration: const Duration(milliseconds: 190),
+            duration: _seekBarSizeDuration,
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
             child: _duration.inMilliseconds > 0
@@ -1961,7 +2073,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     if (!_osdVisible) setState(() => _osdVisible = true);
     _osdHideTimer?.cancel();
-    _osdHideTimer = Timer(const Duration(seconds: 3), () {
+    _osdHideTimer = Timer(_osdHideDuration, () {
       if (mounted) setState(() => _osdVisible = false);
     });
   }
@@ -2046,39 +2158,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  String _trackLabel(String? title, String? language, String fallbackId) {
-    final parts = <String>[];
-    if (title != null && title.trim().isNotEmpty) parts.add(title.trim());
-    if (language != null && language.trim().isNotEmpty) {
-      parts.add(language.trim());
-    }
-    if (parts.isEmpty) return 'Track $fallbackId';
-    return parts.join(' · ');
-  }
+  String _trackLabel(String? title, String? language, String fallbackId) =>
+      formatTrackLabel(
+        title: title,
+        language: language,
+        fallbackId: fallbackId,
+      );
 
   // ── Chapters ──────────────────────────────────────────────
 
-  Future<void> _refreshChapters() async {
-    final raw = await _playerService.getProperty('chapter-list/count');
-    final count = int.tryParse(raw ?? '') ?? 0;
-    if (count <= 0) {
-      if (_chapters.isNotEmpty && mounted) setState(() => _chapters = const []);
-      return;
-    }
-    final list = <_ChapterInfo>[];
-    for (var i = 0; i < count; i++) {
-      final title = await _playerService.getProperty('chapter-list/$i/title');
-      final timeStr = await _playerService.getProperty('chapter-list/$i/time');
-      final time = double.tryParse(timeStr ?? '') ?? 0;
-      list.add(
-        _ChapterInfo(
-          index: i,
-          title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
-          time: Duration(milliseconds: (time * 1000).round()),
-        ),
-      );
-    }
-    if (mounted) setState(() => _chapters = list);
+  Future<void> _refreshChapters({int? expectedCount}) async {
+    final list = await ChapterListLoader.load(
+      readProperty: _playerService.getProperty,
+      expectedCount: expectedCount,
+    );
+    if (!mounted) return;
+    setState(() => _chapters = list);
   }
 
   Future<void> _stepChapter(int delta) async {
@@ -2166,23 +2261,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Multi-audio mix ───────────────────────────────────────
 
-  /// Build the audio branch of a lavfi-complex chain
-  String _buildMultiAudioMixBranch(List<String> audioIds) {
-    final buf = StringBuffer();
-    for (var i = 0; i < audioIds.length; i++) {
-      buf.write(
-        '[aid${audioIds[i]}] '
-        'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo '
-        '[a${i + 1}] ; ',
-      );
-    }
-    for (var i = 0; i < audioIds.length; i++) {
-      buf.write('[a${i + 1}]');
-    }
-    buf.write(' amix=inputs=${audioIds.length}:normalize=0 [ao]');
-    return buf.toString();
-  }
-
   Future<void> _applyMultiAudioMix({bool announce = false}) async {
     final tracks = _currentTracks;
     if (tracks == null) return;
@@ -2212,16 +2290,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (announce) _showOsdMessage('Cannot mix: unsupported track ids');
       return;
     }
-    final audioChain = _buildMultiAudioMixBranch(ids);
-    String chain = audioChain;
     final videoIds = tracks.video
         .where((t) => t.id != 'auto' && t.id != 'no')
         .map((t) => t.id)
         .where((id) => int.tryParse(id) != null)
         .toList(growable: false);
-    if (videoIds.isNotEmpty) {
-      chain = '[vid${videoIds.first}] null [vo] ; $audioChain';
-    }
+    final chain = PlaybackMixPolicy.buildLavfiComplex(
+      audioIds: ids,
+      videoTrackId: videoIds.isNotEmpty ? videoIds.first : null,
+    );
     _log(
       'multi_audio_mix_apply',
       detailsBuilder: () => {
@@ -2253,8 +2330,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final savedPos = _position;
       await _loadFile(path);
       if (savedPos > Duration.zero) {
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        if (mounted && _position < const Duration(seconds: 1)) {
+        await Future<void>.delayed(_mixReloadDelay);
+        if (mounted && _position < _resumeStartThreshold) {
           unawaited(_playerService.seek(savedPos));
         }
       }
@@ -2351,7 +2428,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Wait briefly until duration is known so we don't seek beyond end.
     for (var i = 0; i < 20; i++) {
       if (_duration.inMilliseconds > 0) break;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(_durationPollInterval);
       if (_isDisposed || _currentFile != path) return;
     }
     if (_duration.inMilliseconds > 0 &&
@@ -2398,14 +2475,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _enqueue(List<String> paths, {bool playNow = false}) {
     if (paths.isEmpty) return;
     if (playNow || _playlist.isEmpty) {
-      _playlist.replace(paths);
+      final dropped = _playlist.replace(paths);
+      if (dropped > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(
+                context,
+              ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
+            ),
+          ),
+        );
+      }
       final first = _playlist.current;
       if (first != null) unawaited(_loadFile(first));
     } else {
-      _playlist.addAll(paths);
+      final dropped = _playlist.addAll(paths);
       _showOsdMessage(
         paths.length == 1 ? 'Added to queue' : 'Added ${paths.length} to queue',
       );
+      if (dropped > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(
+                context,
+              ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -2471,7 +2570,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withValues(alpha: 0.20),
-      transitionDuration: const Duration(milliseconds: 180),
+      transitionDuration: _sheetTransitionDuration,
       pageBuilder: (ctx, _, _) {
         final cs = Theme.of(ctx).colorScheme;
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
@@ -3245,69 +3344,5 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     node.dispose();
     return captured;
-  }
-}
-
-class _ChapterInfo {
-  const _ChapterInfo({
-    required this.index,
-    required this.title,
-    required this.time,
-  });
-  final int index;
-  final String title;
-  final Duration time;
-}
-
-class _CompactExitButton extends StatefulWidget {
-  const _CompactExitButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  State<_CompactExitButton> createState() => _CompactExitButtonState();
-}
-
-class _CompactExitButtonState extends State<_CompactExitButton> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Exit mini-player',
-      child: Semantics(
-        button: true,
-        label: 'Exit mini-player',
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovering = true),
-          onExit: (_) => setState(() => _hovering = false),
-          child: GestureDetector(
-            onTap: widget.onPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: _hovering ? 0.72 : 0.48),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(
-                    alpha: _hovering ? 0.85 : 0.55,
-                  ),
-                  width: 1,
-                ),
-              ),
-              child: const Icon(
-                Icons.close_fullscreen,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

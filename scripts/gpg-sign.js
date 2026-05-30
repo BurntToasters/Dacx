@@ -36,9 +36,10 @@ const ALLOW_ASSET_REPLACE = !/^(0|false|no|off)$/i.test(
 const ext = (e) => (n) => n.toLowerCase().endsWith(e);
 const rx = (r) => (n) => r.test(n);
 const isChecksumTextName = rx(/^SHA256SUMS(?:-[a-z0-9_]+(?:-[a-z0-9_]+)?)?\.txt$/i);
+const isUpdateManifestName = rx(/^Dacx-update-manifest-[A-Za-z0-9_-]+\.json$/);
+const isUpdateManifestSigName = rx(/^Dacx-update-manifest-[A-Za-z0-9_-]+\.json\.sig$/);
 
 const ARTIFACT_RULES = [
-  rx(/^Dacx-.*\.exe$/i),
   ext(".msi"),
   ext(".dmg"),
   ext(".zip"),
@@ -47,12 +48,11 @@ const ARTIFACT_RULES = [
   ext(".flatpak"),
   rx(/\.appimage$/i),
   rx(/\.tar\.gz$/i),
-  rx(/\.(?:exe|msi|dmg|deb|rpm|flatpak|appimage|zip)\.sig$/i),
+  rx(/\.(?:msi|dmg|deb|rpm|flatpak|appimage|zip)\.sig$/i),
   rx(/\.tar\.gz\.sig$/i),
 ];
 
 const SIGN_RULES = [
-  ext(".exe"),
   ext(".msi"),
   ext(".dmg"),
   ext(".deb"),
@@ -81,7 +81,6 @@ function cleanArtifactBaseName(name) {
   if (/^dacx.*\.zip$/i.test(name) && /mac/i.test(name)) return "Dacx-macOS.zip";
 
   // Windows
-  if (/x64.*\.exe$/i.test(name) || /\.exe$/i.test(name)) return "Dacx-Windows-x64.exe";
   if (/\.msi$/i.test(name)) return "Dacx-Windows-x64.msi";
 
   // Linux
@@ -124,7 +123,13 @@ function cleanArtifactName(name) {
 }
 
 function shouldUploadReleaseEntry(name) {
-  return isArtifact(name) || name.endsWith(".asc") || isChecksumTextName(name);
+  return (
+    isArtifact(name) ||
+    name.endsWith(".asc") ||
+    isChecksumTextName(name) ||
+    isUpdateManifestName(name) ||
+    isUpdateManifestSigName(name)
+  );
 }
 
 // ── Version matching ─────────────────────────────────────────
@@ -149,7 +154,13 @@ function clearReleaseStaging(preserveNames = new Set()) {
       continue;
     }
     if (!isFile) continue;
-    if (isArtifact(name) || name.endsWith(".asc") || isChecksumTextName(name)) {
+    if (
+      isArtifact(name) ||
+      name.endsWith(".asc") ||
+      isChecksumTextName(name) ||
+      isUpdateManifestName(name) ||
+      isUpdateManifestSigName(name)
+    ) {
       fs.rmSync(fullPath, { force: true });
     }
   }
@@ -307,7 +318,7 @@ function sha256(filePath) {
 
 function classifyArtifactPlatform(name) {
   const n = name.toLowerCase();
-  if (/windows|\.msi$|\.exe$|\.msix$/.test(n)) {
+  if (/windows|\.msi$|\.msix$/.test(n)) {
     const arch = /arm64|aarch64/.test(n) ? "arm64" : "x64";
     return `Windows-${arch}`;
   }
@@ -352,6 +363,54 @@ function generateChecksums(files) {
     outFiles.push(out);
   }
   return outFiles;
+}
+
+function updateManifestPrivateKey() {
+  const encoded = (
+    process.env.DACX_UPDATE_PRIVATE_KEY_PKCS8_BASE64 ||
+    process.env.WINDOWS_UPDATE_PRIVATE_KEY_PKCS8_BASE64 ||
+    ""
+  ).trim();
+  if (!encoded) return null;
+  return crypto.createPrivateKey({
+    key: Buffer.from(encoded, "base64"),
+    format: "der",
+    type: "pkcs8",
+  });
+}
+
+function generateWindowsUpdateManifest(files) {
+  const msi = files.find((f) => path.basename(f).toLowerCase() === "dacx-windows-x64.msi");
+  if (!msi) return [];
+
+  const key = updateManifestPrivateKey();
+  if (!key) {
+    console.error(
+      "DACX_UPDATE_PRIVATE_KEY_PKCS8_BASE64 is required to sign the Windows update manifest.",
+    );
+    console.error("Generate one with: node scripts/generate-update-key.js");
+    process.exit(1);
+  }
+
+  const manifest = {
+    schema: 1,
+    app: "Dacx",
+    platform: "Windows-x64",
+    version: VERSION,
+    released_at: new Date().toISOString(),
+    assets: {
+      [path.basename(msi)]: sha256(msi),
+    },
+  };
+  const body = `${JSON.stringify(manifest, null, 2)}\n`;
+  const manifestPath = path.join(releaseDir, "Dacx-update-manifest-Windows-x64.json");
+  const signaturePath = `${manifestPath}.sig`;
+  fs.writeFileSync(manifestPath, body, "utf8");
+  const signature = crypto.sign(null, Buffer.from(body, "utf8"), key);
+  fs.writeFileSync(signaturePath, `${signature.toString("base64")}\n`, "utf8");
+  console.log("  + Dacx-update-manifest-Windows-x64.json");
+  console.log("  + Dacx-update-manifest-Windows-x64.json.sig");
+  return [manifestPath, signaturePath];
 }
 
 // ── GPG signing ──────────────────────────────────────────────
@@ -579,6 +638,7 @@ async function main() {
 
   console.log("[3/4] Generating checksums & signing...");
   const checksumFiles = generateChecksums(artifacts);
+  generateWindowsUpdateManifest(artifacts);
   const ascFiles = signArtifacts(artifacts);
   for (const checksumFile of checksumFiles) {
     ascFiles.push(signFile(checksumFile));

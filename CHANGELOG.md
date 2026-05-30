@@ -1,24 +1,43 @@
+<!-- > [!NOTE]
+> 🅱️ This is a BETA build. -->
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
 # ⬇️ Downloads
 
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
-| **EXE: [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-Windows-x64.exe) / MSI: [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.exe)** -->| **[Universal DMG](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-macOS.dmg)** | <!--**AppImage:** [x64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Linux-x64.AppImage)--> <!--/  [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.AppImage) --> |
-| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
-| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/DACX/releases/download/v0.7.3/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
+| **MSI (Recommended): [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-macOS.dmg)** | <!--**AppImage:** [x64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Linux-x64.AppImage)--> <!--/  [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.AppImage) --> |
+| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
+| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
 
 > [!IMPORTANT]
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 *This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
-## Changes in `v0.7.3:`
-*Hi everyone sorry for all the random versions that kept appearing and dissapearing. I was testing a new self-update method which I thought broke the entire app and then scraped it, only to find out it was because my flutter versions were all over the place on all my envs. This release impliments FVM on the back-end.*
-* **FVM:** Flutter is now controlled by Flutter Version Manager.
-* **Updates:** When an update is available and a user clicks to update, they are now brought to Dacx's project website with a simple and straightforward download button for the OS the browser detects.
+## Changes in `v0.8.0`
+*Dacx like my other projects now has two update channels: `STABLE` and `BETA`.*
+
+### Important breaking change in v0.8.0: Windows EXE installers are REMOVED in favor of .msi installers.
+*If you installed DACX via the exe installers previously, please uninstall dacx and re-install via the MSI installer.*
+* **Windows:** `.EXE` Installers have been **REMOVED**.
+  * For now I have made the decision to remove the exe installer as for the new self-updater function to work in the best way, `.MSI` is the best choice. If a user installs Dacx via .exe and then updates via .msi, there will be multiple entries in the registry and install list and could create conflict issues in the future.
+  * The portable exe remains for now; but it is deprecated and NOT supported any longer.
+
+* **NEW - Self updater:** Added a new experimental custom self updater for Windows and macOS
+  * **Windows:** Verifies new json signature file when downloading and verifies .msi SHA256SUM and then launches `msiexec`.
+  * **MacOS:** Helper spawns in, closes Dacx, downloads .zip from github, verifies SHA256 sum and unzips .zip, verifies code signature for unzipped .app, overwrites current app in /Applications/.
+* **NEW - Update channels:** Added the ability for users to switch between `STABLE` and `BETA` updates for Dacx!
+  * The default setting is `AUTO` which keeps a user on `STABLE` if they are on a stable version, or keeps a user on `BETA` if they are on a beta version.
+* **Windows:** Fixes issues with the windowing system for multiple Dacx windows on Windows (mouthful lol).
+* **Stability:** Settings screen wraps list tiles in `Material` (fixes widget tests on Flutter 3.44); `npm run test:all` uses FVM-pinned Flutter/Dart; VS Code SDK path aligned with `.fvmrc`; dropped flaky device-bound `integration_test` (307 VM tests remain).
+* **Compliance:** `THIRD_PARTY_NOTICES.txt` + `LICENSE` bundled in Windows/macOS/Linux/Flatpak releases (`npm run licenses`); Flatpak drops `--filesystem=host` and broad XDG document/desktop mounts.
+* **Tests:** Added more test coverage.
 * **PKG:** Updated packages.
+
+<details>
+<summary>Full changelog</summary>
 
 ## Changes in `v0.7.0:`
 *`v0.7.0` is a quality and stability-focused release branch of DACX.*
@@ -34,9 +53,6 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
   * Major fixes to app launch time.
   * Fixed multiple issues with `MKV` video containers.
   * Other misc bug fixes and improvements to the codebase.
-
-<details>
-<summary>Full changelog</summary>
 
 ## Changes in `v0.6.0:`
 ### v0.6.0 is a large feature packed update :) I hope you enjoy this project getting close to my vision of 1.0!
@@ -91,3 +107,5 @@ This is intended to be a light-weight music and video player just meant to launc
 
 ## Info
 More information about Dacx is available via the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md) and also via: [https://help.rosie.run/dacx/en-us/faq](https://help.rosie.run/dacx/en-us/faq).
+
+[i] This changelog is made using the BCLS standard: https://github.com/BurntToasters/BCLS

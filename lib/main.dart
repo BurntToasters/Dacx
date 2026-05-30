@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
@@ -12,9 +13,11 @@ import 'package:window_manager/window_manager.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
+import 'services/trusted_http.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/settings_service.dart';
+import 'services/update_service.dart';
 import 'theme/window_visuals.dart';
 
 class _NoBounceScrollBehavior extends MaterialScrollBehavior {
@@ -69,6 +72,9 @@ void main(List<String> args) async {
   // frame is not blocked by sysctl + system_profiler subprocesses. No-op
   // elsewhere.
   unawaited(HardwareAccelerationService.prime());
+  if (Platform.isWindows) {
+    unawaited(primeWindowsTlsTrust());
+  }
 
   await windowManager.ensureInitialized();
 
@@ -96,7 +102,23 @@ void main(List<String> args) async {
     try {
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     } catch (e) {
-      debugPrint('Dacx: setTitleBarStyle failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: setTitleBarStyle failed: $e');
+      }
+    }
+  }
+
+  Future<void> nudgeWindowSurface() async {
+    if (!Platform.isWindows) return;
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final size = await windowManager.getSize();
+      await windowManager.setSize(Size(size.width + 1, size.height + 1));
+      await windowManager.setSize(size);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: window surface nudge failed: $e');
+      }
     }
   }
 
@@ -109,6 +131,7 @@ void main(List<String> args) async {
     windowShown = true;
     await windowManager.show();
     await windowManager.focus();
+    await nudgeWindowSurface();
   }
 
   unawaited(
@@ -120,7 +143,9 @@ void main(List<String> args) async {
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
         await applyHiddenTitleBarBestEffort();
       } catch (e) {
-        debugPrint('Dacx: startup window operations failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: startup window operations failed: $e');
+        }
       } finally {
         if (!windowReady.isCompleted) {
           windowReady.complete();
@@ -130,8 +155,16 @@ void main(List<String> args) async {
     }),
   );
   final cliFile = _parseCliFilePath(args);
+  final updateService = UpdateService(debugLog: debugLog, debugSource: 'app');
 
-  runApp(DacxApp(settings: settings, debugLog: debugLog, initialFile: cliFile));
+  runApp(
+    DacxApp(
+      settings: settings,
+      debugLog: debugLog,
+      updateService: updateService,
+      initialFile: cliFile,
+    ),
+  );
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (!firstFrameReady.isCompleted) {
@@ -182,7 +215,9 @@ String? _normalizeCliPath(String value) {
     try {
       return uri.toFilePath(windows: Platform.isWindows);
     } catch (e) {
-      debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: parseCliFilePath toFilePath failed: $e');
+      }
       return null;
     }
   }
@@ -197,7 +232,9 @@ String? _normalizeCliPath(String value) {
       return trimmed;
     }
   } catch (e) {
-    debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
+    if (kDebugMode) {
+      debugPrint('Dacx: parseCliFilePath windows regex failed: $e');
+    }
   }
 
   return null;
@@ -206,12 +243,14 @@ String? _normalizeCliPath(String value) {
 class DacxApp extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
+  final UpdateService updateService;
   final String? initialFile;
 
   const DacxApp({
     super.key,
     required this.settings,
     required this.debugLog,
+    required this.updateService,
     this.initialFile,
   });
 
@@ -275,7 +314,6 @@ class _DacxAppState extends State<DacxApp>
         'experimental_features': widget.settings.experimentalFeaturesEnabled,
       },
     );
-    setState(() {});
     unawaited(_applyWindowVisualSettings());
   }
 
@@ -283,7 +321,9 @@ class _DacxAppState extends State<DacxApp>
     try {
       await HardwareKeyboard.instance.syncKeyboardState();
     } catch (e) {
-      debugPrint('Dacx: syncKeyboardState failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: syncKeyboardState failed: $e');
+      }
     }
   }
 
@@ -333,7 +373,9 @@ class _DacxAppState extends State<DacxApp>
           await windowManager.setOpacity(effectiveOpacity);
         }
       } catch (e) {
-        debugPrint('Dacx: window opacity apply failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: window opacity apply failed: $e');
+        }
       }
 
       try {
@@ -344,7 +386,9 @@ class _DacxAppState extends State<DacxApp>
             await Window.enableFullSizeContentView();
             await Window.hideTitle();
           } catch (e) {
-            debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
+            if (kDebugMode) {
+              debugPrint('Dacx: macOS titlebar visuals apply failed: $e');
+            }
           }
         }
 
@@ -397,7 +441,9 @@ class _DacxAppState extends State<DacxApp>
           );
         }
       } catch (e) {
-        debugPrint('Dacx: window blur effect apply failed: $e');
+        if (kDebugMode) {
+          debugPrint('Dacx: window blur effect apply failed: $e');
+        }
       }
       if (widget.debugLog.isEnabled) {
         widget.debugLog.logLazy(
@@ -447,43 +493,49 @@ class _DacxAppState extends State<DacxApp>
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.settings;
-    final experimentalEnabled = s.experimentalFeaturesEnabled;
-    final blurEnabled = _isEffectiveBlurEnabled(s);
-    final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
-    final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
-    final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
-        ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
-        : 1.0;
-    final popupAlpha = blurEnabled
-        ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
-        : 1.0;
-    final inputs = _ThemeInputs(
-      seed: s.accentColor.color,
-      blurEnabled: blurEnabled,
-      blurStrength: s.windowBlurStrength,
-      windowsBlurUiOpacity: windowsBlurUiOpacity,
-      popupAlpha: popupAlpha,
-    );
-    final themes = _cachedThemeInputs == inputs && _cachedThemes != null
-        ? _cachedThemes!
-        : (_cachedThemes = _buildThemes(inputs));
-    _cachedThemeInputs = inputs;
+    return ListenableBuilder(
+      listenable: widget.settings,
+      builder: (context, _) {
+        final s = widget.settings;
+        final experimentalEnabled = s.experimentalFeaturesEnabled;
+        final blurEnabled = _isEffectiveBlurEnabled(s);
+        final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
+        final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
+        final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
+            ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
+            : 1.0;
+        final popupAlpha = blurEnabled
+            ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
+            : 1.0;
+        final inputs = _ThemeInputs(
+          seed: s.accentColor.color,
+          blurEnabled: blurEnabled,
+          blurStrength: s.windowBlurStrength,
+          windowsBlurUiOpacity: windowsBlurUiOpacity,
+          popupAlpha: popupAlpha,
+        );
+        final themes = _cachedThemeInputs == inputs && _cachedThemes != null
+            ? _cachedThemes!
+            : (_cachedThemes = _buildThemes(inputs));
+        _cachedThemeInputs = inputs;
 
-    return MaterialApp(
-      title: 'Dacx',
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      scrollBehavior: const _NoBounceScrollBehavior(),
-      themeMode: s.themeMode,
-      theme: themes.light,
-      darkTheme: themes.dark,
-      home: PlayerScreen(
-        settings: s,
-        debugLog: widget.debugLog,
-        initialFile: widget.initialFile,
-      ),
+        return MaterialApp(
+          title: 'Dacx',
+          debugShowCheckedModeBanner: false,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          scrollBehavior: const _NoBounceScrollBehavior(),
+          themeMode: s.themeMode,
+          theme: themes.light,
+          darkTheme: themes.dark,
+          home: PlayerScreen(
+            settings: s,
+            debugLog: widget.debugLog,
+            updateService: widget.updateService,
+            initialFile: widget.initialFile,
+          ),
+        );
+      },
     );
   }
 

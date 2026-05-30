@@ -1,5 +1,6 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <shobjidl.h>
 #include <windows.h>
 
 #include "flutter_window.h"
@@ -22,6 +23,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::OutputDebugStringW(L"[Dacx] CoInitializeEx failed; aborting startup.\n");
     return EXIT_FAILURE;
   }
+
+  // Match WiX Start Menu shortcut System.AppUserModel.ID for shell search/taskbar.
+  ::SetCurrentProcessExplicitAppUserModelID(L"run.rosie.dacx");
 
   flutter::DartProject project(L"data");
 
