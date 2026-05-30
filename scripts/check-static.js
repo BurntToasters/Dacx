@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { compareSemverDescending } from "./semver-sort.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const failures = [];
@@ -88,16 +89,7 @@ if (fs.existsSync(metainfoPath)) {
   if (releases.length === 0) {
     failures.push("metainfo has no <release> entries");
   } else {
-    const cmp = (a, b) => {
-      const pa = a.split(/[.-]/).map((s) => parseInt(s, 10) || 0);
-      const pb = b.split(/[.-]/).map((s) => parseInt(s, 10) || 0);
-      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-        const d = (pb[i] || 0) - (pa[i] || 0);
-        if (d !== 0) return d;
-      }
-      return 0;
-    };
-    const sorted = [...releases].sort(cmp);
+    const sorted = [...releases].sort(compareSemverDescending);
     if (sorted.join(",") !== releases.join(",")) {
       failures.push(
         `metainfo <release> entries are not version-sorted descending. Got: ${releases.join(", ")}`,

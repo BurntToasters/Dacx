@@ -3,6 +3,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { compareSemverDescending } from "./semver-sort.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,6 +87,12 @@ function run({ now = new Date() } = {}) {
   if (!replacedCurrentVersion) {
     rebuiltEntries.unshift(newReleaseTag.trim());
   }
+
+  rebuiltEntries.sort((a, b) => {
+    const aVersion = a.match(releaseVersionRegex)?.[1] || "";
+    const bVersion = b.match(releaseVersionRegex)?.[1] || "";
+    return compareSemverDescending(aVersion, bVersion);
+  });
 
   const updatedSection = `<releases>\n${rebuiltEntries
     .map((tag) => `${releaseIndent}${tag}`)

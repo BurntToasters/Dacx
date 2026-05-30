@@ -1,98 +1,39 @@
-> [!NOTE]
-> 🅱️ This is a BETA build.
+<!-- > [!NOTE]
+> 🅱️ This is a BETA build. -->
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
 # ⬇️ Downloads
 
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
-| **MSI (Recommended): [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0-beta.17/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0-beta.17/Dacx-macOS.dmg)** | <!--**AppImage:** [x64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Linux-x64.AppImage)--> <!--/  [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.AppImage) --> |
-| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0-beta.17/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0-beta.17/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
-| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0-beta.17/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0-beta.17/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
+| **MSI (Recommended): [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-macOS.dmg)** | <!--**AppImage:** [x64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Linux-x64.AppImage)--> <!--/  [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.AppImage) --> |
+| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
+| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
 
 > [!IMPORTANT]
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 *This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
-## Changes in `v0.8.0-beta.17:`
-* **macOS:** More fixes to the macOS update helper to address issues with gatekeeper.
-* **PKG:** Updated packages.
+## Changes in `v0.8.0`
+*Dacx like my other projects now has two update channels: `STABLE` and `BETA`.*
 
-## Changes in `v0.8.0-beta.16:`
-* **Win:** Testing a fix for an issue where a powershell prompt would flash when the updater starts.
-* **UI:** Addressed an issue with flutter that would cause UI Issues.
-* **PKG:** Updated packages.
-
-## Changes in `v0.8.0-beta.15:`
-* **Win:** New update method for PS as the old one would get killed per Dart/Flutter docs when ran.
-
-## Changes in `v0.8.0-beta.14:`
-* **Win:** Testing the updater.
-
-## Changes in `v0.8.0-beta.13:`
-* **Win:** Addressed an issue where the powershell script for the updater was not configured correctly (Incorrect flags were used causing it to fail).
-
-## Changes in `v0.8.0-beta.12:`
-* **CA CERT:** This update adds the Mozilla CA Cert to Dacx to allow for the update checker to run better on Windows/Mac.
-
-## Changes in `v0.8.0-beta.11:`
-* **Win:** Fixed malformed exe manifest.
-
-## Changes in `v0.8.0-beta.10:`
-* **Win:** Addressed an issue where the MSVC runtime DLLs were not included in the latest MSI beta installers.
-* **PKG:** Updated packages.
-
-## Changes in `v0.8.0-beta.9:`
-* **Self-Update (Windows):** Fixed critical regression where updater spawned watchdog via conhost.exe but watchdog never ran (silent fail on Windows 10); reverted to plain powershell.exe. Extended watchdog timeout from 2 min → 10 min to handle slow Windows shutdowns. Fixed watchdog bare exception catch to distinguish "process-already-gone" from other errors (now exits with error code on unexpected failures). Added watchdog logging to `%LOCALAPPDATA%\Dacx\updates\watchdog.log`. Fixed `-Verb RunAs -UseShellExecute` to properly trigger UAC elevation on msiexec spawn.
-* **Self-Update (Windows & macOS):** Added manifest field validation (`app="Dacx"`, `platform="windows-x64"`). Windows manifest now includes `released_at` timestamp (defense-in-depth). Added process-wide install guard to prevent concurrent update spawns. Fixed TLS root cert hydration to retry on failure instead of permanently failing for session lifetime.
-* **Update Service:** Beta channel now fetches both stable and prerelease endpoints in parallel (reduced API calls). Fixed version comparison to pick newer stable release when it's available to beta users. Both platforms now verify manifest signatures before proceeding.
-* **macOS:** Self-update verification uses `codesign` only (removed deprecated `spctl`); fixes false "internal error in Code Signing subsystem" when assessing bundles inside the sandbox container (beta 6+).
-* **Stability:** Settings screen wraps list tiles in `Material` (fixes widget tests on Flutter 3.44); `npm run test:all` uses FVM-pinned Flutter/Dart; VS Code SDK path aligned with `.fvmrc`; dropped flaky device-bound `integration_test` (307 VM tests remain).
-* **Compliance:** `THIRD_PARTY_NOTICES.txt` + `LICENSE` bundled in Windows/macOS/Linux/Flatpak releases (`npm run licenses`); Flatpak drops `--filesystem=host` and broad XDG document/desktop mounts.
-
-## Changes in `v0.8.0-beta.8:`
-* **Win:** Addressed multiple issues with the new self-updater on windows:
-  * Updater spawned a visible terminal window that was broken.
-  * Updater wasn't cleanly launching.
-  * TLS issues with Dart.
-* **Codebase:** Misc fixes to the build pipeline and general stability fixes.
-
-## Changes in `v0.8.0-beta.7:`
-* **Codebase:** Lots of general stabilization to the app (especially macOS).
-* **PKG:** Updated packages.
-
-## Changes in `v0.8.0-beta.6:`
-* **macOS:** Added Sparkle/Apple sandbox permissions back with a permissive rule for the updater helper.
-  * Testing this feature.
-  * This addresses a bug from beta 5 on macOS where users couldn't use the file picker as flutter expected a sandbox permission (I didn't want to fully remove the sandbox permanently).
-
-## Changes in `v0.8.0-beta.5:`
-* **MacOS:** Self-updater deemed stable-ish.
-* **Windows:** Fixed an issue with the .MSI installers where beta string names were being passed to it (MSI installs don't support version #s with strings).
+### Important breaking change in v0.8.0: Windows EXE installers are REMOVED in favor of .msi installers.
+*If you installed DACX via the exe installers previously, please uninstall dacx and re-install via the MSI installer.*
 * **Windows:** `.EXE` Installers have been **REMOVED**.
-  * For now I have made the decision to remove the exe installer as for the new self-updater function to work in the best way, `.MSI` is the clear choice. If a user installs Dacx via .exe and then updates via .msi, there will be multiple entries in the registry and install list and could create conflict issues in the future.
+  * For now I have made the decision to remove the exe installer as for the new self-updater function to work in the best way, `.MSI` is the best choice. If a user installs Dacx via .exe and then updates via .msi, there will be multiple entries in the registry and install list and could create conflict issues in the future.
   * The portable exe remains for now; but it is deprecated and NOT supported any longer.
 
-## Changes in `v0.8.0-beta.4:`
-* **Mac:** Fixed an issue where incorrect sandbox permissions caused the app to crash.
-
-## Changes in `v0.8.0-beta.3:`
-* **Mac:** Fixed an issue with MacOS beta number versioning that made the updater think beta users were on a stable release.
-* **Tests:** Added more test coverage.
-* **PKG:** Updated packages.
-
-## Changes in `v0.8.0-beta.2:`
 * **NEW - Self updater:** Added a new experimental custom self updater for Windows and macOS
   * **Windows:** Verifies new json signature file when downloading and verifies .msi SHA256SUM and then launches `msiexec`.
   * **MacOS:** Helper spawns in, closes Dacx, downloads .zip from github, verifies SHA256 sum and unzips .zip, verifies code signature for unzipped .app, overwrites current app in /Applications/.
-
-## Changes in `v0.8.0-beta.1:`
-*Welcome to the first REAL beta of Dacx! Dacx like my other projects now has two update channels: `STABLE` and `BETA`.*
 * **NEW - Update channels:** Added the ability for users to switch between `STABLE` and `BETA` updates for Dacx!
   * The default setting is `AUTO` which keeps a user on `STABLE` if they are on a stable version, or keeps a user on `BETA` if they are on a beta version.
 * **Windows:** Fixes issues with the windowing system for multiple Dacx windows on Windows (mouthful lol).
+* **Stability:** Settings screen wraps list tiles in `Material` (fixes widget tests on Flutter 3.44); `npm run test:all` uses FVM-pinned Flutter/Dart; VS Code SDK path aligned with `.fvmrc`; dropped flaky device-bound `integration_test` (307 VM tests remain).
+* **Compliance:** `THIRD_PARTY_NOTICES.txt` + `LICENSE` bundled in Windows/macOS/Linux/Flatpak releases (`npm run licenses`); Flatpak drops `--filesystem=host` and broad XDG document/desktop mounts.
+* **Tests:** Added more test coverage.
 * **PKG:** Updated packages.
 
 <details>
