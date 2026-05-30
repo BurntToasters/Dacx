@@ -363,6 +363,19 @@ class SelfUpdateService {
     }
     if (result.outcome != SelfUpdateOutcome.spawned) {
       _installInFlight = false;
+      if (result.outcome != SelfUpdateOutcome.unsupportedPlatform) {
+        final failed = result;
+        _log(
+          'self_update_outcome',
+          message: failed.message,
+          severity: DebugSeverity.error,
+          detailsBuilder: () => {
+            'outcome': failed.outcome.name,
+            'platform': Platform.operatingSystem,
+            'target_version': info.version,
+          },
+        );
+      }
     }
     return result;
   }
