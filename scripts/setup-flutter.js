@@ -126,8 +126,9 @@ function addToWindowsUserPath(bin) {
 function addToShellRc(bin) {
   // Append to whichever rc files exist for the user's likely shells. macOS
   // defaults to zsh and sources .zprofile for login shells (SSH) + .zshrc for
-  // interactive; most Linux distros default to bash. Write to all that exist
-  // so the user is covered regardless of which shell they launch.
+  // interactive; most Linux distros default to bash; I also added fish because I use it.
+  // Write to all that exist so the user is covered regardless of which shell
+  // they launch.
   const home = homedir();
   const targets = [
     join(home, '.zprofile'),
@@ -135,6 +136,7 @@ function addToShellRc(bin) {
     join(home, '.bashrc'),
     join(home, '.bash_profile'),
     join(home, '.profile'),
+    join(home, '.config', 'fish', 'config.fish'),
   ].filter((p) => existsSync(p));
 
   if (targets.length === 0) {
@@ -143,9 +145,12 @@ function addToShellRc(bin) {
   }
 
   const marker = '# Added by dacx setup:flutter — fvm bin';
-  const line = `export PATH="${bin}:$PATH"`;
   let wrote = false;
   for (const file of targets) {
+    const isFish = file.endsWith('config.fish');
+    const line = isFish
+      ? `set -gx PATH "${bin}" $PATH`
+      : `export PATH="${bin}:$PATH"`;
     const existing = existsSync(file) ? readFileSync(file, 'utf8') : '';
     if (existing.includes(marker) || existing.includes(line)) continue;
     appendFileSync(file, `\n${marker}\n${line}\n`);
