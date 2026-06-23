@@ -19,6 +19,11 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 
 ## Changes in `v0.9.0-beta.4:`
 
+- **NEW - Localization completeness:** All user-facing hardcoded strings are now localized. Covered in this pass: transport control tooltips ("Previous Track", "Next Track", "Play Queue"); folder + URL button and dialog labels; media info metadata labels (Source, Duration, Resolution, Audio Tracks, etc.); folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI (title, buttons, empty state); accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button). Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
+- **Testing:** 342 tests passing. Code verified clean with zero lint issues.
+- **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.
+- **PKG:** Updated packages.
+
 ## Changes in `v0.9.0-beta.3:`
 * **Updater:** Addressed an issue where the security policies on URLs did not have the new github redirect cdn added. (Beta users on 0.9.0 Beta 1 and Beta 2 need to manually update; sorry! Good thing for betas amiright :P)
 

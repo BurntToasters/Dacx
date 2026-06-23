@@ -463,7 +463,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: AccentColor.values.map((ac) {
           final isSelected = ac == _s.accentColor;
           return Semantics(
-            label: 'Accent color ${ac.name}',
+            label: l10n.semanticsAccentColor(ac.name),
             button: true,
             selected: isSelected,
             child: GestureDetector(
@@ -794,9 +794,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Dacx v${update.version} is available!'),
+            content: Text(
+              AppLocalizations.of(context).snackUpdateAvailable(update.version),
+            ),
             action: SnackBarAction(
-              label: updateActionLabel(),
+              label: updateActionLabel(AppLocalizations.of(context)),
               onPressed: () => triggerUpdateAction(
                 context: context,
                 info: update,

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
 import '../services/self_update_service.dart';
 import '../services/update_service.dart';
@@ -43,8 +44,10 @@ Future<void> triggerUpdateAction({
 }
 
 /// Returns the right snackbar action label for the current platform.
-String updateActionLabel() =>
-    SelfUpdateService.isSupported() ? 'Install' : 'View';
+String updateActionLabel(AppLocalizations l10n) =>
+    SelfUpdateService.isSupported()
+    ? l10n.updateActionInstall
+    : l10n.updateActionView;
 
 class UpdateProgressDialog extends StatefulWidget {
   const UpdateProgressDialog({
@@ -94,37 +97,26 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
   String _formatMb(int bytes) =>
       '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
 
-  String _outcomeLabel(SelfUpdateOutcome o) {
-    switch (o) {
-      case SelfUpdateOutcome.unsupportedPlatform:
-        return 'Self-update is not supported on this platform.';
-      case SelfUpdateOutcome.missingAsset:
-        return 'The release does not include an installer for this platform.';
-      case SelfUpdateOutcome.missingChecksums:
-        return 'The release does not include a checksums file. Cannot verify download.';
-      case SelfUpdateOutcome.missingSignature:
-        return 'The release does not include a signed update manifest. Cannot verify update authenticity.';
-      case SelfUpdateOutcome.downloadFailed:
-        return 'Download failed.';
-      case SelfUpdateOutcome.checksumMismatch:
-        return 'Downloaded file failed checksum verification. Refusing to install.';
-      case SelfUpdateOutcome.extractionFailed:
-        return 'Could not extract the update package.';
-      case SelfUpdateOutcome.signatureInvalid:
-        return 'Downloaded app failed code-signature verification.';
-      case SelfUpdateOutcome.bundleIdentifierMismatch:
-        return 'Downloaded app has an unexpected bundle identifier. Refusing to install.';
-      case SelfUpdateOutcome.versionMismatch:
-        return 'Downloaded app version does not match the selected update. Refusing to install.';
-      case SelfUpdateOutcome.teamIdMismatch:
-        return 'Downloaded app is signed by an unexpected developer. Refusing to install.';
-      case SelfUpdateOutcome.gatekeeperRejected:
-        return 'Self-update is not available on this build (missing signing configuration).';
-      case SelfUpdateOutcome.spawnFailed:
-        return 'Could not launch the installer.';
-      case SelfUpdateOutcome.spawned:
-        return 'Update started.';
-    }
+  String _outcomeLabel(AppLocalizations l10n, SelfUpdateOutcome o) {
+    return switch (o) {
+      SelfUpdateOutcome.unsupportedPlatform =>
+        l10n.updateOutcomeUnsupportedPlatform,
+      SelfUpdateOutcome.missingAsset => l10n.updateOutcomeMissingAsset,
+      SelfUpdateOutcome.missingChecksums => l10n.updateOutcomeMissingChecksums,
+      SelfUpdateOutcome.missingSignature => l10n.updateOutcomeMissingSignature,
+      SelfUpdateOutcome.downloadFailed => l10n.updateOutcomeDownloadFailed,
+      SelfUpdateOutcome.checksumMismatch => l10n.updateOutcomeChecksumMismatch,
+      SelfUpdateOutcome.extractionFailed => l10n.updateOutcomeExtractionFailed,
+      SelfUpdateOutcome.signatureInvalid => l10n.updateOutcomeSignatureInvalid,
+      SelfUpdateOutcome.bundleIdentifierMismatch =>
+        l10n.updateOutcomeBundleIdMismatch,
+      SelfUpdateOutcome.versionMismatch => l10n.updateOutcomeVersionMismatch,
+      SelfUpdateOutcome.teamIdMismatch => l10n.updateOutcomeTeamIdMismatch,
+      SelfUpdateOutcome.gatekeeperRejected =>
+        l10n.updateOutcomeGatekeeperRejected,
+      SelfUpdateOutcome.spawnFailed => l10n.updateOutcomeSpawnFailed,
+      SelfUpdateOutcome.spawned => l10n.updateOutcomeStarted,
+    };
   }
 
   @override
@@ -135,23 +127,27 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
   }
 
   Widget _buildProgressDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final progress = _progress;
     final fraction = progress?.fraction;
     final downloaded = progress?.downloadedBytes ?? 0;
     final total = progress?.totalBytes;
     final showVerifying = fraction == 1.0;
     final statusText = Platform.isMacOS && progress == null
-        ? 'Downloading and verifying in the update helper...'
+        ? l10n.updateDialogDownloadingVerifying
         : showVerifying
-        ? 'Verifying signature...'
+        ? l10n.updateDialogVerifyingSignature
         : total != null
-        ? 'Downloading ${_formatMb(downloaded)} / ${_formatMb(total)}'
-        : 'Downloading...';
+        ? l10n.updateDialogDownloadingProgress(
+            _formatMb(downloaded),
+            _formatMb(total),
+          )
+        : l10n.updateDialogDownloading;
 
     return PopScope(
       canPop: false,
       child: AlertDialog(
-        title: Text('Installing Dacx ${widget.info.version}'),
+        title: Text(l10n.updateDialogInstallingTitle(widget.info.version)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -161,7 +157,7 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
             Text(statusText, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 4),
             Text(
-              'Dacx will close to apply the update.',
+              l10n.updateDialogWillClose,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -171,13 +167,14 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
   }
 
   Widget _buildErrorDialog(BuildContext context, SelfUpdateResult result) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Update failed'),
+      title: Text(l10n.updateDialogFailedTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_outcomeLabel(result.outcome)),
+          Text(_outcomeLabel(l10n, result.outcome)),
           if (result.message != null && result.message!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(result.message!, style: Theme.of(context).textTheme.bodySmall),
@@ -190,11 +187,11 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
             widget.onFallbackToBrowser();
             Navigator.of(context).pop(result);
           },
-          child: const Text('Open release page'),
+          child: Text(l10n.updateDialogOpenReleasePage),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(result),
-          child: const Text('Close'),
+          child: Text(l10n.actionClose),
         ),
       ],
     );

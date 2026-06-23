@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/services/self_update_service.dart';
 import 'package:dacx/services/update_service.dart';
 import 'package:dacx/widgets/update_progress_dialog.dart';
@@ -32,7 +33,11 @@ class _FakeSelfUpdateService extends SelfUpdateService {
 }
 
 Widget _wrap(Widget child) {
-  return MaterialApp(home: Scaffold(body: child));
+  return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: child),
+  );
 }
 
 void main() {
@@ -193,11 +198,21 @@ void main() {
   });
 
   group('updateActionLabel', () {
-    test('matches self-update platform support', () {
-      expect(
-        updateActionLabel(),
-        SelfUpdateService.isSupported() ? 'Install' : 'View',
+    testWidgets('matches self-update platform support', (tester) async {
+      late String label;
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) {
+              label = updateActionLabel(AppLocalizations.of(context));
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
       );
+      expect(label, SelfUpdateService.isSupported() ? 'Install' : 'View');
     });
   });
 

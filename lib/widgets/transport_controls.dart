@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../l10n/app_localizations.dart';
+import '../models/playable_source.dart';
 import '../services/settings_service.dart';
 
 class TransportControls extends StatelessWidget {
@@ -14,6 +15,8 @@ class TransportControls extends StatelessWidget {
   final VoidCallback onPlayPause;
   final VoidCallback onStop;
   final VoidCallback onOpenFile;
+  final VoidCallback? onOpenFolder;
+  final VoidCallback? onOpenUrl;
   final VoidCallback onReopenLast;
   final ValueChanged<double> onVolumeChanged;
   final ValueChanged<LoopMode> onLoopModeChanged;
@@ -35,6 +38,8 @@ class TransportControls extends StatelessWidget {
     required this.onPlayPause,
     required this.onStop,
     required this.onOpenFile,
+    this.onOpenFolder,
+    this.onOpenUrl,
     required this.onReopenLast,
     required this.onVolumeChanged,
     required this.onLoopModeChanged,
@@ -99,7 +104,7 @@ class TransportControls extends StatelessWidget {
             children: [
               IconButton(
                 icon: const Icon(Icons.skip_previous),
-                tooltip: 'Previous Track (PageUp)',
+                tooltip: l10n.tooltipPreviousTrack,
                 onPressed: hasMedia ? onPrevious : null,
                 iconSize: 22,
               ),
@@ -135,7 +140,7 @@ class TransportControls extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.skip_next),
-                tooltip: 'Next Track (PageDown)',
+                tooltip: l10n.tooltipNextTrack,
                 onPressed: hasMedia ? onNext : null,
                 iconSize: 22,
               ),
@@ -219,7 +224,7 @@ class TransportControls extends StatelessWidget {
                 // Queue toggle button
                 IconButton(
                   icon: const Icon(Icons.queue_music),
-                  tooltip: 'Play Queue',
+                  tooltip: l10n.tooltipPlayQueue,
                   iconSize: 20,
                   onPressed: onToggleQueue,
                 ),
@@ -259,6 +264,20 @@ class TransportControls extends StatelessWidget {
           tooltip: l10n.tooltipOpenFile,
           onPressed: onOpenFile,
         ),
+        if (onOpenFolder != null)
+          IconButton(
+            key: const Key('open-folder-transport-button'),
+            icon: const Icon(Icons.create_new_folder),
+            tooltip: l10n.tooltipOpenFolder,
+            onPressed: onOpenFolder,
+          ),
+        if (onOpenUrl != null)
+          IconButton(
+            key: const Key('open-url-transport-button'),
+            icon: const Icon(Icons.link),
+            tooltip: l10n.tooltipOpenUrl,
+            onPressed: onOpenUrl,
+          ),
         if (recents.isNotEmpty)
           PopupMenuButton<String>(
             tooltip: l10n.tooltipRecentFiles,
@@ -266,7 +285,8 @@ class TransportControls extends StatelessWidget {
             icon: const Icon(Icons.arrow_drop_down),
             onSelected: onRecentFileSelected,
             itemBuilder: (context) => recents.map((path) {
-              final name = p.basename(path).trim();
+              final source = PlayableSource.fromStored(path);
+              final name = source?.displayName ?? p.basename(path).trim();
               return PopupMenuItem<String>(
                 key: ValueKey<String>(path),
                 value: path,

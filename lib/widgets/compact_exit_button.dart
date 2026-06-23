@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 const _animFastDuration = Duration(milliseconds: 140);
 
 class CompactExitButton extends StatefulWidget {
@@ -16,11 +18,12 @@ class _CompactExitButtonState extends State<CompactExitButton> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Tooltip(
-      message: 'Exit mini-player',
+      message: l10n.tooltipExitMiniPlayer,
       child: Semantics(
         button: true,
-        label: 'Exit mini-player',
+        label: l10n.tooltipExitMiniPlayer,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           onEnter: (_) => setState(() => _hovering = true),

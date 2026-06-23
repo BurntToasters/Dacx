@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/services/seek_preview_service.dart';
 import 'package:dacx/widgets/seek_slider.dart';
 
@@ -99,6 +100,8 @@ Widget _harness({
   Duration duration = const Duration(seconds: 60),
 }) {
   return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(40),

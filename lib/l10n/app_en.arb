@@ -150,9 +150,25 @@
   "@snackSkippedUnreadableFiles": {
     "placeholders": { "count": { "type": "int", "example": "3" } }
   },
+  "snackInvalidStreamUrl": "Enter a valid http:// or https:// URL.",
+  "snackNoSupportedMediaInFolder": "No supported media found in that folder.",
+  "snackFolderScanFailed": "Could not scan folder. {detail}",
+  "@snackFolderScanFailed": {
+    "placeholders": { "detail": { "type": "String", "example": "Permission denied" } }
+  },
+  "snackFolderScanSkipped": "Skipped {count} unsupported or unreadable item(s).",
+  "@snackFolderScanSkipped": {
+    "placeholders": { "count": { "type": "int", "example": "4" } }
+  },
+  "snackQueueRemovedMissing": "Removed {count} missing item(s).",
+  "@snackQueueRemovedMissing": {
+    "placeholders": { "count": { "type": "int", "example": "2" } }
+  },
 
   "emptyStateMessage": "Drop a file here or click Open",
   "buttonOpenFile": "Open File",
+  "buttonOpenFolder": "Open Folder",
+  "buttonOpenUrl": "Open URL",
   "buttonReopenLast": "Reopen Last",
 
   "dialogAudioTrackTitle": "Audio track",
@@ -165,8 +181,24 @@
   "dialogPlayQueueAddFiles": "Add files…",
   "dialogKeyboardShortcutsTitle": "Keyboard shortcuts",
   "dialogKeyCaptureTitle": "Press a key combination",
+  "dialogOpenUrlTitle": "Open URL",
+  "dialogOpenUrlHint": "https://example.com/stream.m3u8",
+  "dialogMediaInfoTitle": "Media info",
   "dialogMacInstallLocationTitle": "Move Dacx to Applications",
   "dialogMacInstallLocationMessage": "Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.",
+  "mediaInfoSource": "Source",
+  "mediaInfoType": "Type",
+  "mediaInfoDuration": "Duration",
+  "mediaInfoResolution": "Resolution",
+  "mediaInfoAudioTracks": "Audio tracks",
+  "mediaInfoSubtitleTracks": "Subtitle tracks",
+  "mediaInfoChapters": "Chapters",
+  "mediaInfoAudioSelection": "Selected audio",
+  "mediaInfoSubtitleSelection": "Selected subtitles",
+  "mediaInfoTypeUrlStream": "URL stream",
+  "mediaInfoTypeAudioFile": "Audio file",
+  "mediaInfoTypeVideoFile": "Video file",
+  "mediaInfoUnknown": "Unknown",
 
   "menuTakeScreenshot": "Take screenshot",
   "menuMixAllAudioTracks": "Mix all audio tracks",
@@ -213,7 +245,9 @@
   "actionClear": "Clear",
   "actionCancel": "Cancel",
   "actionSave": "Save",
+  "actionOpen": "Open",
   "actionRemove": "Remove",
+  "actionRemoveMissing": "Remove missing",
   "actionSetNewBinding": "Set new binding",
   "actionResetToDefault": "Reset to default",
 
@@ -224,7 +258,73 @@
   "tooltipMore": "More",
   "tooltipSettings": "Settings",
   "tooltipOpenFile": "Open file",
+  "tooltipOpenFolder": "Open folder",
+  "tooltipOpenUrl": "Open URL",
   "tooltipRecentFiles": "Recent files",
+  "tooltipMediaInfo": "Media info",
+  "tooltipPreviousTrack": "Previous Track (PageUp)",
+  "tooltipNextTrack": "Next Track (PageDown)",
+  "tooltipPlayQueue": "Play Queue",
+  "tooltipExitMiniPlayer": "Exit mini-player",
+
+  "semanticsSeekBar": "Seek bar",
+  "semanticsAccentColor": "Accent color {name}",
+  "@semanticsAccentColor": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+
+  "updateDialogInstallingTitle": "Installing Dacx {version}",
+  "@updateDialogInstallingTitle": {
+    "placeholders": { "version": { "type": "String", "example": "0.9.0" } }
+  },
+  "updateDialogDownloadingVerifying": "Downloading and verifying in the update helper...",
+  "updateDialogVerifyingSignature": "Verifying signature...",
+  "updateDialogDownloadingProgress": "Downloading {downloaded} / {total}",
+  "@updateDialogDownloadingProgress": {
+    "placeholders": {
+      "downloaded": { "type": "String", "example": "1.2 MB" },
+      "total": { "type": "String", "example": "8.4 MB" }
+    }
+  },
+  "updateDialogDownloading": "Downloading...",
+  "updateDialogWillClose": "Dacx will close to apply the update.",
+  "updateDialogFailedTitle": "Update failed",
+  "updateDialogOpenReleasePage": "Open release page",
+  "updateActionInstall": "Install",
+  "updateActionView": "View",
+
+  "snackUpdatedToVersion": "Updated to v{version}",
+  "@snackUpdatedToVersion": {
+    "placeholders": { "version": { "type": "String", "example": "0.9.0" } }
+  },
+  "snackUpdateMayHaveFailed": "Update to v{version} may have failed.",
+  "@snackUpdateMayHaveFailed": {
+    "placeholders": { "version": { "type": "String", "example": "0.9.0" } }
+  },
+
+  "debugLogTitle": "Debug Log",
+  "debugLogEntryCount": "{count} entries",
+  "@debugLogEntryCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "debugLogCopyButton": "Copy Log",
+  "debugLogClearButton": "Clear Log",
+  "debugLogEmpty": "No debug events yet.",
+
+  "updateOutcomeUnsupportedPlatform": "Self-update is not supported on this platform.",
+  "updateOutcomeMissingAsset": "The release does not include an installer for this platform.",
+  "updateOutcomeMissingChecksums": "The release does not include a checksums file. Cannot verify download.",
+  "updateOutcomeMissingSignature": "The release does not include a signed update manifest. Cannot verify update authenticity.",
+  "updateOutcomeDownloadFailed": "Download failed.",
+  "updateOutcomeChecksumMismatch": "Downloaded file failed checksum verification. Refusing to install.",
+  "updateOutcomeExtractionFailed": "Could not extract the update package.",
+  "updateOutcomeSignatureInvalid": "Downloaded app failed code-signature verification.",
+  "updateOutcomeBundleIdMismatch": "Downloaded app has an unexpected bundle identifier. Refusing to install.",
+  "updateOutcomeVersionMismatch": "Downloaded app version does not match the selected update. Refusing to install.",
+  "updateOutcomeTeamIdMismatch": "Downloaded app is signed by an unexpected developer. Refusing to install.",
+  "updateOutcomeGatekeeperRejected": "Self-update is not available on this build (missing signing configuration).",
+  "updateOutcomeSpawnFailed": "Could not launch the installer.",
+  "updateOutcomeStarted": "Update started.",
 
   "windowMinimize": "Minimize window",
   "windowMaximize": "Maximize window",

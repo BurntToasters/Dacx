@@ -1,6 +1,10 @@
 import 'dart:math';
+import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+
+import '../models/playable_source.dart';
 
 /// In-memory playback queue. Persistence is intentionally omitted: queue lives
 /// for the session. The `index` is `-1` when the queue is empty.
@@ -8,18 +12,19 @@ class PlaylistService extends ChangeNotifier {
   /// Maximum tracks kept in memory for one session (bulk folder drops).
   static const int maxQueueItems = 1000;
 
-  final List<String> _items = [];
+  final List<PlayableSource> _items = [];
   int _index = -1;
   bool _shuffle = false;
   final List<int> _shuffleOrder = [];
   int _shufflePos = -1;
+  bool _disposed = false;
 
-  List<String> get items => List.unmodifiable(_items);
+  List<PlayableSource> get items => List.unmodifiable(_items);
   int get index => _index;
   int get length => _items.length;
   bool get isEmpty => _items.isEmpty;
   bool get isNotEmpty => _items.isNotEmpty;
-  String? get current =>
+  PlayableSource? get current =>
       (_index >= 0 && _index < _items.length) ? _items[_index] : null;
   bool get shuffle => _shuffle;
   bool get hasNext => _peekRelative(1) != null;
@@ -35,7 +40,18 @@ class PlaylistService extends ChangeNotifier {
   /// Replaces the queue and starts at [startIndex] (default 0).
   /// Returns how many paths were dropped because of [maxQueueItems].
   int replace(List<String> paths, {int startIndex = 0}) {
-    final filtered = paths.where((p) => p.trim().isNotEmpty).toList();
+    return replaceSources(
+      paths.map(PlayableSource.file).toList(growable: false),
+      startIndex: startIndex,
+    );
+  }
+
+  /// Replaces the queue with typed media sources.
+  /// Returns how many sources were dropped because of [maxQueueItems].
+  int replaceSources(List<PlayableSource> sources, {int startIndex = 0}) {
+    final filtered = sources
+        .where((source) => source.value.trim().isNotEmpty)
+        .toList();
     final capped = filtered.length > maxQueueItems
         ? filtered.sublist(0, maxQueueItems)
         : filtered;
@@ -56,7 +72,17 @@ class PlaylistService extends ChangeNotifier {
   /// Appends [paths] to the queue.
   /// Returns how many paths were dropped because of [maxQueueItems].
   int addAll(List<String> paths) {
-    final filtered = paths.where((p) => p.trim().isNotEmpty).toList();
+    return addAllSources(
+      paths.map(PlayableSource.file).toList(growable: false),
+    );
+  }
+
+  /// Appends typed media sources to the queue.
+  /// Returns how many sources were dropped because of [maxQueueItems].
+  int addAllSources(List<PlayableSource> sources) {
+    final filtered = sources
+        .where((source) => source.value.trim().isNotEmpty)
+        .toList();
     if (filtered.isEmpty) return 0;
     final room = maxQueueItems - _items.length;
     if (room <= 0) return filtered.length;
@@ -71,14 +97,15 @@ class PlaylistService extends ChangeNotifier {
   }
 
   /// Inserts [path] right after the current item.
-  void playNext(String path) {
-    final trimmed = path.trim();
-    if (trimmed.isEmpty) return;
+  void playNext(String path) => playNextSource(PlayableSource.file(path));
+
+  void playNextSource(PlayableSource source) {
+    if (source.value.trim().isEmpty) return;
     if (_items.isEmpty) {
-      _items.add(trimmed);
+      _items.add(source);
       _index = 0;
     } else {
-      _items.insert(_index + 1, trimmed);
+      _items.insert(_index + 1, source);
     }
     if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
@@ -96,6 +123,46 @@ class PlaylistService extends ChangeNotifier {
     }
     if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();
+  }
+
+  Future<int> removeMissingFiles() async {
+    if (_items.isEmpty || _disposed) return 0;
+    final checkedPaths = _items
+        .where((source) => source.isFile)
+        .map((source) => source.value)
+        .toSet();
+    if (checkedPaths.isEmpty) return 0;
+    final pathsToCheck = checkedPaths.toList(growable: false);
+    final existingPaths = (await Isolate.run(
+      () => _existingFilePaths(pathsToCheck),
+    )).toSet();
+    if (_disposed) return 0;
+    final missingPaths = checkedPaths.difference(existingPaths);
+    if (missingPaths.isEmpty) return 0;
+    final current = this.current;
+    final before = _items.length;
+    _items.removeWhere(
+      (source) => source.isFile && missingPaths.contains(source.value),
+    );
+    final removed = before - _items.length;
+    if (removed == 0) return 0;
+    if (_items.isEmpty) {
+      _index = -1;
+    } else if (current != null) {
+      final nextIndex = _items.indexOf(current);
+      _index = nextIndex >= 0 ? nextIndex : _index.clamp(0, _items.length - 1);
+    } else {
+      _index = _index.clamp(0, _items.length - 1);
+    }
+    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+    notifyListeners();
+    return removed;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   void clear() {
@@ -119,7 +186,7 @@ class PlaylistService extends ChangeNotifier {
 
   /// Advances by [delta] in queue order. Returns the new path or null when out
   /// of bounds. Honors shuffle.
-  String? advance(int delta) {
+  PlayableSource? advance(int delta) {
     if (_items.isEmpty) return null;
     if (_shuffle) {
       if (_shuffleOrder.isEmpty) return null;
@@ -137,7 +204,7 @@ class PlaylistService extends ChangeNotifier {
     return _items[_index];
   }
 
-  String? _peekRelative(int delta) {
+  PlayableSource? _peekRelative(int delta) {
     if (_items.isEmpty) return null;
     if (_shuffle) {
       if (_shuffleOrder.isEmpty) return null;
@@ -172,4 +239,16 @@ class PlaylistService extends ChangeNotifier {
       ..addAll(indices);
     _shufflePos = preserveCurrent ? 0 : -1;
   }
+}
+
+List<String> _existingFilePaths(List<String> paths) {
+  final existing = <String>[];
+  for (final path in paths) {
+    try {
+      if (File(path).existsSync()) existing.add(path);
+    } catch (_) {
+      // Treat inaccessible paths as missing.
+    }
+  }
+  return existing;
 }

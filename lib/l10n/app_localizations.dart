@@ -724,6 +724,36 @@ abstract class AppLocalizations {
   /// **'Skipped {count} unreadable files.'**
   String snackSkippedUnreadableFiles(int count);
 
+  /// No description provided for @snackInvalidStreamUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http:// or https:// URL.'**
+  String get snackInvalidStreamUrl;
+
+  /// No description provided for @snackNoSupportedMediaInFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'No supported media found in that folder.'**
+  String get snackNoSupportedMediaInFolder;
+
+  /// No description provided for @snackFolderScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not scan folder. {detail}'**
+  String snackFolderScanFailed(String detail);
+
+  /// No description provided for @snackFolderScanSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {count} unsupported or unreadable item(s).'**
+  String snackFolderScanSkipped(int count);
+
+  /// No description provided for @snackQueueRemovedMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed {count} missing item(s).'**
+  String snackQueueRemovedMissing(int count);
+
   /// No description provided for @emptyStateMessage.
   ///
   /// In en, this message translates to:
@@ -735,6 +765,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open File'**
   String get buttonOpenFile;
+
+  /// No description provided for @buttonOpenFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Folder'**
+  String get buttonOpenFolder;
+
+  /// No description provided for @buttonOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get buttonOpenUrl;
 
   /// No description provided for @buttonReopenLast.
   ///
@@ -802,6 +844,24 @@ abstract class AppLocalizations {
   /// **'Press a key combination'**
   String get dialogKeyCaptureTitle;
 
+  /// No description provided for @dialogOpenUrlTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get dialogOpenUrlTitle;
+
+  /// No description provided for @dialogOpenUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://example.com/stream.m3u8'**
+  String get dialogOpenUrlHint;
+
+  /// No description provided for @dialogMediaInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Media info'**
+  String get dialogMediaInfoTitle;
+
   /// No description provided for @dialogMacInstallLocationTitle.
   ///
   /// In en, this message translates to:
@@ -813,6 +873,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.'**
   String get dialogMacInstallLocationMessage;
+
+  /// No description provided for @mediaInfoSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get mediaInfoSource;
+
+  /// No description provided for @mediaInfoType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get mediaInfoType;
+
+  /// No description provided for @mediaInfoDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration'**
+  String get mediaInfoDuration;
+
+  /// No description provided for @mediaInfoResolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolution'**
+  String get mediaInfoResolution;
+
+  /// No description provided for @mediaInfoAudioTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio tracks'**
+  String get mediaInfoAudioTracks;
+
+  /// No description provided for @mediaInfoSubtitleTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle tracks'**
+  String get mediaInfoSubtitleTracks;
+
+  /// No description provided for @mediaInfoChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get mediaInfoChapters;
+
+  /// No description provided for @mediaInfoAudioSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected audio'**
+  String get mediaInfoAudioSelection;
+
+  /// No description provided for @mediaInfoSubtitleSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected subtitles'**
+  String get mediaInfoSubtitleSelection;
+
+  /// No description provided for @mediaInfoTypeUrlStream.
+  ///
+  /// In en, this message translates to:
+  /// **'URL stream'**
+  String get mediaInfoTypeUrlStream;
+
+  /// No description provided for @mediaInfoTypeAudioFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file'**
+  String get mediaInfoTypeAudioFile;
+
+  /// No description provided for @mediaInfoTypeVideoFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Video file'**
+  String get mediaInfoTypeVideoFile;
+
+  /// No description provided for @mediaInfoUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get mediaInfoUnknown;
 
   /// No description provided for @menuTakeScreenshot.
   ///
@@ -1024,11 +1162,23 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get actionSave;
 
+  /// No description provided for @actionOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get actionOpen;
+
   /// No description provided for @actionRemove.
   ///
   /// In en, this message translates to:
   /// **'Remove'**
   String get actionRemove;
+
+  /// No description provided for @actionRemoveMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove missing'**
+  String get actionRemoveMissing;
 
   /// No description provided for @actionSetNewBinding.
   ///
@@ -1078,11 +1228,251 @@ abstract class AppLocalizations {
   /// **'Open file'**
   String get tooltipOpenFile;
 
+  /// No description provided for @tooltipOpenFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open folder'**
+  String get tooltipOpenFolder;
+
+  /// No description provided for @tooltipOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get tooltipOpenUrl;
+
   /// No description provided for @tooltipRecentFiles.
   ///
   /// In en, this message translates to:
   /// **'Recent files'**
   String get tooltipRecentFiles;
+
+  /// No description provided for @tooltipMediaInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Media info'**
+  String get tooltipMediaInfo;
+
+  /// No description provided for @tooltipPreviousTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Track (PageUp)'**
+  String get tooltipPreviousTrack;
+
+  /// No description provided for @tooltipNextTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Next Track (PageDown)'**
+  String get tooltipNextTrack;
+
+  /// No description provided for @tooltipPlayQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Play Queue'**
+  String get tooltipPlayQueue;
+
+  /// No description provided for @tooltipExitMiniPlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit mini-player'**
+  String get tooltipExitMiniPlayer;
+
+  /// No description provided for @semanticsSeekBar.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek bar'**
+  String get semanticsSeekBar;
+
+  /// No description provided for @semanticsAccentColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Accent color {name}'**
+  String semanticsAccentColor(String name);
+
+  /// No description provided for @updateDialogInstallingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing Dacx {version}'**
+  String updateDialogInstallingTitle(String version);
+
+  /// No description provided for @updateDialogDownloadingVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading and verifying in the update helper...'**
+  String get updateDialogDownloadingVerifying;
+
+  /// No description provided for @updateDialogVerifyingSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying signature...'**
+  String get updateDialogVerifyingSignature;
+
+  /// No description provided for @updateDialogDownloadingProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {downloaded} / {total}'**
+  String updateDialogDownloadingProgress(String downloaded, String total);
+
+  /// No description provided for @updateDialogDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading...'**
+  String get updateDialogDownloading;
+
+  /// No description provided for @updateDialogWillClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Dacx will close to apply the update.'**
+  String get updateDialogWillClose;
+
+  /// No description provided for @updateDialogFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get updateDialogFailedTitle;
+
+  /// No description provided for @updateDialogOpenReleasePage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open release page'**
+  String get updateDialogOpenReleasePage;
+
+  /// No description provided for @updateActionInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install'**
+  String get updateActionInstall;
+
+  /// No description provided for @updateActionView.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get updateActionView;
+
+  /// No description provided for @snackUpdatedToVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated to v{version}'**
+  String snackUpdatedToVersion(String version);
+
+  /// No description provided for @snackUpdateMayHaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update to v{version} may have failed.'**
+  String snackUpdateMayHaveFailed(String version);
+
+  /// No description provided for @debugLogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug Log'**
+  String get debugLogTitle;
+
+  /// No description provided for @debugLogEntryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} entries'**
+  String debugLogEntryCount(int count);
+
+  /// No description provided for @debugLogCopyButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Log'**
+  String get debugLogCopyButton;
+
+  /// No description provided for @debugLogClearButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Log'**
+  String get debugLogClearButton;
+
+  /// No description provided for @debugLogEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No debug events yet.'**
+  String get debugLogEmpty;
+
+  /// No description provided for @updateOutcomeUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-update is not supported on this platform.'**
+  String get updateOutcomeUnsupportedPlatform;
+
+  /// No description provided for @updateOutcomeMissingAsset.
+  ///
+  /// In en, this message translates to:
+  /// **'The release does not include an installer for this platform.'**
+  String get updateOutcomeMissingAsset;
+
+  /// No description provided for @updateOutcomeMissingChecksums.
+  ///
+  /// In en, this message translates to:
+  /// **'The release does not include a checksums file. Cannot verify download.'**
+  String get updateOutcomeMissingChecksums;
+
+  /// No description provided for @updateOutcomeMissingSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'The release does not include a signed update manifest. Cannot verify update authenticity.'**
+  String get updateOutcomeMissingSignature;
+
+  /// No description provided for @updateOutcomeDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed.'**
+  String get updateOutcomeDownloadFailed;
+
+  /// No description provided for @updateOutcomeChecksumMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded file failed checksum verification. Refusing to install.'**
+  String get updateOutcomeChecksumMismatch;
+
+  /// No description provided for @updateOutcomeExtractionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not extract the update package.'**
+  String get updateOutcomeExtractionFailed;
+
+  /// No description provided for @updateOutcomeSignatureInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app failed code-signature verification.'**
+  String get updateOutcomeSignatureInvalid;
+
+  /// No description provided for @updateOutcomeBundleIdMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app has an unexpected bundle identifier. Refusing to install.'**
+  String get updateOutcomeBundleIdMismatch;
+
+  /// No description provided for @updateOutcomeVersionMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app version does not match the selected update. Refusing to install.'**
+  String get updateOutcomeVersionMismatch;
+
+  /// No description provided for @updateOutcomeTeamIdMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app is signed by an unexpected developer. Refusing to install.'**
+  String get updateOutcomeTeamIdMismatch;
+
+  /// No description provided for @updateOutcomeGatekeeperRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-update is not available on this build (missing signing configuration).'**
+  String get updateOutcomeGatekeeperRejected;
+
+  /// No description provided for @updateOutcomeSpawnFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch the installer.'**
+  String get updateOutcomeSpawnFailed;
+
+  /// No description provided for @updateOutcomeStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Update started.'**
+  String get updateOutcomeStarted;
 
   /// No description provided for @windowMinimize.
   ///
