@@ -274,14 +274,19 @@ function setupLinux() {
   // ── Flatpak build runtime ─────────────────────────────────────
   header('Setting up Flatpak build runtime (Freedesktop 25.08)');
   run(
-    'flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo',
+    'sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo',
     { allowFail: true },
   );
-  run(
-    'flatpak install -y --noninteractive flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08',
+  const flatpakRuntimeInstalled = run(
+    'sudo flatpak install -y --noninteractive flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08',
     { allowFail: true },
   );
-  console.log('✔ Freedesktop Platform/SDK 25.08 ready');
+  if (flatpakRuntimeInstalled) {
+    console.log('✔ Freedesktop Platform/SDK 25.08 ready');
+  } else {
+    console.warn('⚠ Flatpak runtime install failed — flatpak:bundle builds will be skipped.');
+    console.warn('  Run manually: sudo flatpak install flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08');
+  }
 
   header('Linux setup complete');
   console.log('Run "fvm flutter doctor" to verify everything is configured.');
