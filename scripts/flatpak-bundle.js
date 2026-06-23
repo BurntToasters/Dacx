@@ -105,12 +105,27 @@ function main() {
     );
   }
 
-  run("flatpak-builder", [
-    "--repo=flatpak-repo",
-    "--force-clean",
-    "flatpak-build",
-    path.relative(root, manifestPath),
-  ]);
+  const rootManifest = path.join(root, "run.rosie.dacx.yaml");
+  const manifestIsAtRoot =
+    path.resolve(manifestPath) === path.resolve(rootManifest);
+  let tempManifestCreated = false;
+  if (!manifestIsAtRoot) {
+    fs.copyFileSync(manifestPath, rootManifest);
+    tempManifestCreated = true;
+  }
+
+  try {
+    run("flatpak-builder", [
+      "--repo=flatpak-repo",
+      "--force-clean",
+      "flatpak-build",
+      "run.rosie.dacx.yaml",
+    ]);
+  } finally {
+    if (tempManifestCreated) {
+      fs.rmSync(rootManifest, { force: true });
+    }
+  }
 
   const arch = detectArch();
   const releaseDir = path.join(root, "release");
