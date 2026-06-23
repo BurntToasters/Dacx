@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -82,6 +83,7 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late final PlayerService _playerService;
   late final VideoController _videoController;
   late final SeekPreviewService _seekPreviewService;
@@ -1572,7 +1574,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: Colors.transparent,
+        endDrawer: _buildPlayQueueDrawer(),
         body: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1678,13 +1682,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 duration: _animFastDuration,
                                 curve: Curves.easeOutCubic,
                                 opacity: _isDragging ? 1 : 0,
-                                child: ColoredBox(
-                                  color: visuals.dragOverlayColor,
-                                  child: const Center(
-                                    child: Icon(
-                                      Icons.file_download,
-                                      size: 64,
-                                      color: Colors.white,
+                                child: ClipRect(
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(
+                                      sigmaX: 8.0,
+                                      sigmaY: 8.0,
+                                    ),
+                                    child: ColoredBox(
+                                      color: visuals.dragOverlayColor
+                                          .withValues(alpha: 0.28),
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.file_download,
+                                              size: 64,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              'Drop media files to play or enqueue',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium
+                                                  ?.copyWith(
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.onSurface,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1844,8 +1877,185 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onRecentFileSelected: _loadRecentFile,
             onSettingsPressed: _openSettings,
             onMoreActions: _showMoreMenu,
+            onPrevious: () => unawaited(_advancePlaylist(-1)),
+            onNext: () => unawaited(_advancePlaylist(1)),
+            onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPlayQueueDrawer() {
+    final visuals = context.windowVisuals;
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
+
+    return Drawer(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: visuals.contentColor.withValues(alpha: 0.88),
+              border: Border(left: BorderSide(color: visuals.borderColor)),
+            ),
+            child: SafeArea(
+              child: ListenableBuilder(
+                listenable: _playlist,
+                builder: (context, _) {
+                  final items = _playlist.items;
+                  return Column(
+                    children: [
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.queue_music, color: colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                l10n.dialogPlayQueueTitle,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (items.isNotEmpty)
+                              IconButton(
+                                icon: const Icon(Icons.clear_all),
+                                tooltip: l10n.actionClear,
+                                onPressed: () {
+                                  _playlist.clear();
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      // List
+                      Expanded(
+                        child: items.isEmpty
+                            ? Center(
+                                child: Text(
+                                  l10n.dialogPlayQueueEmpty,
+                                  style: TextStyle(
+                                    color: colorScheme.onSurface.withValues(
+                                      alpha: 0.54,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                itemCount: items.length,
+                                itemBuilder: (context, index) {
+                                  final isCurrent = index == _playlist.index;
+                                  final path = items[index];
+                                  final name = p.basename(path);
+
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    child: Material(
+                                      color: isCurrent
+                                          ? colorScheme.primaryContainer
+                                                .withValues(alpha: 0.58)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: InkWell(
+                                        onTap: () {
+                                          _playlist.jumpTo(index);
+                                          unawaited(_loadFile(path));
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                isCurrent
+                                                    ? Icons.play_arrow
+                                                    : Icons.music_note,
+                                                size: 18,
+                                                color: isCurrent
+                                                    ? colorScheme.primary
+                                                    : colorScheme.onSurface
+                                                          .withValues(
+                                                            alpha: 0.54,
+                                                          ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  name,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: isCurrent
+                                                        ? FontWeight.w600
+                                                        : FontWeight.normal,
+                                                    color: isCurrent
+                                                        ? colorScheme
+                                                              .onPrimaryContainer
+                                                        : colorScheme.onSurface,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.close,
+                                                  size: 16,
+                                                ),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(),
+                                                onPressed: () {
+                                                  _playlist.removeAt(index);
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      const Divider(height: 1),
+                      // Actions at bottom
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            onPressed: _pickFilesToEnqueue,
+                            icon: const Icon(Icons.add),
+                            label: Text(l10n.dialogPlayQueueAddFiles),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2891,7 +3101,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         unawaited(_showKeybindsDialog());
         break;
       case 'queue':
-        unawaited(_showQueueDialog());
+        _scaffoldKey.currentState?.openEndDrawer();
         break;
       case 'enqueue':
         unawaited(_pickFilesToEnqueue());
@@ -3173,89 +3383,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         severity: DebugSeverity.error,
       );
     }
-  }
-
-  Future<void> _showQueueDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            final l10n = AppLocalizations.of(ctx);
-            final items = _playlist.items;
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Expanded(child: Text(l10n.dialogPlayQueueTitle)),
-                  if (items.isNotEmpty)
-                    TextButton(
-                      onPressed: () {
-                        _playlist.clear();
-                        setLocal(() {});
-                      },
-                      child: Text(l10n.actionClear),
-                    ),
-                ],
-              ),
-              content: SizedBox(
-                width: _dialogWidth(ctx, 480),
-                height: _dialogHeight(ctx, 360),
-                child: items.isEmpty
-                    ? Center(child: Text(l10n.dialogPlayQueueEmpty))
-                    : ListView.builder(
-                        itemCount: items.length,
-                        itemBuilder: (c, i) {
-                          final isCurrent = i == _playlist.index;
-                          return ListTile(
-                            dense: true,
-                            leading: Icon(
-                              isCurrent ? Icons.play_arrow : Icons.music_note,
-                              size: 18,
-                            ),
-                            title: Text(
-                              p.basename(items[i]),
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: isCurrent
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            onTap: () {
-                              _playlist.jumpTo(i);
-                              unawaited(_loadFile(items[i]));
-                              Navigator.pop(ctx);
-                            },
-                            trailing: IconButton(
-                              tooltip: l10n.actionRemove,
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () {
-                                _playlist.removeAt(i);
-                                setLocal(() {});
-                              },
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await _pickFilesToEnqueue();
-                  },
-                  child: Text(l10n.dialogPlayQueueAddFiles),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.actionClose),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _showKeybindsDialog() async {
