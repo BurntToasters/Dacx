@@ -213,6 +213,7 @@ function setupLinux() {
     'libgtk-3-dev', 'libepoxy-dev', 'libmpv-dev', 'mpv',
     'libunwind-dev',
     'curl', 'git', 'unzip', 'xz-utils', 'zip',
+    'flatpak', 'flatpak-builder',
   ];
 
   console.log('\nInstalling system packages...');
@@ -244,6 +245,43 @@ function setupLinux() {
   }
 
   commonSetup();
+
+  // ── appimagetool ──────────────────────────────────────────────
+  header('Installing appimagetool (.AppImage builds)');
+  let machineArch = 'x86_64';
+  try {
+    machineArch = execSync('uname -m', { encoding: 'utf8' }).trim();
+  } catch {
+    // uname unavailable — default to x86_64
+  }
+  const appimageArch = machineArch === 'aarch64' ? 'aarch64' : 'x86_64';
+  const appimageUrl =
+    `https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-${appimageArch}.AppImage`;
+  const tmpPath = '/tmp/appimagetool-download';
+  // Best-effort: run() exits the process on failure unless allowFail is set,
+  // so each step must pass allowFail and we branch on the boolean result.
+  const appimageInstalled =
+    run(`curl -fL --progress-bar -o "${tmpPath}" "${appimageUrl}"`, { allowFail: true }) &&
+    run(`chmod +x "${tmpPath}"`, { allowFail: true }) &&
+    run(`sudo mv -f "${tmpPath}" /usr/local/bin/appimagetool`, { allowFail: true });
+  if (appimageInstalled) {
+    console.log('✔ appimagetool installed → /usr/local/bin/appimagetool');
+  } else {
+    console.warn('⚠ appimagetool install failed — .AppImage builds will be skipped.');
+    console.warn('  Install manually: https://github.com/AppImage/appimagetool/releases');
+  }
+
+  // ── Flatpak build runtime ─────────────────────────────────────
+  header('Setting up Flatpak build runtime (Freedesktop 25.08)');
+  run(
+    'flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo',
+    { allowFail: true },
+  );
+  run(
+    'flatpak install -y --noninteractive flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08',
+    { allowFail: true },
+  );
+  console.log('✔ Freedesktop Platform/SDK 25.08 ready');
 
   header('Linux setup complete');
   console.log('Run "fvm flutter doctor" to verify everything is configured.');
