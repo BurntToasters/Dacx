@@ -49,7 +49,7 @@ modules:
       - type: file
         path: run.rosie.dacx.metainfo.xml
       - type: file
-        path: assets/icon/icon.png
+        path: build/flatpak-icon-512.png
         dest-filename: run.rosie.dacx.png
       - type: file
         path: build/THIRD_PARTY_NOTICES.txt
