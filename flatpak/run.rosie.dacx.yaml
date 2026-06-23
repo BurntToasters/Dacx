@@ -1,4 +1,4 @@
-# x-version: 0.9.0-beta.3
+# x-version: 0.9.0-beta.4
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
@@ -14,6 +14,7 @@ finish-args:
   - --filesystem=xdg-music:ro
   - --filesystem=xdg-videos:ro
   - --filesystem=xdg-download:ro
+  - --filesystem=xdg-pictures:create
   # Arbitrary paths use the Freedesktop file portal (file_picker).
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.mpris.MediaPlayer2.dacx

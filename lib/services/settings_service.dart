@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/playable_source.dart';
 import '../models/update_channel.dart';
 import 'instance_mode_service.dart';
 
@@ -402,6 +403,9 @@ class SettingsService extends ChangeNotifier {
   bool _isSafeFilePath(String value) {
     if (value.isEmpty) return false;
     if (value.contains('\u0000')) return false;
+    if (PlayableSource.isSupportedUrl(value)) {
+      return PlayableSource.isDisplaySafeUrl(value);
+    }
     final segments = value.replaceAll('\\', '/').split('/');
     if (segments.any((s) => s == '..')) return false;
     return true;
@@ -938,6 +942,9 @@ class SettingsService extends ChangeNotifier {
   }
 
   bool _recentFilePathExists(String path) {
+    if (PlayableSource.isSupportedUrl(path)) {
+      return PlayableSource.isDisplaySafeUrl(path);
+    }
     try {
       return File(path).existsSync();
     } catch (e) {

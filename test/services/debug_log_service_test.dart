@@ -155,5 +155,29 @@ void main() {
       expect(output, contains('<path:movie.mp4>'));
       expect(output, isNot(contains('/home/burnt/Videos/movie.mp4')));
     });
+
+    test('exportText redacts URL credentials, query, and fragment', () {
+      final service = DebugLogService(isEnabled: () => true);
+
+      service.log(
+        category: DebugLogCategory.playback,
+        event: 'stream_open',
+        message:
+            'Opening https://user:pass@example.com/live.m3u8?token=secret#frag',
+        details: {
+          'source': 'https://user:pass@example.com/live.m3u8?token=secret#frag',
+        },
+      );
+
+      final output = service.exportText();
+
+      expect(
+        output,
+        contains('https://example.com/live.m3u8?<redacted>#<redacted>'),
+      );
+      expect(output, isNot(contains('user:pass')));
+      expect(output, isNot(contains('token=secret')));
+      expect(output, isNot(contains('#frag')));
+    });
   });
 }

@@ -376,10 +376,38 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get snackInvalidStreamUrl => 'Enter a valid http:// or https:// URL.';
+
+  @override
+  String get snackNoSupportedMediaInFolder =>
+      'No supported media found in that folder.';
+
+  @override
+  String snackFolderScanFailed(String detail) {
+    return 'Could not scan folder. $detail';
+  }
+
+  @override
+  String snackFolderScanSkipped(int count) {
+    return 'Skipped $count unsupported or unreadable item(s).';
+  }
+
+  @override
+  String snackQueueRemovedMissing(int count) {
+    return 'Removed $count missing item(s).';
+  }
+
+  @override
   String get emptyStateMessage => 'Drop a file here or click Open';
 
   @override
   String get buttonOpenFile => 'Open File';
+
+  @override
+  String get buttonOpenFolder => 'Open Folder';
+
+  @override
+  String get buttonOpenUrl => 'Open URL';
 
   @override
   String get buttonReopenLast => 'Reopen Last';
@@ -415,11 +443,59 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dialogKeyCaptureTitle => 'Press a key combination';
 
   @override
+  String get dialogOpenUrlTitle => 'Open URL';
+
+  @override
+  String get dialogOpenUrlHint => 'https://example.com/stream.m3u8';
+
+  @override
+  String get dialogMediaInfoTitle => 'Media info';
+
+  @override
   String get dialogMacInstallLocationTitle => 'Move Dacx to Applications';
 
   @override
   String get dialogMacInstallLocationMessage =>
       'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.';
+
+  @override
+  String get mediaInfoSource => 'Source';
+
+  @override
+  String get mediaInfoType => 'Type';
+
+  @override
+  String get mediaInfoDuration => 'Duration';
+
+  @override
+  String get mediaInfoResolution => 'Resolution';
+
+  @override
+  String get mediaInfoAudioTracks => 'Audio tracks';
+
+  @override
+  String get mediaInfoSubtitleTracks => 'Subtitle tracks';
+
+  @override
+  String get mediaInfoChapters => 'Chapters';
+
+  @override
+  String get mediaInfoAudioSelection => 'Selected audio';
+
+  @override
+  String get mediaInfoSubtitleSelection => 'Selected subtitles';
+
+  @override
+  String get mediaInfoTypeUrlStream => 'URL stream';
+
+  @override
+  String get mediaInfoTypeAudioFile => 'Audio file';
+
+  @override
+  String get mediaInfoTypeVideoFile => 'Video file';
+
+  @override
+  String get mediaInfoUnknown => 'Unknown';
 
   @override
   String get menuTakeScreenshot => 'Take screenshot';
@@ -544,7 +620,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionSave => 'Save';
 
   @override
+  String get actionOpen => 'Open';
+
+  @override
   String get actionRemove => 'Remove';
+
+  @override
+  String get actionRemoveMissing => 'Remove missing';
 
   @override
   String get actionSetNewBinding => 'Set new binding';
@@ -571,7 +653,151 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipOpenFile => 'Open file';
 
   @override
+  String get tooltipOpenFolder => 'Open folder';
+
+  @override
+  String get tooltipOpenUrl => 'Open URL';
+
+  @override
   String get tooltipRecentFiles => 'Recent files';
+
+  @override
+  String get tooltipMediaInfo => 'Media info';
+
+  @override
+  String get tooltipPreviousTrack => 'Previous Track (PageUp)';
+
+  @override
+  String get tooltipNextTrack => 'Next Track (PageDown)';
+
+  @override
+  String get tooltipPlayQueue => 'Play Queue';
+
+  @override
+  String get tooltipExitMiniPlayer => 'Exit mini-player';
+
+  @override
+  String get semanticsSeekBar => 'Seek bar';
+
+  @override
+  String semanticsAccentColor(String name) {
+    return 'Accent color $name';
+  }
+
+  @override
+  String updateDialogInstallingTitle(String version) {
+    return 'Installing Dacx $version';
+  }
+
+  @override
+  String get updateDialogDownloadingVerifying =>
+      'Downloading and verifying in the update helper...';
+
+  @override
+  String get updateDialogVerifyingSignature => 'Verifying signature...';
+
+  @override
+  String updateDialogDownloadingProgress(String downloaded, String total) {
+    return 'Downloading $downloaded / $total';
+  }
+
+  @override
+  String get updateDialogDownloading => 'Downloading...';
+
+  @override
+  String get updateDialogWillClose => 'Dacx will close to apply the update.';
+
+  @override
+  String get updateDialogFailedTitle => 'Update failed';
+
+  @override
+  String get updateDialogOpenReleasePage => 'Open release page';
+
+  @override
+  String get updateActionInstall => 'Install';
+
+  @override
+  String get updateActionView => 'View';
+
+  @override
+  String snackUpdatedToVersion(String version) {
+    return 'Updated to v$version';
+  }
+
+  @override
+  String snackUpdateMayHaveFailed(String version) {
+    return 'Update to v$version may have failed.';
+  }
+
+  @override
+  String get debugLogTitle => 'Debug Log';
+
+  @override
+  String debugLogEntryCount(int count) {
+    return '$count entries';
+  }
+
+  @override
+  String get debugLogCopyButton => 'Copy Log';
+
+  @override
+  String get debugLogClearButton => 'Clear Log';
+
+  @override
+  String get debugLogEmpty => 'No debug events yet.';
+
+  @override
+  String get updateOutcomeUnsupportedPlatform =>
+      'Self-update is not supported on this platform.';
+
+  @override
+  String get updateOutcomeMissingAsset =>
+      'The release does not include an installer for this platform.';
+
+  @override
+  String get updateOutcomeMissingChecksums =>
+      'The release does not include a checksums file. Cannot verify download.';
+
+  @override
+  String get updateOutcomeMissingSignature =>
+      'The release does not include a signed update manifest. Cannot verify update authenticity.';
+
+  @override
+  String get updateOutcomeDownloadFailed => 'Download failed.';
+
+  @override
+  String get updateOutcomeChecksumMismatch =>
+      'Downloaded file failed checksum verification. Refusing to install.';
+
+  @override
+  String get updateOutcomeExtractionFailed =>
+      'Could not extract the update package.';
+
+  @override
+  String get updateOutcomeSignatureInvalid =>
+      'Downloaded app failed code-signature verification.';
+
+  @override
+  String get updateOutcomeBundleIdMismatch =>
+      'Downloaded app has an unexpected bundle identifier. Refusing to install.';
+
+  @override
+  String get updateOutcomeVersionMismatch =>
+      'Downloaded app version does not match the selected update. Refusing to install.';
+
+  @override
+  String get updateOutcomeTeamIdMismatch =>
+      'Downloaded app is signed by an unexpected developer. Refusing to install.';
+
+  @override
+  String get updateOutcomeGatekeeperRejected =>
+      'Self-update is not available on this build (missing signing configuration).';
+
+  @override
+  String get updateOutcomeSpawnFailed => 'Could not launch the installer.';
+
+  @override
+  String get updateOutcomeStarted => 'Update started.';
 
   @override
   String get windowMinimize => 'Minimize window';

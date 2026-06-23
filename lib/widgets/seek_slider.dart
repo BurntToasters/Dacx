@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/seek_preview_service.dart';
 
 class SeekSliderWithHover extends StatefulWidget {
@@ -64,7 +65,7 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
     return MergeSemantics(
       child: Semantics(
         slider: true,
-        label: 'Seek bar',
+        label: AppLocalizations.of(context).semanticsSeekBar,
         value: '$positionLabel of $durationLabel',
         child: LayoutBuilder(
           builder: (context, constraints) {

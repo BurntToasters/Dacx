@@ -105,5 +105,72 @@ void main() {
         expect(find.byTooltip('Recent files'), findsOneWidget);
       },
     );
+
+    testWidgets('folder button appears when callback is provided', (
+      tester,
+    ) async {
+      var folderPressed = false;
+      await tester.pumpWidget(
+        _wrap(
+          TransportControls(
+            isPlaying: false,
+            volume: 50,
+            hasMedia: false,
+            speed: 1.0,
+            loopMode: LoopMode.none,
+            recentFiles: const [],
+            onPlayPause: () {},
+            onStop: () {},
+            onOpenFile: () {},
+            onOpenFolder: () => folderPressed = true,
+            onReopenLast: () {},
+            onVolumeChanged: (_) {},
+            onLoopModeChanged: (_) {},
+            onRecentFileSelected: (_) {},
+            onSettingsPressed: () {},
+          ),
+        ),
+      );
+
+      final button = find.byKey(const Key('open-folder-transport-button'));
+      expect(button, findsOneWidget);
+      await tester.tap(button);
+      expect(folderPressed, isTrue);
+    });
+
+    testWidgets('url button is hidden unless callback is provided', (
+      tester,
+    ) async {
+      Widget build({VoidCallback? onOpenUrl}) {
+        return _wrap(
+          TransportControls(
+            isPlaying: false,
+            volume: 50,
+            hasMedia: false,
+            speed: 1.0,
+            loopMode: LoopMode.none,
+            recentFiles: const [],
+            onPlayPause: () {},
+            onStop: () {},
+            onOpenFile: () {},
+            onOpenUrl: onOpenUrl,
+            onReopenLast: () {},
+            onVolumeChanged: (_) {},
+            onLoopModeChanged: (_) {},
+            onRecentFileSelected: (_) {},
+            onSettingsPressed: () {},
+          ),
+        );
+      }
+
+      await tester.pumpWidget(build());
+      expect(find.byKey(const Key('open-url-transport-button')), findsNothing);
+
+      await tester.pumpWidget(build(onOpenUrl: () {}));
+      expect(
+        find.byKey(const Key('open-url-transport-button')),
+        findsOneWidget,
+      );
+    });
   });
 }

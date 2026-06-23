@@ -65,6 +65,63 @@ void main() {
       expect(prefs.getString('recent_files'), jsonEncode([existing.path]));
     });
 
+    test('pruneRecentFiles keeps valid stream URLs', () async {
+      final tempDir = await Directory.systemTemp.createTemp('dacx-settings-');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final missing = '${tempDir.path}/gone.flac';
+      const url = 'https://example.com/live.m3u8';
+
+      SharedPreferences.setMockInitialValues({
+        'recent_files': jsonEncode([url, missing]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      final changed = service.pruneRecentFiles(notifyListeners: false);
+
+      expect(changed, isTrue);
+      expect(service.recentFiles, [url]);
+      expect(prefs.getString('recent_files'), jsonEncode([url]));
+    });
+
+    test('addRecentFile accepts valid stream URLs', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      service.addRecentFile('https://example.com/live.m3u8');
+
+      expect(service.recentFiles, ['https://example.com/live.m3u8']);
+    });
+
+    test('addRecentFile skips tokenized stream URLs', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      service.addRecentFile('https://example.com/live.m3u8?token=secret');
+
+      expect(service.recentFiles, isEmpty);
+      expect(prefs.getString('recent_files'), isNull);
+    });
+
+    test('pruneRecentFiles drops tokenized stream URLs', () async {
+      const safeUrl = 'https://example.com/live.m3u8';
+      const tokenizedUrl = 'https://example.com/live.m3u8?token=secret';
+
+      SharedPreferences.setMockInitialValues({
+        'recent_files': jsonEncode([tokenizedUrl, safeUrl]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      final changed = service.pruneRecentFiles(notifyListeners: false);
+
+      expect(changed, isTrue);
+      expect(service.recentFiles, [safeUrl]);
+      expect(prefs.getString('recent_files'), jsonEncode([safeUrl]));
+    });
+
     test('addRecentFile works when existing storage list is present', () async {
       final tempDir = await Directory.systemTemp.createTemp('dacx-settings-');
       addTearDown(() => tempDir.delete(recursive: true));
