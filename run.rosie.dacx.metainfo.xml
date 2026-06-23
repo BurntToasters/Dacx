@@ -76,6 +76,7 @@
     <mediatype>video/x-flv</mediatype>
   </provides>
   <releases>
+    <release version="0.9.0-beta.2" date="2026-06-23"/>
     <release version="0.9.0-beta.1" date="2026-06-23"/>
     <release version="0.8.1" date="2026-06-13"/>
     <release version="0.8.0" date="2026-05-30"/>

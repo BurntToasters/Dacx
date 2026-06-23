@@ -44,10 +44,10 @@ function normalizeArch(raw) {
     value === "x64" ||
     value === "x86-64"
   ) {
-    return "x64";
+    return "x86_64";
   }
   if (value === "aarch64" || value === "arm64") {
-    return "arm64";
+    return "aarch64";
   }
   return value || "unknown";
 }
@@ -113,9 +113,9 @@ function main() {
   ]);
 
   const arch = detectArch();
-  const distDir = path.join(root, "dist");
-  fs.mkdirSync(distDir, { recursive: true });
-  const bundlePath = path.join(distDir, `Dacx-Linux-${arch}.flatpak`);
+  const releaseDir = path.join(root, "release");
+  fs.mkdirSync(releaseDir, { recursive: true });
+  const bundlePath = path.join(releaseDir, `Dacx-Linux-${arch}.flatpak`);
 
   run("flatpak", [
     "build-bundle",
