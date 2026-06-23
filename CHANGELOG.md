@@ -17,6 +17,13 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 *This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
 ## Changes in `v0.9.0-beta.1:`
+### UI - Major UI Overhaul!
+The UI has been revamped to provide a way better user experience and UI moving forward.
+  * **Playhead and controllers:** The playhead and controller buttons for video/audio has been center aligned.
+  * **Queue:** Added a dedicated QUEUE UI instead of it being in the overflow menu.
+  * **Settings:** Minor tweaks and fixes to the UI.
+  * **Misc:** Color scheme improvements, animation updates, general cleanup.
+
 * **Stability:** Reset player track and multi-audio mix state on each new media load so stale audio/video IDs cannot leak into the next file.
 * **MacOS:** Added a launch warning when packaged Dacx is run outside `/Applications/Dacx.app`; the self-updater still targets `/Applications/Dacx.app`.
 * **Windows:** Added a timeout around certificate-store hydration used by update HTTP requests.
@@ -24,8 +31,8 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 * **Compliance:** Improved license generation for Flutter SDK runtime packages and documented the current macOS Swift Package Manager plugin fallback.
 * **PKG:** Updated packages.
 
-## Changes in `v0.8.1:`
-* **PKG:** Updated packages.
+<details>
+<summary>Full changelog</summary>
 
 ## Changes in `v0.8.0:`
 *Dacx like my other projects now has two update channels: `STABLE` and `BETA`.*
@@ -46,9 +53,6 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 * **Compliance:** `THIRD_PARTY_NOTICES.txt` + `LICENSE` bundled in Windows/macOS/Linux/Flatpak releases (`npm run licenses`); Flatpak drops `--filesystem=host` and broad XDG document/desktop mounts.
 * **Tests:** Added more test coverage.
 * **PKG:** Updated packages.
-
-<details>
-<summary>Full changelog</summary>
 
 ## Changes in `v0.7.0:`
 *`v0.7.0` is a quality and stability-focused release branch of DACX.*
