@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.8.1",
+  "version": "0.9.0-beta.1",
   "private": true,
   "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
   "license": "GPL-3.0-only",
@@ -95,6 +95,7 @@
     "localbuild:linux": "npm run build:linux && npm run release:package:linux && dotenv -e .env -- node scripts/post-release-assets.js"
   },
   "devDependencies": {
+    "cross-spawn": "^7.0.6",
     "dotenv-cli": "^8.0.0"
   }
 }

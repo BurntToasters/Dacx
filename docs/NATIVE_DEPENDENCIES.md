@@ -17,6 +17,12 @@ Windows/macOS **release bundles** include the Flutter engine and media_kit
 prebuilt libraries produced by `flutter build`. Exact versions match the pinned
 Flutter SDK (`.fvmrc`) and `pubspec.lock` at build time.
 
+Flutter's macOS Swift Package Manager path may warn when a third-party plugin
+does not yet publish SwiftPM metadata. Dacx currently relies on Flutter's
+CocoaPods fallback for `media_kit_video` / `media_kit_libs_macos_video`; this is
+expected until those upstream plugins add SwiftPM support. Build smoke checks
+may allow that warning, but a SwiftPM build error is release-blocking.
+
 Windows release artifacts also bundle required MSVC runtime files
 (`vcruntime`/`msvcp`) app-local so clean machines can launch without manually
 installing the Visual C++ Redistributable first.

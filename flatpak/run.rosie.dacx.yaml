@@ -1,7 +1,7 @@
-# x-version: 0.8.1
+# x-version: 0.9.0-beta.1
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
-runtime-version: "24.08"
+runtime-version: "25.08"
 sdk: org.freedesktop.Sdk
 command: dacx
 finish-args:
@@ -32,6 +32,7 @@ modules:
       - cp -r bundle/. /app/lib/dacx/
       - install -m 644 THIRD_PARTY_NOTICES.txt /app/share/doc/dacx/THIRD_PARTY_NOTICES.txt
       - install -m 644 LICENSE /app/share/doc/dacx/LICENSE
+      - install -m 644 NATIVE_DEPENDENCIES.md /app/share/doc/dacx/NATIVE_DEPENDENCIES.md
       - install -m 755 flatpak-dacx-launcher.sh /app/bin/dacx
       - install -m 644 run.rosie.dacx.desktop /app/share/applications/run.rosie.dacx.desktop
       - install -m 644 run.rosie.dacx.metainfo.xml /app/share/metainfo/run.rosie.dacx.metainfo.xml
@@ -54,3 +55,5 @@ modules:
         path: build/THIRD_PARTY_NOTICES.txt
       - type: file
         path: LICENSE
+      - type: file
+        path: docs/NATIVE_DEPENDENCIES.md

@@ -1036,6 +1036,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         scrolledUnderElevation: 0,
         leadingWidth: Platform.isMacOS ? 144 : base.appBarTheme.leadingWidth,
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          fixedSize: Platform.isMacOS ? const Size(120, 48) : null,
+          alignment: Platform.isMacOS
+              ? Alignment.centerRight
+              : Alignment.center,
+          padding: Platform.isMacOS ? EdgeInsets.zero : null,
+          shape: Platform.isMacOS
+              ? const _OffsetCircleBorder(72.0)
+              : const CircleBorder(),
+        ),
+      ),
     );
 
     Navigator.of(context).push(
@@ -1184,5 +1196,39 @@ class _ShortcutRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _OffsetCircleBorder extends CircleBorder {
+  final double offset;
+  const _OffsetCircleBorder(this.offset, {super.side});
+
+  Rect _shift(Rect rect) {
+    return Rect.fromLTWH(
+      rect.left + offset,
+      rect.top,
+      rect.height,
+      rect.height,
+    );
+  }
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
+    return super.getInnerPath(_shift(rect), textDirection: textDirection);
+  }
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    return super.getOuterPath(_shift(rect), textDirection: textDirection);
+  }
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    super.paint(canvas, _shift(rect), textDirection: textDirection);
+  }
+
+  @override
+  _OffsetCircleBorder copyWith({BorderSide? side, double? eccentricity}) {
+    return _OffsetCircleBorder(offset, side: side ?? this.side);
   }
 }

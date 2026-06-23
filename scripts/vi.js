@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { spawnSync, execSync } from 'child_process';
+import { execSync } from 'child_process';
+import crossSpawn from 'cross-spawn';
 
 function run(cmd, args) {
   console.log(`> ${cmd} ${args.join(' ')}`);
-  const res = spawnSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+  const res = crossSpawn.sync(cmd, args, { stdio: 'inherit' });
   if (res.status !== 0) {
     console.error(`Command failed: ${cmd} ${args.join(' ')}`);
     process.exit(res.status || 1);

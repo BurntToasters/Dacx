@@ -34,4 +34,35 @@ abstract final class PlaybackMixPolicy {
       .where((id) => id != 'auto' && id != 'no')
       .where((id) => int.tryParse(id) != null)
       .toList(growable: false);
+
+  /// Returns only numeric mpv video track ids suitable for lavfi labels.
+  static List<String> numericVideoIds(Iterable<String> raw) => raw
+      .where((id) => id != 'auto' && id != 'no')
+      .where((id) => int.tryParse(id) != null)
+      .toList(growable: false);
+}
+
+/// Tracks per-load mix cache state so IDs from one file cannot leak into the
+/// next file's lavfi graph.
+final class PlaybackMixLoadState {
+  List<String> _audioIds = const [];
+  List<String> _videoIds = const [];
+
+  List<String> get audioIds => _audioIds;
+  List<String> get videoIds => _videoIds;
+
+  bool get canMix => _audioIds.length >= 2;
+
+  void reset() {
+    _audioIds = const [];
+    _videoIds = const [];
+  }
+
+  void update({
+    required Iterable<String> audioIds,
+    required Iterable<String> videoIds,
+  }) {
+    _audioIds = PlaybackMixPolicy.numericAudioIds(audioIds);
+    _videoIds = PlaybackMixPolicy.numericVideoIds(videoIds);
+  }
 }

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart' as cryptography;
+import 'package:cryptography_plus/cryptography_plus.dart' as cryptography;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -13,16 +13,18 @@ import 'debug_log_service.dart';
 import 'trusted_http.dart';
 import 'update_trust_config.dart';
 import 'update_service.dart';
+import 'windows_system_paths.dart';
 import 'windows_process_ffi.dart';
 
 typedef HttpStreamFn =
     Future<http.StreamedResponse> Function(http.BaseRequest request);
-typedef HttpGet =
-    Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
 typedef ProcessRunFn =
     Future<ProcessResult> Function(String executable, List<String> arguments);
 typedef WindowsSpawnFn =
-    Future<WindowsSpawnResult> Function(String commandLine);
+    Future<WindowsSpawnResult> Function(
+      String commandLine, {
+      String? applicationName,
+    });
 
 enum SelfUpdateOutcome {
   unsupportedPlatform,
@@ -81,29 +83,30 @@ class SelfUpdateService {
     'www.github.com',
     'objects.githubusercontent.com',
   };
+  static const int _maxDownloadRedirects = 5;
 
   static bool _installInFlight = false;
 
   final DebugLogService? _debugLog;
-  final HttpGet _httpGet;
   final HttpStreamFn _httpStream;
   final ProcessRunFn _processRun;
   final WindowsSpawnFn _windowsSpawn;
 
   SelfUpdateService({
     DebugLogService? debugLog,
-    HttpGet? httpGet,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
     WindowsSpawnFn? windowsSpawn,
   }) : _debugLog = debugLog,
-       _httpGet = httpGet ?? platformHttpGetFn,
        _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
        _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn;
 
-  static Future<WindowsSpawnResult> _defaultWindowsSpawn(String commandLine) =>
-      WindowsProcessFfi.runAsync(commandLine);
+  static Future<WindowsSpawnResult> _defaultWindowsSpawn(
+    String commandLine, {
+    String? applicationName,
+  }) =>
+      WindowsProcessFfi.runAsync(commandLine, applicationName: applicationName);
 
   void _log(
     String event, {
@@ -192,6 +195,13 @@ class SelfUpdateService {
     return _allowedHosts.contains(uri.host.toLowerCase());
   }
 
+  static bool _isRedirectStatus(int statusCode) =>
+      statusCode == 301 ||
+      statusCode == 302 ||
+      statusCode == 303 ||
+      statusCode == 307 ||
+      statusCode == 308;
+
   static String normalizeCertificateThumbprint(String value) {
     return value.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
   }
@@ -266,12 +276,11 @@ class SelfUpdateService {
     File outFile, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
-    if (!isAllowedDownloadUrl(url)) {
-      throw StateError('Refusing to download from non-allowlisted host: $url');
-    }
     await outFile.parent.create(recursive: true);
-    final request = http.Request('GET', Uri.parse(url));
-    final resp = await _httpStream(request).timeout(const Duration(minutes: 5));
+    final resp = await _sendAllowedGet(
+      url,
+      timeout: const Duration(minutes: 5),
+    );
     if (resp.statusCode != 200) {
       throw StateError('HTTP ${resp.statusCode} from $url');
     }
@@ -298,29 +307,60 @@ class SelfUpdateService {
 
   /// Fetches [url] as text. Throws on HTTP error.
   Future<String> _fetchText(String url) async {
-    if (!isAllowedDownloadUrl(url)) {
-      throw StateError('Refusing to fetch from non-allowlisted host: $url');
-    }
-    final resp = await _httpGet(
-      Uri.parse(url),
-    ).timeout(const Duration(seconds: 30));
+    final resp = await _sendAllowedGet(
+      url,
+      timeout: const Duration(seconds: 30),
+    );
     if (resp.statusCode != 200) {
       throw StateError('HTTP ${resp.statusCode} from $url');
     }
-    return resp.body;
+    return utf8.decode(await resp.stream.toBytes());
   }
 
   Future<List<int>> _fetchBytes(String url) async {
-    if (!isAllowedDownloadUrl(url)) {
-      throw StateError('Refusing to fetch from non-allowlisted host: $url');
-    }
-    final resp = await _httpGet(
-      Uri.parse(url),
-    ).timeout(const Duration(seconds: 30));
+    final resp = await _sendAllowedGet(
+      url,
+      timeout: const Duration(seconds: 30),
+    );
     if (resp.statusCode != 200) {
       throw StateError('HTTP ${resp.statusCode} from $url');
     }
-    return resp.bodyBytes;
+    return resp.stream.toBytes();
+  }
+
+  Future<http.StreamedResponse> _sendAllowedGet(
+    String url, {
+    required Duration timeout,
+  }) async {
+    var uri = Uri.parse(url);
+    for (
+      var redirectCount = 0;
+      redirectCount <= _maxDownloadRedirects;
+      redirectCount++
+    ) {
+      if (!isAllowedDownloadUrl(uri.toString())) {
+        throw StateError('Refusing to fetch from non-allowlisted host: $uri');
+      }
+      final request = http.Request('GET', uri)..followRedirects = false;
+      final response = await _httpStream(request).timeout(timeout);
+      if (!_isRedirectStatus(response.statusCode)) {
+        return response;
+      }
+
+      final location = response.headers['location'];
+      await response.stream.drain<void>();
+      if (location == null || location.trim().isEmpty) {
+        throw StateError(
+          'HTTP ${response.statusCode} redirect missing Location',
+        );
+      }
+      final next = uri.resolve(location);
+      if (!isAllowedDownloadUrl(next.toString())) {
+        throw StateError('Refusing redirect to non-allowlisted host: $next');
+      }
+      uri = next;
+    }
+    throw StateError('Too many redirects from $url');
   }
 
   /// Top-level orchestrator. On success returns [SelfUpdateOutcome.spawned]
@@ -514,7 +554,10 @@ class SelfUpdateService {
 
     try {
       final commandLine = buildBootstrapCommandLine(bootstrapPath.path);
-      final spawn = await _windowsSpawn(commandLine);
+      final spawn = await _windowsSpawn(
+        commandLine,
+        applicationName: WindowsSystemPaths.powershell(),
+      );
       if (!spawn.launched) {
         return SelfUpdateResult(
           SelfUpdateOutcome.spawnFailed,
@@ -661,7 +704,7 @@ class SelfUpdateService {
       r"$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' };",
       r"Write-Output ($sig.Status.ToString() + '|' + $thumb + '|' + $sig.StatusMessage)",
     ].join(' ');
-    final result = await _processRun('powershell.exe', [
+    final result = await _processRun(WindowsSystemPaths.powershell(), [
       '-NoProfile',
       '-ExecutionPolicy',
       'Bypass',
@@ -699,7 +742,7 @@ class SelfUpdateService {
   /// spaces in `%LOCALAPPDATA%` are handled.
   @visibleForTesting
   static String buildBootstrapCommandLine(String bootstrapPath) {
-    return 'powershell.exe -NoProfile -ExecutionPolicy Bypass '
+    return '-NoProfile -ExecutionPolicy Bypass '
         '-WindowStyle Hidden -File "$bootstrapPath"';
   }
 
@@ -764,7 +807,7 @@ if ($ExpectedThumbprint -ne '') {
 Log "launching msiexec"
 $msiArgs = @('/i', $DacxMsi, '/passive', '/norestart')
 try {
-  $install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Verb RunAs -Wait -PassThru
+  $install = Start-Process -FilePath '@@MSIEXEC@@' -ArgumentList $msiArgs -Verb RunAs -Wait -PassThru
 } catch {
   Log "msiexec launch failed: $_"
   exit 1223
@@ -772,7 +815,11 @@ try {
 if ($null -eq $install) { Log "msiexec process was null"; exit 1 }
 Log "msiexec exited code=$($install.ExitCode)"
 exit $install.ExitCode
-''';
+'''
+        .replaceAll(
+          '@@MSIEXEC@@',
+          WindowsSystemPaths.msiexec().replaceAll("'", "''"),
+        );
   }
 
   /// Bootstrap script: spawns the watchdog via WMI `Win32_Process.Create` so it
@@ -788,8 +835,9 @@ exit $install.ExitCode
     required String sha256,
   }) {
     String esc(String s) => s.replaceAll('"', '\\"');
+    final powershellPath = esc(WindowsSystemPaths.powershell());
     final cmd =
-        'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden '
+        '"$powershellPath" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden '
         '-File "${esc(scriptPath)}" '
         '-DacxPid $dacxPid '
         '-DacxMsi "${esc(msiPath)}" '

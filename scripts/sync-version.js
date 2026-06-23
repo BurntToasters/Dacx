@@ -13,6 +13,11 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
   process.exit(1);
 }
 
+function semverToDebianVersion(semver) {
+  const stripped = semver.split("+")[0];
+  return stripped.replace("-", "~");
+}
+
 let exitCode = 0;
 const failures = [];
 
@@ -32,13 +37,13 @@ function syncFile(label, filePath, mutate) {
 
 function syncLinuxPackageTemplateVersion(label, text) {
   const versionPattern =
-    /^(Version:\s*)(?:\{\{VERSION\}\}|\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*$/m;
+    /^(Version:\s*)(?:\{\{VERSION\}\}|\d+\.\d+\.\d+(?:[-~][0-9A-Za-z.-]+)?)\s*$/m;
   if (!versionPattern.test(text)) {
     failures.push(`${label}: Version line not found`);
     exitCode = 1;
     return null;
   }
-  return text.replace(versionPattern, `$1${version}`);
+  return text.replace(versionPattern, `$1${semverToDebianVersion(version)}`);
 }
 
 syncFile("pubspec.yaml", path.join(root, "pubspec.yaml"), (text) => {

@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+
+import 'windows_system_paths.dart';
 
 /// AppUserModelID for Windows shell integration (Start search, taskbar).
 const String dacxAppUserModelId = 'run.rosie.dacx';
@@ -14,6 +17,10 @@ typedef HttpGet =
 
 typedef HttpStreamFn =
     Future<http.StreamedResponse> Function(http.BaseRequest request);
+typedef ProcessStarter =
+    Future<Process> Function(String executable, List<String> arguments);
+
+const windowsCertificateStoreHydrationTimeout = Duration(seconds: 10);
 
 /// Hydrates [SecurityContext] with base64-encoded DER certificates (one per line).
 void applyTrustedCertificatesFromBase64Lines(
@@ -40,7 +47,24 @@ Future<void> _hydrateBundledMozillaRoots(SecurityContext context) async {
   }
 }
 
-Future<void> _hydrateWindowsCertificateStore(SecurityContext context) async {
+@visibleForTesting
+Future<void> hydrateWindowsCertificateStoreForTesting(
+  SecurityContext context, {
+  required ProcessStarter startProcess,
+  Duration timeout = windowsCertificateStoreHydrationTimeout,
+}) {
+  return _hydrateWindowsCertificateStore(
+    context,
+    startProcess: startProcess,
+    timeout: timeout,
+  );
+}
+
+Future<void> _hydrateWindowsCertificateStore(
+  SecurityContext context, {
+  ProcessStarter startProcess = Process.start,
+  Duration timeout = windowsCertificateStoreHydrationTimeout,
+}) async {
   const stores = <String>[
     r'Cert:\LocalMachine\Root',
     r'Cert:\CurrentUser\Root',
@@ -55,21 +79,30 @@ Future<void> _hydrateWindowsCertificateStore(SecurityContext context) async {
       )
       .join('; ');
 
-  final result = await Process.run('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-Command',
-    command,
-  ]);
-
-  if (result.exitCode != 0) return;
-
-  applyTrustedCertificatesFromBase64Lines(
-    context,
-    (result.stdout as String).split(RegExp(r'\r?\n')),
-  );
+  Process? process;
+  try {
+    process = await startProcess(WindowsSystemPaths.powershell(), [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command,
+    ]);
+    final stdoutFuture = utf8.decoder.bind(process.stdout).join();
+    final stderrFuture = process.stderr.drain<void>();
+    final exitCode = await process.exitCode.timeout(timeout);
+    final stdout = await stdoutFuture;
+    await stderrFuture;
+    if (exitCode != 0) return;
+    applyTrustedCertificatesFromBase64Lines(
+      context,
+      stdout.split(RegExp(r'\r?\n')),
+    );
+  } on TimeoutException {
+    process?.kill();
+    return;
+  }
 }
 
 Completer<IOClient?>? _windowsClientCompleter;

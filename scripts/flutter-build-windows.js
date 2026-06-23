@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import crossSpawn from 'cross-spawn';
 import { loadLocalDotEnv } from './xcode-env.js';
 
 loadLocalDotEnv();
@@ -29,10 +29,9 @@ if (thumbprint) {
   flutterArgs.push(`--dart-define=DACX_WINDOWS_SIGNER_THUMBPRINT=${thumbprint}`);
 }
 
-const result = spawnSync('fvm', flutterArgs, {
+const result = crossSpawn.sync('fvm', flutterArgs, {
   stdio: 'inherit',
   env,
-  shell: true,
 });
 
 if (result.error) {

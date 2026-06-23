@@ -80,6 +80,7 @@ class WindowsProcessFfi {
 
   static Future<WindowsSpawnResult> runAsync(
     String commandLine, {
+    String? applicationName,
     bool wait = true,
     int waitMs = _defaultWaitMs,
   }) {
@@ -91,11 +92,19 @@ class WindowsProcessFfi {
         ),
       );
     }
-    return Isolate.run(() => run(commandLine, wait: wait, waitMs: waitMs));
+    return Isolate.run(
+      () => run(
+        commandLine,
+        applicationName: applicationName,
+        wait: wait,
+        waitMs: waitMs,
+      ),
+    );
   }
 
   static WindowsSpawnResult run(
     String commandLine, {
+    String? applicationName,
     bool wait = true,
     int waitMs = _defaultWaitMs,
   }) {
@@ -106,6 +115,7 @@ class WindowsProcessFfi {
       );
     }
 
+    final appPtr = applicationName?.toNativeUtf16();
     final cmdPtr = commandLine.toNativeUtf16();
     final startupInfo = calloc<Uint8>(104);
     final processInfo = calloc<Uint8>(24);
@@ -113,7 +123,7 @@ class WindowsProcessFfi {
 
     try {
       final ok = _createProcess(
-        nullptr,
+        appPtr ?? nullptr,
         cmdPtr,
         nullptr,
         nullptr,
@@ -153,6 +163,7 @@ class WindowsProcessFfi {
       _closeHandle(hProcess);
       return WindowsSpawnResult(launched: true, exitCode: exitCode);
     } finally {
+      if (appPtr != null) calloc.free(appPtr);
       calloc.free(cmdPtr);
       calloc.free(startupInfo);
       calloc.free(processInfo);

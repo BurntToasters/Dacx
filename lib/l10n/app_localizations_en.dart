@@ -415,6 +415,117 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dialogKeyCaptureTitle => 'Press a key combination';
 
   @override
+  String get dialogMacInstallLocationTitle => 'Move Dacx to Applications';
+
+  @override
+  String get dialogMacInstallLocationMessage =>
+      'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.';
+
+  @override
+  String get menuTakeScreenshot => 'Take screenshot';
+
+  @override
+  String get menuMixAllAudioTracks => 'Mix all audio tracks';
+
+  @override
+  String get menuSeekThumbnailsBeta =>
+      'Seek thumbnails (beta: uses more resources)';
+
+  @override
+  String get menuQueueEmpty => 'Queue (empty)';
+
+  @override
+  String menuQueueCount(int count) {
+    return 'Queue ($count)';
+  }
+
+  @override
+  String get menuAddFilesToQueue => 'Add files to queue…';
+
+  @override
+  String get menuShuffleQueue => 'Shuffle queue';
+
+  @override
+  String get menuMiniPlayer => 'Mini-player (always on top)';
+
+  @override
+  String osdAudioTrack(String label) {
+    return 'Audio: $label';
+  }
+
+  @override
+  String get osdSubtitlesOff => 'Subtitles: Off';
+
+  @override
+  String osdSubtitlesTrack(String label) {
+    return 'Subtitles: $label';
+  }
+
+  @override
+  String osdChapter(String title) {
+    return 'Chapter: $title';
+  }
+
+  @override
+  String get osdScreenshotFailed => 'Screenshot failed';
+
+  @override
+  String get osdScreenshotSaved => 'Screenshot saved';
+
+  @override
+  String get osdScreenshotSaveFailed => 'Screenshot save failed';
+
+  @override
+  String osdEqualizer(String state) {
+    return 'Equalizer: $state';
+  }
+
+  @override
+  String get osdStateOn => 'On';
+
+  @override
+  String get osdStateOff => 'Off';
+
+  @override
+  String get osdAudioMixOff => 'Audio mix off';
+
+  @override
+  String get osdAudioMixUnsupportedIds => 'Cannot mix: unsupported track ids';
+
+  @override
+  String osdAudioMixActive(int count) {
+    return 'Mixing $count audio tracks';
+  }
+
+  @override
+  String get osdAudioMixFailed => 'Could not enable audio mix';
+
+  @override
+  String osdResumedAt(String time) {
+    return 'Resumed at $time';
+  }
+
+  @override
+  String get osdNextInQueue => 'Next in queue';
+
+  @override
+  String get osdPreviousInQueue => 'Previous in queue';
+
+  @override
+  String get osdAddedToQueue => 'Added to queue';
+
+  @override
+  String osdAddedMultipleToQueue(int count) {
+    return 'Added $count to queue';
+  }
+
+  @override
+  String get osdMiniPlayerOff => 'Mini-player off';
+
+  @override
+  String get osdMiniPlayerOn => 'Mini-player on';
+
+  @override
   String get actionReset => 'Reset';
 
   @override

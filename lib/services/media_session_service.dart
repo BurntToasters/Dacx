@@ -305,7 +305,7 @@ class _MprisAdapter extends MPRISService {
       _dispatch(const MediaSessionCommand('stop', null));
   @override
   Future<void> onSeek(int offset) async =>
-      _dispatch(const MediaSessionCommand('seek', null));
+      _dispatch(MediaSessionCommand('seek_relative', offset ~/ 1000));
   @override
   Future<void> onSetPosition(String trackId, int position) async {
     _dispatch(MediaSessionCommand('seek', position ~/ 1000));

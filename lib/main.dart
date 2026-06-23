@@ -13,10 +13,11 @@ import 'package:window_manager/window_manager.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
-import 'services/trusted_http.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
+import 'services/macos_install_location_service.dart';
 import 'services/settings_service.dart';
+import 'services/trusted_http.dart';
 import 'services/update_service.dart';
 import 'theme/window_visuals.dart';
 
@@ -528,6 +529,10 @@ class _DacxAppState extends State<DacxApp>
           themeMode: s.themeMode,
           theme: themes.light,
           darkTheme: themes.dark,
+          builder: (context, child) => _MacInstallLocationWarning(
+            debugLog: widget.debugLog,
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: PlayerScreen(
             settings: s,
             debugLog: widget.debugLog,
@@ -600,6 +605,65 @@ class _DacxAppState extends State<DacxApp>
       ),
     );
   }
+}
+
+class _MacInstallLocationWarning extends StatefulWidget {
+  final DebugLogService debugLog;
+  final Widget child;
+
+  const _MacInstallLocationWarning({
+    required this.debugLog,
+    required this.child,
+  });
+
+  @override
+  State<_MacInstallLocationWarning> createState() =>
+      _MacInstallLocationWarningState();
+}
+
+class _MacInstallLocationWarningState
+    extends State<_MacInstallLocationWarning> {
+  bool _scheduled = false;
+  bool _shown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showIfNeeded());
+    });
+  }
+
+  Future<void> _showIfNeeded() async {
+    if (!mounted || _shown) return;
+    if (!MacosInstallLocationService.shouldWarnForCurrentApp()) return;
+    _shown = true;
+    widget.debugLog.log(
+      category: DebugLogCategory.update,
+      event: 'macos_install_location_warning',
+      message: 'Dacx is running outside /Applications.',
+      severity: DebugSeverity.warn,
+    );
+    final l10n = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.dialogMacInstallLocationTitle),
+        content: Text(l10n.dialogMacInstallLocationMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.actionClose),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _ThemeInputs {

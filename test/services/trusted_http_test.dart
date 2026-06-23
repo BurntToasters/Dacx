@@ -21,4 +21,16 @@ void main() {
   test('dacxAppUserModelId matches package id', () {
     expect(dacxAppUserModelId, 'run.rosie.dacx');
   });
+
+  test('Windows certificate store hydration returns on timeout', () async {
+    final context = SecurityContext();
+    await expectLater(
+      hydrateWindowsCertificateStoreForTesting(
+        context,
+        timeout: const Duration(milliseconds: 1),
+        startProcess: (_, _) => Process.start('sh', ['-c', 'sleep 1']),
+      ),
+      completes,
+    );
+  });
 }

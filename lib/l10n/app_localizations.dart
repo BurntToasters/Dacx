@@ -802,6 +802,192 @@ abstract class AppLocalizations {
   /// **'Press a key combination'**
   String get dialogKeyCaptureTitle;
 
+  /// No description provided for @dialogMacInstallLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Move Dacx to Applications'**
+  String get dialogMacInstallLocationTitle;
+
+  /// No description provided for @dialogMacInstallLocationMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.'**
+  String get dialogMacInstallLocationMessage;
+
+  /// No description provided for @menuTakeScreenshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Take screenshot'**
+  String get menuTakeScreenshot;
+
+  /// No description provided for @menuMixAllAudioTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Mix all audio tracks'**
+  String get menuMixAllAudioTracks;
+
+  /// No description provided for @menuSeekThumbnailsBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek thumbnails (beta: uses more resources)'**
+  String get menuSeekThumbnailsBeta;
+
+  /// No description provided for @menuQueueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue (empty)'**
+  String get menuQueueEmpty;
+
+  /// No description provided for @menuQueueCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue ({count})'**
+  String menuQueueCount(int count);
+
+  /// No description provided for @menuAddFilesToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files to queue…'**
+  String get menuAddFilesToQueue;
+
+  /// No description provided for @menuShuffleQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle queue'**
+  String get menuShuffleQueue;
+
+  /// No description provided for @menuMiniPlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini-player (always on top)'**
+  String get menuMiniPlayer;
+
+  /// No description provided for @osdAudioTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio: {label}'**
+  String osdAudioTrack(String label);
+
+  /// No description provided for @osdSubtitlesOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitles: Off'**
+  String get osdSubtitlesOff;
+
+  /// No description provided for @osdSubtitlesTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitles: {label}'**
+  String osdSubtitlesTrack(String label);
+
+  /// No description provided for @osdChapter.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter: {title}'**
+  String osdChapter(String title);
+
+  /// No description provided for @osdScreenshotFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot failed'**
+  String get osdScreenshotFailed;
+
+  /// No description provided for @osdScreenshotSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot saved'**
+  String get osdScreenshotSaved;
+
+  /// No description provided for @osdScreenshotSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot save failed'**
+  String get osdScreenshotSaveFailed;
+
+  /// No description provided for @osdEqualizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Equalizer: {state}'**
+  String osdEqualizer(String state);
+
+  /// No description provided for @osdStateOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get osdStateOn;
+
+  /// No description provided for @osdStateOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get osdStateOff;
+
+  /// No description provided for @osdAudioMixOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio mix off'**
+  String get osdAudioMixOff;
+
+  /// No description provided for @osdAudioMixUnsupportedIds.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot mix: unsupported track ids'**
+  String get osdAudioMixUnsupportedIds;
+
+  /// No description provided for @osdAudioMixActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Mixing {count} audio tracks'**
+  String osdAudioMixActive(int count);
+
+  /// No description provided for @osdAudioMixFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not enable audio mix'**
+  String get osdAudioMixFailed;
+
+  /// No description provided for @osdResumedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Resumed at {time}'**
+  String osdResumedAt(String time);
+
+  /// No description provided for @osdNextInQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Next in queue'**
+  String get osdNextInQueue;
+
+  /// No description provided for @osdPreviousInQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous in queue'**
+  String get osdPreviousInQueue;
+
+  /// No description provided for @osdAddedToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to queue'**
+  String get osdAddedToQueue;
+
+  /// No description provided for @osdAddedMultipleToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} to queue'**
+  String osdAddedMultipleToQueue(int count);
+
+  /// No description provided for @osdMiniPlayerOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini-player off'**
+  String get osdMiniPlayerOff;
+
+  /// No description provided for @osdMiniPlayerOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini-player on'**
+  String get osdMiniPlayerOn;
+
   /// No description provided for @actionReset.
   ///
   /// In en, this message translates to:
