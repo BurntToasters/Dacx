@@ -265,7 +265,7 @@ final class AllowlistedRedirectDelegate: NSObject, URLSessionTaskDelegate {
                     completionHandler: @escaping (URLRequest?) -> Void) {
         guard let url = request.url,
               url.scheme?.lowercased() == "https",
-              allowedHosts.contains(url.host?.lowercased() ?? "") else {
+              isAllowedHost(url.host) else {
             blockedRedirect = request.url
             completionHandler(nil)
             return
@@ -692,6 +692,20 @@ private let allowedHosts: Set<String> = [
     "objects.githubusercontent.com",
 ]
 
+/// Mirrors the Dart `SelfUpdateService._isAllowedHost` allowlist: the static
+/// GitHub hosts above plus any `*.githubusercontent.com` subdomain. GitHub
+/// serves release-asset downloads from rotating CDN hosts such as
+/// `release-assets.githubusercontent.com`, so an exact-match set rejects
+/// otherwise-legitimate redirects. The leading dot anchors the suffix so
+/// lookalikes like `evilgithubusercontent.com` cannot match. Download
+/// integrity is still enforced separately via SHA256 + codesign team-ID +
+/// Gatekeeper, so this allowlist is defense-in-depth, not the trust anchor.
+private func isAllowedHost(_ rawHost: String?) -> Bool {
+    guard let host = rawHost?.lowercased(), !host.isEmpty else { return false }
+    if allowedHosts.contains(host) { return true }
+    return host == "githubusercontent.com" || host.hasSuffix(".githubusercontent.com")
+}
+
 private let helperOperationDeadlineSeconds: TimeInterval = 840
 
 // MARK: - XPC service implementation
@@ -733,8 +747,8 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
         }
         guard let parsedUrl = URL(string: zipUrl),
               parsedUrl.scheme == "https",
-              allowedHosts.contains(parsedUrl.host ?? "") else {
-            reply(false, "zipUrl must be https and on an allowed host (github.com / objects.githubusercontent.com)")
+              isAllowedHost(parsedUrl.host) else {
+            reply(false, "zipUrl must be https and on an allowed GitHub host")
             return
         }
         guard checksumHex.count == 64,
