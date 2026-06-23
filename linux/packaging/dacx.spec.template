@@ -17,6 +17,9 @@ and cross-platform consistency.
 
 %files
 /opt/dacx/
+%license /usr/share/doc/dacx/LICENSE
+%doc /usr/share/doc/dacx/THIRD_PARTY_NOTICES.txt
+%doc /usr/share/doc/dacx/NATIVE_DEPENDENCIES.md
 /usr/share/applications/dacx.desktop
 /usr/share/icons/hicolor/256x256/apps/dacx.png
 /usr/bin/dacx

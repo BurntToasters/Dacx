@@ -107,7 +107,7 @@ function writeThirdPartyNotices(licenses, outDir) {
     "==========================",
     "",
     "Dacx (run.rosie.dacx) is licensed under the GNU General Public License",
-    "v3.0 or later. The full license text is in the LICENSE file shipped with",
+    "v3.0 only. The full license text is in the LICENSE file shipped with",
     "this distribution.",
     "",
     "This file lists open-source components used in or with Dacx. For bundled",

@@ -28,10 +28,7 @@ void main() {
       hydrateWindowsCertificateStoreForTesting(
         context,
         timeout: const Duration(milliseconds: 1),
-        runProcess: (_, _) => Future<ProcessResult>.delayed(
-          const Duration(seconds: 1),
-          () => ProcessResult(1, 0, '', ''),
-        ),
+        startProcess: (_, _) => Process.start('sh', ['-c', 'sleep 1']),
       ),
       completes,
     );

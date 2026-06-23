@@ -124,7 +124,7 @@ class TransportControls extends StatelessWidget {
                 opacity: animation,
                 child: SizeTransition(
                   axis: Axis.horizontal,
-                  alignment: const AlignmentDirectional(-1.0, -1.0),
+                  axisAlignment: -1.0,
                   sizeFactor: animation,
                   child: child,
                 ),

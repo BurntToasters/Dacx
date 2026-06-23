@@ -94,6 +94,23 @@ static char** dacx_strip_new_instance_flag(char** argv) {
   return (char**)g_ptr_array_free(out, FALSE);
 }
 
+static gboolean dacx_open_cli_arguments(GApplication* application,
+                                        char** argv) {
+  if (argv == nullptr) return FALSE;
+  GPtrArray* files = g_ptr_array_new_with_free_func(g_object_unref);
+  for (int i = 0; argv[i] != nullptr; i++) {
+    if (argv[i][0] == '\0' || argv[i][0] == '-') continue;
+    g_ptr_array_add(files, g_file_new_for_commandline_arg(argv[i]));
+  }
+  if (files->len == 0) {
+    g_ptr_array_free(files, TRUE);
+    return FALSE;
+  }
+  g_application_open(application, (GFile**)files->pdata, files->len, "");
+  g_ptr_array_free(files, TRUE);
+  return TRUE;
+}
+
 static void dacx_window_reg_free(gpointer data) {
   if (data == nullptr) return;
   DacxWindowReg* reg = (DacxWindowReg*)data;
@@ -403,7 +420,9 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
-  g_application_activate(application);
+  if (!dacx_open_cli_arguments(application, self->dart_entrypoint_arguments)) {
+    g_application_activate(application);
+  }
   *exit_status = 0;
 
   return TRUE;

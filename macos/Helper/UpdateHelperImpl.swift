@@ -255,6 +255,25 @@ struct DownloadFailure: Error, CustomStringConvertible {
     let description: String
 }
 
+final class AllowlistedRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    private(set) var blockedRedirect: URL?
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let url = request.url,
+              url.scheme?.lowercased() == "https",
+              allowedHosts.contains(url.host?.lowercased() ?? "") else {
+            blockedRedirect = request.url
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
+    }
+}
+
 func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
     let destDir = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("dacx-update-\(UUID().uuidString)", isDirectory: true)
@@ -270,8 +289,16 @@ func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
 
     var request = URLRequest(url: url)
     request.timeoutInterval = 600
-    let task = URLSession.shared.downloadTask(with: request) { tmpUrl, response, error in
+    let redirectDelegate = AllowlistedRedirectDelegate()
+    let session = URLSession(configuration: .ephemeral,
+                             delegate: redirectDelegate,
+                             delegateQueue: nil)
+    let task = session.downloadTask(with: request) { tmpUrl, response, error in
         defer { semaphore.signal() }
+        if let blocked = redirectDelegate.blockedRedirect {
+            result = .failure(DownloadFailure(description: "blocked redirect to \(blocked)"))
+            return
+        }
         if let error = error {
             result = .failure(DownloadFailure(description: "download error: \(error.localizedDescription)"))
             return
@@ -297,6 +324,7 @@ func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
     }
     task.resume()
     semaphore.wait()
+    session.finishTasksAndInvalidate()
     return result
 }
 

@@ -73,6 +73,7 @@ fs.mkdirSync(releaseDir, { recursive: true });
 const THIRD_PARTY_NOTICES = "THIRD_PARTY_NOTICES.txt";
 const noticesBuildPath = path.join(root, "build", THIRD_PARTY_NOTICES);
 const licensePath = path.join(root, "LICENSE");
+const nativeDependenciesDocPath = path.join(root, "docs", "NATIVE_DEPENDENCIES.md");
 
 function ensureThirdPartyNotices() {
   if (fs.existsSync(noticesBuildPath)) return;
@@ -91,6 +92,17 @@ function installLegalFilesInDir(destDir) {
   if (fs.existsSync(licensePath)) {
     fs.copyFileSync(licensePath, path.join(destDir, "LICENSE"));
   }
+  if (fs.existsSync(nativeDependenciesDocPath)) {
+    fs.copyFileSync(
+      nativeDependenciesDocPath,
+      path.join(destDir, "NATIVE_DEPENDENCIES.md"),
+    );
+  }
+}
+
+function semverToDebianVersion(semver) {
+  const stripped = semver.split("+")[0];
+  return stripped.replace("-", "~");
 }
 
 function run(cmd, opts = {}) {
@@ -1235,12 +1247,14 @@ function buildDeb(buildDir, desktopFile, iconFile) {
   const binDir = path.join(debRoot, "usr", "bin");
   const appsDir = path.join(debRoot, "usr", "share", "applications");
   const iconDir = path.join(debRoot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const docDir = path.join(debRoot, "usr", "share", "doc", "dacx");
   const debianDir = path.join(debRoot, "DEBIAN");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
   fs.mkdirSync(iconDir, { recursive: true });
+  fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(debianDir, { recursive: true });
 
   // Copy bundle to /opt/dacx
@@ -1266,11 +1280,13 @@ function buildDeb(buildDir, desktopFile, iconFile) {
     fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
   }
 
+  installLegalFilesInDir(docDir);
+
   // Generate control file from template
   const controlTemplate = path.join(root, "linux", "packaging", "control.template");
   if (fs.existsSync(controlTemplate)) {
     let control = fs.readFileSync(controlTemplate, "utf-8");
-    control = control.replace(/\{\{VERSION\}\}/g, VERSION);
+    control = control.replace(/\{\{VERSION\}\}/g, semverToDebianVersion(VERSION));
     // Remove the shebang line if present (it's a template marker, not a real script)
     control = control.replace(/^#!.*\n/, "");
     // Calculate installed size in KB
@@ -1326,11 +1342,13 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   const binDir = path.join(buildroot, "usr", "bin");
   const appsDir = path.join(buildroot, "usr", "share", "applications");
   const iconDir = path.join(buildroot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const docDir = path.join(buildroot, "usr", "share", "doc", "dacx");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
   fs.mkdirSync(iconDir, { recursive: true });
+  fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(specsDir, { recursive: true });
   fs.mkdirSync(rpmsDir, { recursive: true });
 
@@ -1355,6 +1373,8 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   if (iconFile) {
     fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
   }
+
+  installLegalFilesInDir(docDir);
 
   // Generate spec from template
   const specTemplate = path.join(root, "linux", "packaging", "dacx.spec.template");

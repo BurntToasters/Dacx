@@ -528,9 +528,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
         for (final entry in pending) {
           if (_isDisposed || !mounted) return;
-          final path = PlayerPathUtils.coerceOpenPath(entry);
-          if (path == null) continue;
-          await _openRequestedFile(path, forcePlay: true);
+          await _openRequestedPayload(entry, forcePlay: true);
         }
       }
     } on MissingPluginException {
@@ -561,14 +559,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _openFileEventChannel.receiveBroadcastStream().listen(
         (event) {
           if (_isDisposed || !mounted) return;
-          final path = PlayerPathUtils.coerceOpenPath(event);
-          if (path != null) {
+          final request = PlayerPathUtils.coerceOpenRequest(event);
+          if (request != null) {
             _log(
               'open_file_event_received',
               category: DebugLogCategory.system,
-              detailsBuilder: () => {'path': path},
+              detailsBuilder: () => {'path': request.path},
             );
-            unawaited(_openRequestedFile(path, forcePlay: true));
+            unawaited(_openRequestedFileRequest(request, forcePlay: true));
           }
         },
         onError: (error) {
@@ -597,9 +595,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
           for (final entry in pending) {
             if (_isDisposed || !mounted) return;
-            final path = PlayerPathUtils.coerceOpenPath(entry);
-            if (path == null) continue;
-            await _openRequestedFile(path, forcePlay: true);
+            await _openRequestedPayload(entry, forcePlay: true);
           }
         } catch (e) {
           _log(
@@ -617,6 +613,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String filePath, {
     bool forcePlay = false,
   }) async {
+    await _openRequestedFileRequest(
+      OpenFileRequest(path: filePath),
+      forcePlay: forcePlay,
+    );
+  }
+
+  Future<void> _openRequestedPayload(
+    Object? payload, {
+    bool forcePlay = false,
+  }) async {
+    final request = PlayerPathUtils.coerceOpenRequest(payload);
+    if (request == null) return;
+    await _openRequestedFileRequest(request, forcePlay: forcePlay);
+  }
+
+  Future<void> _openRequestedFileRequest(
+    OpenFileRequest request, {
+    bool forcePlay = false,
+  }) async {
+    final bookmark = request.bookmark;
+    if (bookmark != null && BookmarkService.isSupported) {
+      _settings.setFileBookmark(request.path, bookmark);
+    }
+    final filePath = request.path;
     final trimmed = filePath.trim();
     if (trimmed.isEmpty) return;
     if (_currentFile == trimmed) {
@@ -2098,6 +2118,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Tracks: audio / subtitle cycling ──────────────────────
 
   Future<void> _cycleAudioTrack() async {
+    final l10n = AppLocalizations.of(context);
     final tracks = _currentTracks;
     if (tracks == null || tracks.audio.length <= 1) return;
     final list = tracks.audio
@@ -2110,11 +2131,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _disableMixForManualTrackSelection();
     await _playerService.setAudioTrack(next);
     _showOsdMessage(
-      'Audio: ${_trackLabel(next.title, next.language, next.id)}',
+      l10n.osdAudioTrack(_trackLabel(next.title, next.language, next.id)),
     );
   }
 
   Future<void> _cycleSubtitleTrack() async {
+    final l10n = AppLocalizations.of(context);
     final tracks = _currentTracks;
     if (tracks == null) return;
     final list = [
@@ -2129,18 +2151,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subtitlesVisible = next.id != 'no';
     _showOsdMessage(
       next.id == 'no'
-          ? 'Subtitles: Off'
-          : 'Subtitles: ${_trackLabel(next.title, next.language, next.id)}',
+          ? l10n.osdSubtitlesOff
+          : l10n.osdSubtitlesTrack(
+              _trackLabel(next.title, next.language, next.id),
+            ),
     );
   }
 
   Future<void> _toggleSubtitleVisibility() async {
+    final l10n = AppLocalizations.of(context);
     final tracks = _currentTracks;
     if (tracks == null) return;
     if (_subtitlesVisible) {
       await _playerService.setSubtitleTrack(SubtitleTrack.no());
       _subtitlesVisible = false;
-      _showOsdMessage('Subtitles: Off');
+      _showOsdMessage(l10n.osdSubtitlesOff);
     } else {
       final candidate = tracks.subtitle.firstWhere(
         (t) => t.id != 'no' && t.id != 'auto',
@@ -2149,7 +2174,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _playerService.setSubtitleTrack(candidate);
       _subtitlesVisible = true;
       _showOsdMessage(
-        'Subtitles: ${_trackLabel(candidate.title, candidate.language, candidate.id)}',
+        l10n.osdSubtitlesTrack(
+          _trackLabel(candidate.title, candidate.language, candidate.id),
+        ),
       );
     }
   }
@@ -2173,6 +2200,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _stepChapter(int delta) async {
+    final l10n = AppLocalizations.of(context);
     if (_chapters.isEmpty) {
       await _refreshChapters();
     }
@@ -2181,18 +2209,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final idx = int.tryParse(current ?? '') ?? 0;
     final next = (idx + delta).clamp(0, _chapters.length - 1);
     await _playerService.setChapter(next);
-    _showOsdMessage('Chapter: ${_chapters[next].title}');
+    _showOsdMessage(l10n.osdChapter(_chapters[next].title));
   }
 
   // ── Screenshot ────────────────────────────────────────────
 
   Future<void> _takeScreenshot() async {
+    final l10n = AppLocalizations.of(context);
     if (_currentFile == null) return;
     final fmt = _settings.screenshotFormat;
     final mime = fmt == 'png' ? 'image/png' : 'image/jpeg';
     final bytes = await _playerService.screenshot(format: mime);
     if (bytes == null) {
-      _showOsdMessage('Screenshot failed');
+      _showOsdMessage(l10n.osdScreenshotFailed);
       return;
     }
     final dir = _settings.screenshotDir ?? _defaultScreenshotDir();
@@ -2215,13 +2244,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final outPath = p.join(dir, '${base}_$ts.$fmt');
     try {
       await File(outPath).writeAsBytes(bytes, flush: true);
-      _showOsdMessage('Screenshot saved');
+      _showOsdMessage(l10n.osdScreenshotSaved);
       _log(
         'screenshot_saved',
         detailsBuilder: () => {'path': outPath, 'bytes': bytes.length},
       );
     } catch (e) {
-      _showOsdMessage('Screenshot save failed');
+      _showOsdMessage(l10n.osdScreenshotSaveFailed);
       _log(
         'screenshot_save_failed',
         message: e.toString(),
@@ -2252,12 +2281,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _toggleEqualizer() {
     _settings.eqEnabled = !_settings.eqEnabled;
     unawaited(_applyEqualizer());
-    _showOsdMessage('Equalizer: ${_settings.eqEnabled ? 'On' : 'Off'}');
+    final l10n = AppLocalizations.of(context);
+    _showOsdMessage(
+      l10n.osdEqualizer(
+        _settings.eqEnabled ? l10n.osdStateOn : l10n.osdStateOff,
+      ),
+    );
   }
 
   // ── Multi-audio mix ───────────────────────────────────────
 
   Future<void> _applyMultiAudioMix({bool announce = false}) async {
+    final l10n = AppLocalizations.of(context);
     final tracks = _currentTracks;
     if (tracks == null) return;
     final ids = tracks.audio
@@ -2270,7 +2305,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _playerService.setProperty('lavfi-complex', '');
       if (_mixActive) {
         _mixActive = false;
-        if (announce) _showOsdMessage('Audio mix off');
+        if (announce) {
+          _showOsdMessage(l10n.osdAudioMixOff);
+        }
       }
       return;
     }
@@ -2283,7 +2320,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         message: 'non-numeric audio track ids: ${invalid.join(',')}',
         severity: DebugSeverity.warn,
       );
-      if (announce) _showOsdMessage('Cannot mix: unsupported track ids');
+      if (announce) {
+        _showOsdMessage(l10n.osdAudioMixUnsupportedIds);
+      }
       return;
     }
     final videoIds = tracks.video
@@ -2308,12 +2347,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final wasActive = _mixActive;
       _mixActive = true;
       if (announce || !wasActive) {
-        _showOsdMessage('Mixing ${ids.length} audio tracks');
+        _showOsdMessage(l10n.osdAudioMixActive(ids.length));
       }
     } else {
       _mixActive = false;
       _log('multi_audio_mix_setproperty_failed', severity: DebugSeverity.warn);
-      if (announce) _showOsdMessage('Could not enable audio mix');
+      if (announce) {
+        _showOsdMessage(l10n.osdAudioMixFailed);
+      }
     }
   }
 
@@ -2419,6 +2460,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _maybeApplyResume(String path) async {
+    final l10n = AppLocalizations.of(context);
     final ms = _settings.resumePositionFor(path);
     if (ms == null || ms <= 0) return;
     // Wait briefly until duration is known so we don't seek beyond end.
@@ -2437,7 +2479,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       await _playerService.seek(Duration(milliseconds: ms));
       if (mounted) {
-        _showOsdMessage('Resumed at ${_formatHms(Duration(milliseconds: ms))}');
+        _showOsdMessage(
+          l10n.osdResumedAt(_formatHms(Duration(milliseconds: ms))),
+        );
       }
     } catch (e) {
       _log(
@@ -2464,7 +2508,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_playlist.isEmpty) return;
     final next = _playlist.advance(delta);
     if (next == null) return;
-    _showOsdMessage(delta > 0 ? 'Next in queue' : 'Previous in queue');
+    final l10n = AppLocalizations.of(context);
+    _showOsdMessage(delta > 0 ? l10n.osdNextInQueue : l10n.osdPreviousInQueue);
     await _loadFile(next);
   }
 
@@ -2488,7 +2533,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       final dropped = _playlist.addAll(paths);
       _showOsdMessage(
-        paths.length == 1 ? 'Added to queue' : 'Added ${paths.length} to queue',
+        paths.length == 1
+            ? AppLocalizations.of(context).osdAddedToQueue
+            : AppLocalizations.of(
+                context,
+              ).osdAddedMultipleToQueue(paths.length),
       );
       if (dropped > 0 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2508,6 +2557,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _toggleCompactMode() async {
     if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) return;
+    final l10n = AppLocalizations.of(context);
     if (_compactMode) {
       // Restore window state.
       try {
@@ -2527,7 +2577,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       }
       setState(() => _compactMode = false);
-      _showOsdMessage('Mini-player off');
+      _showOsdMessage(l10n.osdMiniPlayerOff);
     } else {
       try {
         _preCompactSize = await windowManager.getSize();
@@ -2547,13 +2597,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       }
       setState(() => _compactMode = true);
-      _showOsdMessage('Mini-player on');
+      _showOsdMessage(l10n.osdMiniPlayerOn);
     }
   }
 
   // ── More menu ─────────────────────────────────────────────
 
   Future<void> _showMoreMenu() async {
+    final l10n = AppLocalizations.of(context);
     final tracks = _currentTracks;
     final hasAudioOptions = tracks != null && tracks.audio.length > 1;
     final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
@@ -2677,37 +2728,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           if (hasAudioOptions)
                             item(
                               icon: Icons.audiotrack,
-                              label: 'Audio track',
+                              label: l10n.dialogAudioTrackTitle,
                               action: 'audio',
                             ),
                           if (hasSubOptions)
                             item(
                               icon: Icons.subtitles,
-                              label: 'Subtitle track',
+                              label: l10n.dialogSubtitleTrackTitle,
                               action: 'subtitle',
                             ),
                           if (hasChapters)
                             item(
                               icon: Icons.menu_book,
-                              label: 'Chapters',
+                              label: l10n.dialogChaptersTitle,
                               action: 'chapters',
                             ),
                           item(
                             icon: Icons.graphic_eq,
-                            label: 'Equalizer',
+                            label: l10n.dialogEqualizerTitle,
                             action: 'equalizer',
                           ),
                           if (_currentFile != null && !_isAudioFile)
                             item(
                               icon: Icons.photo_camera,
-                              label: 'Take screenshot',
+                              label: l10n.menuTakeScreenshot,
                               action: 'screenshot',
                             ),
                           if (hasAudioOptions &&
                               _settings.experimentalFeaturesEnabled)
                             switchItem(
                               icon: Icons.multitrack_audio,
-                              label: 'Mix all audio tracks',
+                              label: l10n.menuMixAllAudioTracks,
                               value: _settings.multiAudioMix,
                               experimental: true,
                               onChanged: (v) {
@@ -2724,8 +2775,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           if (!_isAudioFile)
                             switchItem(
                               icon: Icons.image_search,
-                              label:
-                                  'Seek thumbnails (beta: uses more resources)',
+                              label: l10n.menuSeekThumbnailsBeta,
                               value: _settings.seekPreviewEnabled,
                               onChanged: (v) {
                                 _settings.seekPreviewEnabled = v;
@@ -2745,25 +2795,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                           item(
                             icon: Icons.keyboard,
-                            label: 'Keyboard shortcuts',
+                            label: l10n.dialogKeyboardShortcutsTitle,
                             action: 'keybinds',
                           ),
                           const Divider(height: 1),
                           item(
                             icon: Icons.queue_music,
                             label: _playlist.isEmpty
-                                ? 'Queue (empty)'
-                                : 'Queue (${_playlist.length})',
+                                ? l10n.menuQueueEmpty
+                                : l10n.menuQueueCount(_playlist.length),
                             action: 'queue',
                           ),
                           item(
                             icon: Icons.playlist_add,
-                            label: 'Add files to queue…',
+                            label: l10n.menuAddFilesToQueue,
                             action: 'enqueue',
                           ),
                           switchItem(
                             icon: Icons.shuffle,
-                            label: 'Shuffle queue',
+                            label: l10n.menuShuffleQueue,
                             value: _settings.playlistShuffle,
                             onChanged: (v) {
                               _settings.playlistShuffle = v;
@@ -2773,7 +2823,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           ),
                           switchItem(
                             icon: Icons.picture_in_picture_alt,
-                            label: 'Mini-player (always on top)',
+                            label: l10n.menuMiniPlayer,
                             value: _compactMode,
                             onChanged: (_) => Navigator.pop(ctx, 'compact'),
                           ),
