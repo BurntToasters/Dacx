@@ -66,6 +66,14 @@ function detectArch() {
   return normalizeArch(process.arch);
 }
 
+function olderThan(targetPath, referencePath) {
+  try {
+    return fs.statSync(targetPath).mtimeMs < fs.statSync(referencePath).mtimeMs;
+  } catch {
+    return true;
+  }
+}
+
 function resolveManifestPath() {
   const candidates = [
     process.env.FLATPAK_MANIFEST,
@@ -103,6 +111,15 @@ function main() {
     throw new Error(
       "Missing build/THIRD_PARTY_NOTICES.txt — run npm run licenses before flatpak:bundle",
     );
+  }
+
+  // Flatpak export rejects icons larger than 512x512. The source icon is
+  // 1024x1024, so resize it for the flatpak build.
+  const sourceIcon = path.join(root, "assets", "icon", "icon.png");
+  const flatpakIcon = path.join(root, "build", "flatpak-icon-512.png");
+  if (!fs.existsSync(flatpakIcon) || olderThan(flatpakIcon, sourceIcon)) {
+    console.log("Resizing icon to 512x512 for Flatpak...");
+    run("magick", [sourceIcon, "-resize", "512x512", flatpakIcon]);
   }
 
   const rootManifest = path.join(root, "run.rosie.dacx.yaml");
