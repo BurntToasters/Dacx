@@ -24,6 +24,16 @@ void main() {
       );
     });
 
+    test('allows current GitHub release-assets CDN host', () {
+      // GitHub now redirects release-asset downloads to this host.
+      expect(
+        SelfUpdateService.isAllowedDownloadUrl(
+          'https://release-assets.githubusercontent.com/github-production-release-asset/123/abc?sig=x',
+        ),
+        isTrue,
+      );
+    });
+
     test('rejects non-HTTPS and unknown hosts', () {
       expect(
         SelfUpdateService.isAllowedDownloadUrl('http://github.com/x'),
@@ -34,6 +44,22 @@ void main() {
         isFalse,
       );
       expect(SelfUpdateService.isAllowedDownloadUrl('not-a-url'), isFalse);
+    });
+
+    test('rejects look-alike hosts that only suffix-spoof githubusercontent', () {
+      // Must not match a domain that merely ends with the string without the dot.
+      expect(
+        SelfUpdateService.isAllowedDownloadUrl(
+          'https://evilgithubusercontent.com/github-production-release-asset/x',
+        ),
+        isFalse,
+      );
+      expect(
+        SelfUpdateService.isAllowedDownloadUrl(
+          'https://githubusercontent.com.evil.example/x',
+        ),
+        isFalse,
+      );
     });
   });
 

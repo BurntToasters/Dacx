@@ -192,7 +192,14 @@ class SelfUpdateService {
   static bool isAllowedDownloadUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return false;
-    return _allowedHosts.contains(uri.host.toLowerCase());
+    return _isAllowedHost(uri.host);
+  }
+
+  static bool _isAllowedHost(String host) {
+    final h = host.toLowerCase();
+    if (_allowedHosts.contains(h)) return true;
+    // GitHub serves release-asset downloads from rotating *.githubusercontent.com
+    return h == 'githubusercontent.com' || h.endsWith('.githubusercontent.com');
   }
 
   static bool _isRedirectStatus(int statusCode) =>
