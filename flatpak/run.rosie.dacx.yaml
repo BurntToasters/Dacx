@@ -1,7 +1,7 @@
 # x-version: 0.9.0-beta.1
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
-runtime-version: "24.08"
+runtime-version: "25.08"
 sdk: org.freedesktop.Sdk
 command: dacx
 finish-args:

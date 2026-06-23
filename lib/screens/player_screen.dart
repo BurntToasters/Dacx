@@ -2415,6 +2415,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
         }
         break;
+      case 'seek_relative':
+        if (cmd.positionMs != null) {
+          final target = _position + Duration(milliseconds: cmd.positionMs!);
+          unawaited(
+            _playerService.seek(
+              Duration(
+                milliseconds: target.inMilliseconds.clamp(
+                  0,
+                  _duration.inMilliseconds,
+                ),
+              ),
+            ),
+          );
+        }
+        break;
       case 'loop':
         final v = cmd.value ?? 0.0;
         final mode = v >= 1.5

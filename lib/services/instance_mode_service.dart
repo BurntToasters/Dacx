@@ -66,7 +66,9 @@ class InstanceModeService {
       }
       return true;
     } catch (e) {
-      debugPrint('Dacx: setAllowMultipleInstances failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: setAllowMultipleInstances failed: $e');
+      }
       return false;
     }
   }

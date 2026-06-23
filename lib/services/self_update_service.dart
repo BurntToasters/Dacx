@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart' as cryptography;
+import 'package:cryptography_plus/cryptography_plus.dart' as cryptography;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
