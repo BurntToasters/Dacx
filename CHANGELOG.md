@@ -18,7 +18,7 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 *This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
 ## Changes in `v0.9.0-beta.3:`
-* **Updater:** Addressed an issue where the security policies on URLs got too strict and prevented updates.
+* **Updater:** Addressed an issue where the security policies on URLs did not have the new github redirect cdn added. (Beta users on 0.9.0 Beta 1 and Beta 2 need to manually update; sorry! Good thing for betas amiright :P)
 
 ## Changes in `v0.9.0-beta.2:`
 * **Linux:** Added AppImage and Flatpak support! Both are experimental until 0.9.0 is not in a beta.
