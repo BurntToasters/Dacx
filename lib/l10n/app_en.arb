@@ -165,6 +165,8 @@
   "dialogPlayQueueAddFiles": "Add files…",
   "dialogKeyboardShortcutsTitle": "Keyboard shortcuts",
   "dialogKeyCaptureTitle": "Press a key combination",
+  "dialogMacInstallLocationTitle": "Move Dacx to Applications",
+  "dialogMacInstallLocationMessage": "Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.",
 
   "actionReset": "Reset",
   "actionResetAll": "Reset all",

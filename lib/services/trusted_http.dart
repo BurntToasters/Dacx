@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -14,6 +15,10 @@ typedef HttpGet =
 
 typedef HttpStreamFn =
     Future<http.StreamedResponse> Function(http.BaseRequest request);
+typedef ProcessRunner =
+    Future<ProcessResult> Function(String executable, List<String> arguments);
+
+const windowsCertificateStoreHydrationTimeout = Duration(seconds: 10);
 
 /// Hydrates [SecurityContext] with base64-encoded DER certificates (one per line).
 void applyTrustedCertificatesFromBase64Lines(
@@ -40,7 +45,24 @@ Future<void> _hydrateBundledMozillaRoots(SecurityContext context) async {
   }
 }
 
-Future<void> _hydrateWindowsCertificateStore(SecurityContext context) async {
+@visibleForTesting
+Future<void> hydrateWindowsCertificateStoreForTesting(
+  SecurityContext context, {
+  required ProcessRunner runProcess,
+  Duration timeout = windowsCertificateStoreHydrationTimeout,
+}) {
+  return _hydrateWindowsCertificateStore(
+    context,
+    runProcess: runProcess,
+    timeout: timeout,
+  );
+}
+
+Future<void> _hydrateWindowsCertificateStore(
+  SecurityContext context, {
+  ProcessRunner runProcess = Process.run,
+  Duration timeout = windowsCertificateStoreHydrationTimeout,
+}) async {
   const stores = <String>[
     r'Cert:\LocalMachine\Root',
     r'Cert:\CurrentUser\Root',
@@ -55,14 +77,19 @@ Future<void> _hydrateWindowsCertificateStore(SecurityContext context) async {
       )
       .join('; ');
 
-  final result = await Process.run('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-Command',
-    command,
-  ]);
+  late final ProcessResult result;
+  try {
+    result = await runProcess('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command,
+    ]).timeout(timeout);
+  } on TimeoutException {
+    return;
+  }
 
   if (result.exitCode != 0) return;
 

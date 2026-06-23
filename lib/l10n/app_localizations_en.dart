@@ -415,6 +415,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dialogKeyCaptureTitle => 'Press a key combination';
 
   @override
+  String get dialogMacInstallLocationTitle => 'Move Dacx to Applications';
+
+  @override
+  String get dialogMacInstallLocationMessage =>
+      'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.';
+
+  @override
   String get actionReset => 'Reset';
 
   @override

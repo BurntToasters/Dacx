@@ -7,6 +7,7 @@
  * Skipped silently if `flutter` is not on PATH.
  */
 import { spawnSync } from "node:child_process";
+import crossSpawn from "cross-spawn";
 
 const which = spawnSync(
   process.platform === "win32" ? "where" : "which",
@@ -18,13 +19,12 @@ if (which.status !== 0) {
   process.exit(0);
 }
 
-const r = spawnSync(
+const r = crossSpawn.sync(
   "fvm",
   ["flutter", "pub", "outdated", "--no-dev-dependencies", "--up-to-date"],
   {
     encoding: "utf8",
     windowsHide: true,
-    shell: true,
   },
 );
 

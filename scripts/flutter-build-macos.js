@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import crossSpawn from 'cross-spawn';
 import {
   hasXcodebuildBinary,
   loadLocalDotEnv,
@@ -64,10 +65,9 @@ if (teamId) {
   flutterArgs.push(`--dart-define=DACX_APPLE_TEAM_ID=${teamId}`);
 }
 
-const result = spawnSync('fvm', flutterArgs, {
+const result = crossSpawn.sync('fvm', flutterArgs, {
   stdio: 'inherit',
   env,
-  shell: true,
 });
 
 if (result.error) {

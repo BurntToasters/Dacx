@@ -95,6 +95,7 @@
     "localbuild:linux": "npm run build:linux && npm run release:package:linux && dotenv -e .env -- node scripts/post-release-assets.js"
   },
   "devDependencies": {
+    "cross-spawn": "^7.0.6",
     "dotenv-cli": "^8.0.0"
   }
 }

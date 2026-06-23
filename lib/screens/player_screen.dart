@@ -98,8 +98,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasAlbumArtTrack = false;
   String? _albumArtTrackId;
   bool _mixActive = false;
-  List<String>? _cachedAudioIds;
-  List<String>? _cachedVideoIds;
+  final _mixLoadState = PlaybackMixLoadState();
+  bool _fileOpenInProgress = false;
   bool _mixReloadInFlight = false;
 
   Duration _position = Duration.zero;
@@ -356,26 +356,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }),
       _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
-        unawaited(_refreshChaptersIfNeeded());
-        // Cache numeric ids so the next open() can pre-set lavfi-complex.
-        final aIds = tracks.audio
-            .where((t) => t.id != 'auto' && t.id != 'no')
-            .map((t) => t.id)
-            .where((id) => int.tryParse(id) != null)
-            .toList(growable: false);
-        final vIds = tracks.video
-            .where((t) => t.id != 'auto' && t.id != 'no')
-            .map((t) => t.id)
-            .where((id) => int.tryParse(id) != null)
-            .toList(growable: false);
-        if (aIds.isNotEmpty) _cachedAudioIds = aIds;
-        if (vIds.isNotEmpty) _cachedVideoIds = vIds;
-        if (_settings.multiAudioMix &&
-            aIds.length >= 2 &&
-            !_mixActive &&
-            !_mixReloadInFlight) {
-          unawaited(_reloadCurrentForMixChange());
-        }
+        if (_fileOpenInProgress) return;
+        _cacheTracksForCurrentLoad(tracks, refreshChapters: true);
       }),
       _playerService.completedStream.listen((completed) {
         if (!mounted || _isDisposed || !completed) return;
@@ -843,18 +825,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _log('file_picker_open_requested');
     try {
       final initialDirectory = _settings.lastOpenDirectory;
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.any,
         lockParentWindow: true,
-        allowMultiple: false,
         initialDirectory: initialDirectory,
       );
 
-      if (result == null) {
+      if (file == null) {
         _log('file_picker_cancelled');
         return;
       }
-      final path = result.files.single.path;
+      final path = file.path;
       if (path == null || path.trim().isEmpty) {
         _log('file_picker_invalid_path', severity: DebugSeverity.warn);
         if (mounted) {
@@ -1011,6 +992,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _playback.chapterGate.invalidate();
     setState(() {
       _currentFile = normalizedPath;
+      _currentTracks = null;
+      _currentTrackSelection = null;
       _chapters = const [];
       _isAudioFile = PlayerPathUtils.isAudioExtension(ext);
       _hasVideoOutput = false;
@@ -1028,20 +1011,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     try {
-      String preOpenLavfi = '';
-      if (_settings.multiAudioMix &&
-          _cachedAudioIds != null &&
-          _cachedAudioIds!.length >= 2) {
-        final aIds = _cachedAudioIds!;
-        preOpenLavfi = PlaybackMixPolicy.buildLavfiComplex(
-          audioIds: aIds,
-          videoTrackId: _cachedVideoIds?.isNotEmpty == true
-              ? _cachedVideoIds!.first
-              : null,
-        );
-      }
-      await _playerService.setProperty('lavfi-complex', preOpenLavfi);
-      _mixActive = preOpenLavfi.isNotEmpty;
+      _fileOpenInProgress = true;
+      _mixLoadState.reset();
+      await _playerService.setProperty('lavfi-complex', '');
+      _mixActive = false;
       await _playerService.open(
         normalizedPath,
         play: forcePlay || _settings.autoPlay,
@@ -1074,9 +1047,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       }
       return;
+    } finally {
+      _fileOpenInProgress = false;
     }
 
     if (!_playback.isLoadCurrent(gen) || _isDisposed) return;
+    _cacheTracksForCurrentLoad(_playerService.player.state.tracks);
 
     // Load the same source into the seek preview service (no-op when the
     // feature is disabled or for audio-only files).
@@ -1129,6 +1105,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
         duration: _duration,
       ),
     );
+  }
+
+  void _cacheTracksForCurrentLoad(
+    Tracks tracks, {
+    bool refreshChapters = false,
+  }) {
+    _currentTracks = tracks;
+    if (refreshChapters) {
+      unawaited(_refreshChaptersIfNeeded());
+    }
+    _mixLoadState.update(
+      audioIds: tracks.audio.map((track) => track.id),
+      videoIds: tracks.video.map((track) => track.id),
+    );
+    if (_settings.multiAudioMix &&
+        _mixLoadState.canMix &&
+        !_mixActive &&
+        !_fileOpenInProgress) {
+      unawaited(_applyMultiAudioMix());
+    }
   }
 
   void _onDragDone(DropDoneDetails details) {
@@ -3097,10 +3093,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _pickFilesToEnqueue() async {
     try {
-      final result = await FilePicker.pickFiles(
-        allowMultiple: true,
-        type: FileType.media,
-      );
+      final result = await FilePicker.pickFiles(type: FileType.media);
       if (result == null) return;
       final paths = result.paths
           .whereType<String>()

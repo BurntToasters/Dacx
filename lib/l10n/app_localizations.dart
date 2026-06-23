@@ -802,6 +802,18 @@ abstract class AppLocalizations {
   /// **'Press a key combination'**
   String get dialogKeyCaptureTitle;
 
+  /// No description provided for @dialogMacInstallLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Move Dacx to Applications'**
+  String get dialogMacInstallLocationTitle;
+
+  /// No description provided for @dialogMacInstallLocationMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.'**
+  String get dialogMacInstallLocationMessage;
+
   /// No description provided for @actionReset.
   ///
   /// In en, this message translates to:
