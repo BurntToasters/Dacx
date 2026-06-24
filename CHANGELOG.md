@@ -6,36 +6,20 @@
 
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
-| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-x86_64.AppImage) |
-| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
-| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
+| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/S3-Sidekick/releases/download/v0.9.1/S3-Sidekick-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-x86_64.AppImage) |
+| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-arm64.deb)--> |
+| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.rpm)--> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-x86_64.flatpak) |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/IYERIS/releases/download/v1.0.4/IYERIS-Linux-aarch64.flatpak)--> |
 
 > [!IMPORTANT]
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
-*This app is currently unstable. Bugs, issues, and rough edges are expected.*
 
-## Changes in `v0.9.0-beta.5:`
-* **macOS:** Fixed an issue with the macOS updater (the allowlist from dart wasn't added to the macOS helper, sorry!! Users on macOS will have to still manually update to this version but this should be the fix!)
+## Changes in `v0.9.0-beta.6 (RC):`
+* **General:** Misc bug fixes and codebase improvements in preparation for `v0.9.0 STABLE`.
 
-## Changes in `v0.9.0-beta.4:`
-
-- **NEW - Localization completeness:** All user-facing hardcoded strings are now localized. Covered in this pass: transport control tooltips ("Previous Track", "Next Track", "Play Queue"); folder + URL button and dialog labels; media info metadata labels (Source, Duration, Resolution, Audio Tracks, etc.); folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI (title, buttons, empty state); accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button). Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
-- **Testing:** 342 tests passing. Code verified clean with zero lint issues.
-- **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.
-- **PKG:** Updated packages.
-
-## Changes in `v0.9.0-beta.3:`
-* **Updater:** Addressed an issue where the security policies on URLs did not have the new github redirect cdn added. (Beta users on 0.9.0 Beta 1 and Beta 2 need to manually update; sorry! Good thing for betas amiright :P)
-
-## Changes in `v0.9.0-beta.2:`
-* **Linux:** Added AppImage and Flatpak support! Both are experimental until 0.9.0 is not in a beta.
-  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
-  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.5/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
-
-## Changes in `v0.9.0-beta.1:`
+## Changes in `v0.9.0:`
 ### UI - Major UI Overhaul!
 The UI has been revamped to provide a way better user experience and UI moving forward.
   * **Playhead and controllers:** The playhead and controller buttons for video/audio has been center aligned.
@@ -43,6 +27,12 @@ The UI has been revamped to provide a way better user experience and UI moving f
   * **Settings:** Minor tweaks and fixes to the UI.
   * **Misc:** Color scheme improvements, animation updates, general cleanup.
 
+* **NEW - Linux AppImage and Flatpak:** Added AppImage and Flatpak support! Both are experimental until 0.9.0 is not in a beta.
+  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
+  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0-beta.6/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
+- **NEW - Localization completeness:** All user-facing hardcoded strings are now localized. Covered in this pass: transport control tooltips ("Previous Track", "Next Track", "Play Queue"); folder + URL button and dialog labels; media info metadata labels (Source, Duration, Resolution, Audio Tracks, etc.); folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI (title, buttons, empty state); accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button). Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
+- **Testing:** 342 tests passing. Code verified clean with zero lint issues.
+- **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.
 * **Stability:** Reset player track and multi-audio mix state on each new media load so stale audio/video IDs cannot leak into the next file.
 * **MacOS:** Added a launch warning when packaged Dacx is run outside `/Applications/Dacx.app`; the self-updater still targets `/Applications/Dacx.app`.
 * **Windows:** Added a timeout around certificate-store hydration used by update HTTP requests.
