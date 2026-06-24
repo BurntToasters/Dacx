@@ -18,4 +18,4 @@ The recommended install method is to either use the AppImage with [App Manager](
 * **Fedora (x64):** Download the latest RPM package: **[HERE](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm)**.
 * **OTHER (x64):** I also provide a generic unpackaged binary **[HERE](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.tar.gz)**.
 
-* **ARM64:** There is no support for Linux arm64 on Dacx. This is not a priority of mine due to the low user-base of arm64 linux. If this project gets popular and it becomes a widely requested feature, it may be something I would look into.
+**ARM64:** There is no support for Linux arm64 on Dacx. This is not a priority of mine due to the low user-base of arm64 linux. If this project gets popular and it becomes a widely requested feature, it may be something I would look into.
