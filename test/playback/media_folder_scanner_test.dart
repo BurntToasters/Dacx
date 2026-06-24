@@ -1,10 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:dacx/playback/media_folder_scanner.dart';
 
 void main() {
+  String relFrom(String root, String fullPath) {
+    return p.relative(fullPath, from: root).replaceAll('\\', '/');
+  }
+
   group('MediaFolderScanner', () {
     test('recursively keeps supported media and sorts paths', () async {
       final dir = Directory.systemTemp.createTempSync('dacx_scan_test_');
@@ -18,10 +23,10 @@ void main() {
 
       expect(result.skipped, 1);
       expect(result.truncated, 0);
-      expect(
-        result.paths.map((path) => path.replaceFirst('${dir.path}/', '')),
-        ['nested/a.mkv', 'z.mp3'],
-      );
+      expect(result.paths.map((path) => relFrom(dir.path, path)), [
+        'nested/a.mkv',
+        'z.mp3',
+      ]);
     });
 
     test('caps results and reports truncation', () async {
@@ -35,10 +40,11 @@ void main() {
 
       expect(result.paths.length, 3);
       expect(result.truncated, 2);
-      expect(
-        result.paths.map((path) => path.replaceFirst('${dir.path}/', '')),
-        ['0.mp3', '1.mp3', '2.mp3'],
-      );
+      expect(result.paths.map((path) => relFrom(dir.path, path)), [
+        '0.mp3',
+        '1.mp3',
+        '2.mp3',
+      ]);
     });
 
     test('returns empty result when folder is missing', () async {
@@ -68,10 +74,12 @@ void main() {
 
       final result = await MediaFolderScanner.scan(dir.path);
 
-      expect(
-        result.paths.map((path) => path.replaceFirst('${dir.path}/', '')),
-        ['track1.mp3', 'track2.mp3', 'track10.mp3', 'track20.mp3'],
-      );
+      expect(result.paths.map((path) => relFrom(dir.path, path)), [
+        'track1.mp3',
+        'track2.mp3',
+        'track10.mp3',
+        'track20.mp3',
+      ]);
     });
   });
 }
