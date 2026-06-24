@@ -24,7 +24,10 @@ void main() {
 
   test('Windows certificate store hydration returns on timeout', () async {
     final context = SecurityContext();
-    Future<Process> startSleepyProcess(String _, List<String> __) {
+    Future<Process> startSleepyProcess(String command, List<String> args) {
+      if (command.isEmpty && args.isNotEmpty) {
+        // Unused in this test path; keep parameters intentionally referenced.
+      }
       if (Platform.isWindows) {
         return Process.start('cmd', [
           '/c',

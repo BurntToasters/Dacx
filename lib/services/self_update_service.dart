@@ -85,7 +85,7 @@ class SelfUpdateService {
   };
   static const int _maxDownloadRedirects = 5;
 
-  static bool _installInFlight = false;
+  bool _installInFlight = false;
 
   final DebugLogService? _debugLog;
   final HttpStreamFn _httpStream;
