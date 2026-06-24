@@ -7,6 +7,7 @@ This is a quick writeup on how to install Dacx on Windows, macOS, and Linux:
 
 ### macOS:
 * **Universal (x64 and arm64):** Download the latest `.DMG` release and move `Dacx.app` into your `/Applications` folder. Download the DMG **[HERE](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.dmg)**.
+  * **IMPORTANT:** The Dacx auto-updater **ONLY** works if the application is inside the main `/Applications` folder.
 
 ### Linux:
 The recommended install method is to either use the AppImage with [App Manager](https://github.com/kem-a/AppManager) (or on its own), or to use the Flatpak binary (experimental).
