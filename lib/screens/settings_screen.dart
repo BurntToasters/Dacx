@@ -339,6 +339,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
+  String _accentColorName(AppLocalizations l10n, AccentColor ac) {
+    return switch (ac) {
+      AccentColor.blueGrey => l10n.accentColorBlueGrey,
+      AccentColor.blue => l10n.accentColorBlue,
+      AccentColor.teal => l10n.accentColorTeal,
+      AccentColor.purple => l10n.accentColorPurple,
+      AccentColor.red => l10n.accentColorRed,
+      AccentColor.orange => l10n.accentColorOrange,
+      AccentColor.green => l10n.accentColorGreen,
+      AccentColor.pink => l10n.accentColorPink,
+    };
+  }
+
   Widget _loopModeTile() {
     final l10n = AppLocalizations.of(context);
     return ListTile(
@@ -378,7 +391,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_s.debugModeEnabled) ...[
             const SizedBox(height: 4),
             Text(
-              l10n.settingsHwAccelDebugActive(hwAccelEnabled ? 'Yes' : 'No'),
+              l10n.settingsHwAccelDebugActive(
+                hwAccelEnabled ? l10n.hwAccelStateYes : l10n.hwAccelStateNo,
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w600,
@@ -463,7 +478,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: AccentColor.values.map((ac) {
           final isSelected = ac == _s.accentColor;
           return Semantics(
-            label: l10n.semanticsAccentColor(ac.name),
+            label: l10n.semanticsAccentColor(_accentColorName(l10n, ac)),
             button: true,
             selected: isSelected,
             child: GestureDetector(

@@ -67,7 +67,9 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
       child: Semantics(
         slider: true,
         label: AppLocalizations.of(context).semanticsSeekBar,
-        value: '$positionLabel of $durationLabel',
+        value: AppLocalizations.of(
+          context,
+        ).semanticsSeekBarValue(positionLabel, durationLabel),
         child: LayoutBuilder(
           builder: (context, constraints) {
             return Stack(

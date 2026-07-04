@@ -268,6 +268,13 @@
   "tooltipExitMiniPlayer": "Exit mini-player",
 
   "semanticsSeekBar": "Seek bar",
+  "semanticsSeekBarValue": "{position} of {duration}",
+  "@semanticsSeekBarValue": {
+    "placeholders": {
+      "position": { "type": "String", "example": "1:23" },
+      "duration": { "type": "String", "example": "4:56" }
+    }
+  },
   "semanticsAccentColor": "Accent color {name}",
   "@semanticsAccentColor": {
     "placeholders": { "name": { "type": "String" } }
@@ -345,5 +352,61 @@
     "placeholders": {
       "pct": { "type": "int" }
     }
-  }
+  },
+
+  "shortcutOpenFile": "Open file",
+  "shortcutReopenLast": "Reopen last file",
+  "shortcutPlayPause": "Play / pause",
+  "shortcutSeekForward": "Seek forward",
+  "shortcutSeekBack": "Seek backward",
+  "shortcutVolumeUp": "Volume up",
+  "shortcutVolumeDown": "Volume down",
+  "shortcutToggleMute": "Toggle mute",
+  "shortcutToggleFullscreen": "Toggle fullscreen",
+  "shortcutExitFullscreen": "Exit fullscreen",
+  "shortcutChapterNext": "Next chapter",
+  "shortcutChapterPrev": "Previous chapter",
+  "shortcutScreenshot": "Save screenshot",
+  "shortcutCycleAudioTrack": "Cycle audio track",
+  "shortcutCycleSubtitleTrack": "Cycle subtitle track",
+  "shortcutToggleSubtitle": "Toggle subtitle visibility",
+  "shortcutToggleEqualizer": "Toggle equalizer",
+  "shortcutPlaylistNext": "Next in queue",
+  "shortcutPlaylistPrev": "Previous in queue",
+  "shortcutToggleCompactMode": "Toggle mini-player",
+  "shortcutNewWindow": "Open new window",
+
+  "eqPresetFlat": "Flat",
+  "eqPresetBassBoost": "Bass Boost",
+  "eqPresetBassReduce": "Bass Reduce",
+  "eqPresetTrebleBoost": "Treble Boost",
+  "eqPresetVocal": "Vocal",
+  "eqPresetRock": "Rock",
+  "eqPresetElectronic": "Electronic",
+  "eqPresetAcoustic": "Acoustic",
+  "eqPresetLoudness": "Loudness",
+  "eqPresetClassical": "Classical",
+
+  "subtitleTrackOff": "Off",
+  "keybindsTip": "Tip: press F1 or ? at any time to reopen this dialog.",
+  "keybindsNone": "(none)",
+  "dismissBarrierLabel": "Dismiss",
+  "chapterFallbackLabel": "Chapter {index}",
+  "@chapterFallbackLabel": {
+    "placeholders": { "index": { "type": "int", "example": "3" } }
+  },
+  "trackFallbackLabel": "Track {id}",
+  "@trackFallbackLabel": {
+    "placeholders": { "id": { "type": "String", "example": "2" } }
+  },
+  "hwAccelStateYes": "Yes",
+  "hwAccelStateNo": "No",
+  "accentColorBlueGrey": "Blue Grey",
+  "accentColorBlue": "Blue",
+  "accentColorTeal": "Teal",
+  "accentColorPurple": "Purple",
+  "accentColorRed": "Red",
+  "accentColorOrange": "Orange",
+  "accentColorGreen": "Green",
+  "accentColorPink": "Pink"
 }

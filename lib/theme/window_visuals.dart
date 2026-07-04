@@ -155,5 +155,11 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
 }
 
 extension BuildContextWindowVisuals on BuildContext {
-  WindowVisuals get windowVisuals => Theme.of(this).extension<WindowVisuals>()!;
+  WindowVisuals get windowVisuals =>
+      Theme.of(this).extension<WindowVisuals>() ??
+      WindowVisuals.fromScheme(
+        Theme.of(this).colorScheme,
+        blurEnabled: false,
+        blurStrength: 0.0,
+      );
 }

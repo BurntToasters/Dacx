@@ -2550,14 +2550,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
         title: title,
         language: language,
         fallbackId: fallbackId,
+        fallbackLabel: AppLocalizations.of(
+          context,
+        ).trackFallbackLabel(fallbackId),
       );
 
   // ── Chapters ──────────────────────────────────────────────
 
   Future<void> _refreshChapters({int? expectedCount}) async {
+    final l10n = AppLocalizations.of(context);
     final list = await ChapterListLoader.load(
       readProperty: _playerService.getProperty,
       expectedCount: expectedCount,
+      fallbackTitle: (i) => l10n.chapterFallbackLabel(i + 1),
     );
     if (!mounted) return;
     setState(() => _chapters = list);
@@ -2658,6 +2663,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _settings.eqEnabled ? l10n.osdStateOn : l10n.osdStateOff,
       ),
     );
+  }
+
+  String _eqPresetLabel(AppLocalizations l10n, String id) {
+    return switch (id) {
+      'flat' => l10n.eqPresetFlat,
+      'bass_boost' => l10n.eqPresetBassBoost,
+      'bass_reduce' => l10n.eqPresetBassReduce,
+      'treble_boost' => l10n.eqPresetTrebleBoost,
+      'vocal' => l10n.eqPresetVocal,
+      'rock' => l10n.eqPresetRock,
+      'electronic' => l10n.eqPresetElectronic,
+      'acoustic' => l10n.eqPresetAcoustic,
+      'loudness' => l10n.eqPresetLoudness,
+      'classical' => l10n.eqPresetClassical,
+      _ => id,
+    };
   }
 
   // ── Multi-audio mix ───────────────────────────────────────
@@ -3110,7 +3131,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final result = await showGeneralDialog<String>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: AppLocalizations.of(context).dismissBarrierLabel,
       barrierColor: Colors.black.withValues(alpha: 0.20),
       transitionDuration: _sheetTransitionDuration,
       pageBuilder: (ctx, _, _) {
@@ -3366,9 +3387,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'screenshot':
         unawaited(_takeScreenshot());
         break;
-      case 'mix':
-        unawaited(_applyMultiAudioMix());
-        break;
       case 'keybinds':
         unawaited(_showKeybindsDialog());
         break;
@@ -3458,7 +3476,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Expanded(
                       child: Text(
                         t.id == 'no'
-                            ? 'Off'
+                            ? AppLocalizations.of(ctx).subtitleTrackOff
                             : _trackLabel(t.title, t.language, t.id),
                       ),
                     ),
@@ -3555,7 +3573,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           .map(
                             (p) => DropdownMenuItem(
                               value: p.id,
-                              child: Text(p.label),
+                              child: Text(_eqPresetLabel(l10n, p.id)),
                             ),
                           )
                           .toList(),
@@ -3676,7 +3694,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                         child: Text(
-                          'Tip: press F1 or ? at any time to reopen this dialog.',
+                          AppLocalizations.of(ctx).keybindsTip,
                           style: Theme.of(ctx).textTheme.bodySmall,
                         ),
                       ),
@@ -3687,9 +3705,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             const <String>[];
                         return ListTile(
                           dense: true,
-                          title: Text(shortcutActionLabel(a)),
+                          title: Text(
+                            shortcutActionLabel(
+                              a,
+                              l10n: AppLocalizations.of(ctx),
+                            ),
+                          ),
                           subtitle: Text(
-                            accels.isEmpty ? '(none)' : accels.join(', '),
+                            accels.isEmpty
+                                ? AppLocalizations.of(ctx).keybindsNone
+                                : accels.join(', '),
                             style: Theme.of(ctx).textTheme.bodySmall,
                           ),
                           trailing: Wrap(

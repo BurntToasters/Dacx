@@ -363,8 +363,6 @@ static void my_application_open(GApplication* application, GFile** files,
     if (n_files > 0 && files != nullptr) {
       g_autofree gchar* path = g_file_get_path(files[0]);
       if (path != nullptr) {
-        // Build new argv before freeing previous so a g_new0 failure can't
-        // leave the field dangling.
         char** next_args = g_new0(char*, 2);
         next_args[0] = g_strdup(path);
         next_args[1] = nullptr;
@@ -376,6 +374,13 @@ static void my_application_open(GApplication* application, GFile** files,
     GtkWindow* window = my_application_create_window(
         self, application, self->dart_entrypoint_arguments, TRUE);
     gtk_window_present(window);
+    for (gint i = 1; i < n_files; i++) {
+      if (files[i] == nullptr) continue;
+      g_autofree gchar* extra_path = g_file_get_path(files[i]);
+      if (extra_path != nullptr) {
+        dacx_handle_open_path(self, extra_path);
+      }
+    }
     return;
   }
 

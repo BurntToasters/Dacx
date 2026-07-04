@@ -81,7 +81,14 @@ void main(List<String> args) async {
 
   // Restore saved window geometry or use defaults.
   final savedSize = settings.rememberWindow ? settings.windowSize : null;
-  final savedPos = settings.rememberWindow ? settings.windowPosition : null;
+  var savedPos = settings.rememberWindow ? settings.windowPosition : null;
+
+  if (savedPos != null) {
+    final effectiveSize = savedSize ?? const Size(960, 600);
+    if (!_isPositionOnScreen(savedPos, effectiveSize)) {
+      savedPos = null;
+    }
+  }
 
   final windowOptions = WindowOptions(
     size: savedSize ?? const Size(960, 600),
@@ -186,6 +193,34 @@ void main(List<String> args) async {
       await showWindowIfReady();
     }),
   );
+}
+
+bool _isPositionOnScreen(Offset pos, Size windowSize) {
+  // The Flutter 3.44 Display API exposes each display's size but not its
+  // origin, so an exact multi-monitor bounds check is impossible here. Use the
+  // summed logical extent of all connected displays as a generous upper bound.
+  // Empty display list (info not yet available) means "don't reset" so we never
+  // regress a valid position. This catches the common failure mode: a position
+  // saved on a monitor that has since been disconnected, leaving the window
+  // far beyond the remaining desktop extent.
+  final displays = PlatformDispatcher.instance.displays;
+  if (displays.isEmpty) return true;
+  var totalW = 0.0;
+  var totalH = 0.0;
+  for (final d in displays) {
+    final dpr = d.devicePixelRatio <= 0 ? 1.0 : d.devicePixelRatio;
+    totalW += d.size.width / dpr;
+    totalH += d.size.height / dpr;
+  }
+  if (totalW <= 0 || totalH <= 0) return true;
+  const margin = 80.0;
+  final left = pos.dx;
+  final top = pos.dy;
+  final right = pos.dx + windowSize.width;
+  final bottom = pos.dy + windowSize.height;
+  final withinX = right > (-totalW + margin) && left < (totalW - margin);
+  final withinY = bottom > (-totalH + margin) && top < (totalH - margin);
+  return withinX && withinY;
 }
 
 /// Extracts the first CLI argument that looks like a file path.
