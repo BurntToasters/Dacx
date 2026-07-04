@@ -14,7 +14,7 @@
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 
-## Changes in `v0.9.0:`
+## Changes in `v0.9.0-beta.7 (RC):`
 ### UI - Major UI Overhaul!
 The UI has been revamped to provide a way better user experience and UI moving forward.
   * **Playhead and controllers:** The playhead and controller buttons for video/audio has been center aligned.
