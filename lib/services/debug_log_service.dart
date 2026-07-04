@@ -2,6 +2,8 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/playable_source.dart';
+
 enum DebugLogCategory { playback, settings, update, hwaccel, ui, system, error }
 
 enum DebugSeverity { info, warn, error }
@@ -108,12 +110,15 @@ class DebugLogService extends ChangeNotifier {
     if (_entries.isEmpty) return 'No debug log entries.';
     final lines = <String>[];
     for (final entry in _entries) {
-      lines.add(_formatEntry(entry, redactSensitive: redactSensitive));
+      lines.add(formatEntry(entry, redactSensitive: redactSensitive));
     }
     return lines.join('\n');
   }
 
-  String _formatEntry(DebugLogEntry entry, {required bool redactSensitive}) {
+  static String formatEntry(
+    DebugLogEntry entry, {
+    bool redactSensitive = true,
+  }) {
     final ts = entry.timestamp.toIso8601String();
     final sev = entry.severity.name.toUpperCase();
     final cat = entry.category.name.toUpperCase();
@@ -140,25 +145,35 @@ class DebugLogService extends ChangeNotifier {
     return buf.toString();
   }
 
-  String? _sanitizeDetailValue(String key, Object? value) {
+  static String? _sanitizeDetailValue(String key, Object? value) {
     final text = value?.toString();
     if (text == null) return null;
     if (_isSensitiveKey(key)) return '<redacted>';
     final normalized = text.replaceAll('\n', r'\n');
+    if (PlayableSource.isSupportedUrl(normalized)) {
+      return PlayableSource.displaySafeUrl(normalized);
+    }
     if (_isPathLikeKey(key)) {
       return _redactPath(normalized);
     }
     return _sanitizeText(normalized);
   }
 
-  String? _sanitizeText(String? value) {
+  static String? _sanitizeText(String? value) {
     if (value == null) return null;
     final trimmed = value.trim();
     if (trimmed.isEmpty) return trimmed;
+    if (PlayableSource.isSupportedUrl(trimmed)) {
+      return PlayableSource.displaySafeUrl(trimmed);
+    }
     if (_looksLikePath(trimmed)) {
       return _redactPath(trimmed);
     }
     return value
+        .replaceAllMapped(_urlPattern, (match) {
+          final candidate = match.group(0) ?? '';
+          return PlayableSource.displaySafeUrl(candidate);
+        })
         .replaceAllMapped(_pathPattern, (match) {
           final prefix = match.group(1) ?? '';
           final candidate = match.group(2) ?? '';
@@ -167,7 +182,7 @@ class DebugLogService extends ChangeNotifier {
         .replaceAll('\n', r'\n');
   }
 
-  bool _isPathLikeKey(String key) {
+  static bool _isPathLikeKey(String key) {
     final normalized = key.toLowerCase();
     if (normalized == 'url' ||
         normalized.endsWith('_url') ||
@@ -180,7 +195,7 @@ class DebugLogService extends ChangeNotifier {
         normalized.contains('cwd');
   }
 
-  bool _isSensitiveKey(String key) {
+  static bool _isSensitiveKey(String key) {
     final normalized = key.toLowerCase();
     return normalized.contains('token') ||
         normalized.contains('secret') ||
@@ -195,13 +210,13 @@ class DebugLogService extends ChangeNotifier {
         normalized.contains('session');
   }
 
-  bool _looksLikePath(String value) {
+  static bool _looksLikePath(String value) {
     return value.startsWith('/') ||
         value.startsWith(r'\\') ||
         RegExp(r'^[A-Za-z]:[\\/]').hasMatch(value);
   }
 
-  String _redactPath(String value) {
+  static String _redactPath(String value) {
     final normalized = value.replaceAll('\\', '/');
     final segments = normalized
         .split('/')
@@ -213,5 +228,10 @@ class DebugLogService extends ChangeNotifier {
   static final RegExp _pathPattern = RegExp(
     r"""(^|[\s(="'])((?:[A-Za-z]:[\\/]|\\\\)[^\s,|;"')]+|/(?!/)[^\s,|;"')]+(?:/[^\s,|;"')]+)*)""",
     multiLine: true,
+  );
+
+  static final RegExp _urlPattern = RegExp(
+    r"""https?://[^\s,|;"')<>\]]+""",
+    caseSensitive: false,
   );
 }

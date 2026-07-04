@@ -26,4 +26,20 @@ void main() {
       '1',
     ]);
   });
+
+  test('PlaybackMixLoadState drops stale ids on reset', () {
+    final state = PlaybackMixLoadState()
+      ..update(audioIds: ['1', '2'], videoIds: ['3']);
+
+    expect(state.canMix, isTrue);
+    expect(state.audioIds, ['1', '2']);
+    expect(state.videoIds, ['3']);
+
+    state.reset();
+    state.update(audioIds: ['1'], videoIds: const []);
+
+    expect(state.canMix, isFalse);
+    expect(state.audioIds, ['1']);
+    expect(state.videoIds, isEmpty);
+  });
 }

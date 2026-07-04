@@ -370,7 +370,11 @@ class UpdateService {
       'rosie.run',
       'www.rosie.run',
     };
-    return allowedHosts.contains(uri.host.toLowerCase());
+    final host = uri.host.toLowerCase();
+    if (allowedHosts.contains(host)) return true;
+    // GitHub serves release assets from rotating *.githubusercontent.com
+    return host == 'githubusercontent.com' ||
+        host.endsWith('.githubusercontent.com');
   }
 
   static List<int> _numericParts(String version) {

@@ -1,7 +1,9 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/seek_preview_service.dart';
 
 class SeekSliderWithHover extends StatefulWidget {
@@ -64,8 +66,10 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
     return MergeSemantics(
       child: Semantics(
         slider: true,
-        label: 'Seek bar',
-        value: '$positionLabel of $durationLabel',
+        label: AppLocalizations.of(context).semanticsSeekBar,
+        value: AppLocalizations.of(
+          context,
+        ).semanticsSeekBarValue(positionLabel, durationLabel),
         child: LayoutBuilder(
           builder: (context, constraints) {
             return Stack(
@@ -105,9 +109,19 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                 if (_hoverFraction != null && maxMs > 0)
                   Positioned(
                     left: showPreview
-                        ? (constraints.maxWidth * _hoverFraction!) -
-                              (_previewWidth / 2)
-                        : (constraints.maxWidth * _hoverFraction!) - 28,
+                        ? ((constraints.maxWidth * _hoverFraction!) -
+                                  (_previewWidth / 2))
+                              .clamp(
+                                0.0,
+                                math.max(
+                                  0.0,
+                                  constraints.maxWidth - _previewWidth,
+                                ),
+                              )
+                        : ((constraints.maxWidth * _hoverFraction!) - 28).clamp(
+                            0.0,
+                            math.max(0.0, constraints.maxWidth - 56),
+                          ),
                     top: showPreview ? -(_previewHeight + 34) : -28,
                     child: IgnorePointer(
                       child: Column(

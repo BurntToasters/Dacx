@@ -9,6 +9,7 @@
  * `flutter` is not on PATH (warn only).
  */
 import { spawnSync } from "node:child_process";
+import crossSpawn from "cross-spawn";
 
 if (process.env.DACX_SKIP_BUILD_SMOKE === "1") {
   console.log("Build smoke skipped (DACX_SKIP_BUILD_SMOKE=1).");
@@ -30,11 +31,10 @@ if (which.status !== 0) {
 }
 
 const start = Date.now();
-const r = spawnSync("fvm", ["flutter", "build", "bundle", "--release"], {
+const r = crossSpawn.sync("fvm", ["flutter", "build", "bundle", "--release"], {
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,
-  shell: true,
 });
 const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 const combinedOutput = `${r.stdout ?? ""}${r.stderr ?? ""}`;
@@ -60,5 +60,10 @@ if (r.status !== 0) {
   }
   console.error(`flutter build bundle failed after ${elapsed}s.`);
   process.exit(r.status ?? 1);
+}
+if (/do not support Swift Package Manager/i.test(combinedOutput)) {
+  console.warn(
+    "WARN: Flutter used the known CocoaPods fallback for plugins without SwiftPM support.",
+  );
 }
 console.log(`Build smoke OK (${elapsed}s).`);

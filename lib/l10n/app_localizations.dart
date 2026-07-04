@@ -724,6 +724,36 @@ abstract class AppLocalizations {
   /// **'Skipped {count} unreadable files.'**
   String snackSkippedUnreadableFiles(int count);
 
+  /// No description provided for @snackInvalidStreamUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http:// or https:// URL.'**
+  String get snackInvalidStreamUrl;
+
+  /// No description provided for @snackNoSupportedMediaInFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'No supported media found in that folder.'**
+  String get snackNoSupportedMediaInFolder;
+
+  /// No description provided for @snackFolderScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not scan folder. {detail}'**
+  String snackFolderScanFailed(String detail);
+
+  /// No description provided for @snackFolderScanSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {count} unsupported or unreadable item(s).'**
+  String snackFolderScanSkipped(int count);
+
+  /// No description provided for @snackQueueRemovedMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed {count} missing item(s).'**
+  String snackQueueRemovedMissing(int count);
+
   /// No description provided for @emptyStateMessage.
   ///
   /// In en, this message translates to:
@@ -735,6 +765,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open File'**
   String get buttonOpenFile;
+
+  /// No description provided for @buttonOpenFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Folder'**
+  String get buttonOpenFolder;
+
+  /// No description provided for @buttonOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get buttonOpenUrl;
 
   /// No description provided for @buttonReopenLast.
   ///
@@ -802,6 +844,288 @@ abstract class AppLocalizations {
   /// **'Press a key combination'**
   String get dialogKeyCaptureTitle;
 
+  /// No description provided for @dialogOpenUrlTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get dialogOpenUrlTitle;
+
+  /// No description provided for @dialogOpenUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://example.com/stream.m3u8'**
+  String get dialogOpenUrlHint;
+
+  /// No description provided for @dialogMediaInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Media info'**
+  String get dialogMediaInfoTitle;
+
+  /// No description provided for @dialogMacInstallLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Move Dacx to Applications'**
+  String get dialogMacInstallLocationTitle;
+
+  /// No description provided for @dialogMacInstallLocationMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.'**
+  String get dialogMacInstallLocationMessage;
+
+  /// No description provided for @mediaInfoSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get mediaInfoSource;
+
+  /// No description provided for @mediaInfoType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get mediaInfoType;
+
+  /// No description provided for @mediaInfoDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration'**
+  String get mediaInfoDuration;
+
+  /// No description provided for @mediaInfoResolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolution'**
+  String get mediaInfoResolution;
+
+  /// No description provided for @mediaInfoAudioTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio tracks'**
+  String get mediaInfoAudioTracks;
+
+  /// No description provided for @mediaInfoSubtitleTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle tracks'**
+  String get mediaInfoSubtitleTracks;
+
+  /// No description provided for @mediaInfoChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get mediaInfoChapters;
+
+  /// No description provided for @mediaInfoAudioSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected audio'**
+  String get mediaInfoAudioSelection;
+
+  /// No description provided for @mediaInfoSubtitleSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected subtitles'**
+  String get mediaInfoSubtitleSelection;
+
+  /// No description provided for @mediaInfoTypeUrlStream.
+  ///
+  /// In en, this message translates to:
+  /// **'URL stream'**
+  String get mediaInfoTypeUrlStream;
+
+  /// No description provided for @mediaInfoTypeAudioFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file'**
+  String get mediaInfoTypeAudioFile;
+
+  /// No description provided for @mediaInfoTypeVideoFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Video file'**
+  String get mediaInfoTypeVideoFile;
+
+  /// No description provided for @mediaInfoUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get mediaInfoUnknown;
+
+  /// No description provided for @menuTakeScreenshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Take screenshot'**
+  String get menuTakeScreenshot;
+
+  /// No description provided for @menuMixAllAudioTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Mix all audio tracks'**
+  String get menuMixAllAudioTracks;
+
+  /// No description provided for @menuSeekThumbnailsBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek thumbnails (beta: uses more resources)'**
+  String get menuSeekThumbnailsBeta;
+
+  /// No description provided for @menuQueueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue (empty)'**
+  String get menuQueueEmpty;
+
+  /// No description provided for @menuQueueCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue ({count})'**
+  String menuQueueCount(int count);
+
+  /// No description provided for @menuAddFilesToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files to queue…'**
+  String get menuAddFilesToQueue;
+
+  /// No description provided for @menuShuffleQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle queue'**
+  String get menuShuffleQueue;
+
+  /// No description provided for @menuMiniPlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini-player (always on top)'**
+  String get menuMiniPlayer;
+
+  /// No description provided for @osdAudioTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio: {label}'**
+  String osdAudioTrack(String label);
+
+  /// No description provided for @osdSubtitlesOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitles: Off'**
+  String get osdSubtitlesOff;
+
+  /// No description provided for @osdSubtitlesTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitles: {label}'**
+  String osdSubtitlesTrack(String label);
+
+  /// No description provided for @osdChapter.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter: {title}'**
+  String osdChapter(String title);
+
+  /// No description provided for @osdScreenshotFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot failed'**
+  String get osdScreenshotFailed;
+
+  /// No description provided for @osdScreenshotSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot saved'**
+  String get osdScreenshotSaved;
+
+  /// No description provided for @osdScreenshotSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot save failed'**
+  String get osdScreenshotSaveFailed;
+
+  /// No description provided for @osdEqualizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Equalizer: {state}'**
+  String osdEqualizer(String state);
+
+  /// No description provided for @osdStateOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get osdStateOn;
+
+  /// No description provided for @osdStateOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get osdStateOff;
+
+  /// No description provided for @osdAudioMixOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio mix off'**
+  String get osdAudioMixOff;
+
+  /// No description provided for @osdAudioMixUnsupportedIds.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot mix: unsupported track ids'**
+  String get osdAudioMixUnsupportedIds;
+
+  /// No description provided for @osdAudioMixActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Mixing {count} audio tracks'**
+  String osdAudioMixActive(int count);
+
+  /// No description provided for @osdAudioMixFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not enable audio mix'**
+  String get osdAudioMixFailed;
+
+  /// No description provided for @osdResumedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Resumed at {time}'**
+  String osdResumedAt(String time);
+
+  /// No description provided for @osdNextInQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Next in queue'**
+  String get osdNextInQueue;
+
+  /// No description provided for @osdPreviousInQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous in queue'**
+  String get osdPreviousInQueue;
+
+  /// No description provided for @osdAddedToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to queue'**
+  String get osdAddedToQueue;
+
+  /// No description provided for @osdAddedMultipleToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} to queue'**
+  String osdAddedMultipleToQueue(int count);
+
+  /// No description provided for @osdMiniPlayerOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini-player off'**
+  String get osdMiniPlayerOff;
+
+  /// No description provided for @osdMiniPlayerOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini-player on'**
+  String get osdMiniPlayerOn;
+
   /// No description provided for @actionReset.
   ///
   /// In en, this message translates to:
@@ -838,11 +1162,23 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get actionSave;
 
+  /// No description provided for @actionOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get actionOpen;
+
   /// No description provided for @actionRemove.
   ///
   /// In en, this message translates to:
   /// **'Remove'**
   String get actionRemove;
+
+  /// No description provided for @actionRemoveMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove missing'**
+  String get actionRemoveMissing;
 
   /// No description provided for @actionSetNewBinding.
   ///
@@ -892,11 +1228,257 @@ abstract class AppLocalizations {
   /// **'Open file'**
   String get tooltipOpenFile;
 
+  /// No description provided for @tooltipOpenFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open folder'**
+  String get tooltipOpenFolder;
+
+  /// No description provided for @tooltipOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get tooltipOpenUrl;
+
   /// No description provided for @tooltipRecentFiles.
   ///
   /// In en, this message translates to:
   /// **'Recent files'**
   String get tooltipRecentFiles;
+
+  /// No description provided for @tooltipMediaInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Media info'**
+  String get tooltipMediaInfo;
+
+  /// No description provided for @tooltipPreviousTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Track (PageUp)'**
+  String get tooltipPreviousTrack;
+
+  /// No description provided for @tooltipNextTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Next Track (PageDown)'**
+  String get tooltipNextTrack;
+
+  /// No description provided for @tooltipPlayQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Play Queue'**
+  String get tooltipPlayQueue;
+
+  /// No description provided for @tooltipExitMiniPlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit mini-player'**
+  String get tooltipExitMiniPlayer;
+
+  /// No description provided for @semanticsSeekBar.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek bar'**
+  String get semanticsSeekBar;
+
+  /// No description provided for @semanticsSeekBarValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{position} of {duration}'**
+  String semanticsSeekBarValue(String position, String duration);
+
+  /// No description provided for @semanticsAccentColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Accent color {name}'**
+  String semanticsAccentColor(String name);
+
+  /// No description provided for @updateDialogInstallingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing Dacx {version}'**
+  String updateDialogInstallingTitle(String version);
+
+  /// No description provided for @updateDialogDownloadingVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading and verifying in the update helper...'**
+  String get updateDialogDownloadingVerifying;
+
+  /// No description provided for @updateDialogVerifyingSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying signature...'**
+  String get updateDialogVerifyingSignature;
+
+  /// No description provided for @updateDialogDownloadingProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {downloaded} / {total}'**
+  String updateDialogDownloadingProgress(String downloaded, String total);
+
+  /// No description provided for @updateDialogDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading...'**
+  String get updateDialogDownloading;
+
+  /// No description provided for @updateDialogWillClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Dacx will close to apply the update.'**
+  String get updateDialogWillClose;
+
+  /// No description provided for @updateDialogFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get updateDialogFailedTitle;
+
+  /// No description provided for @updateDialogOpenReleasePage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open release page'**
+  String get updateDialogOpenReleasePage;
+
+  /// No description provided for @updateActionInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install'**
+  String get updateActionInstall;
+
+  /// No description provided for @updateActionView.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get updateActionView;
+
+  /// No description provided for @snackUpdatedToVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated to v{version}'**
+  String snackUpdatedToVersion(String version);
+
+  /// No description provided for @snackUpdateMayHaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update to v{version} may have failed.'**
+  String snackUpdateMayHaveFailed(String version);
+
+  /// No description provided for @debugLogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug Log'**
+  String get debugLogTitle;
+
+  /// No description provided for @debugLogEntryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} entries'**
+  String debugLogEntryCount(int count);
+
+  /// No description provided for @debugLogCopyButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Log'**
+  String get debugLogCopyButton;
+
+  /// No description provided for @debugLogClearButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Log'**
+  String get debugLogClearButton;
+
+  /// No description provided for @debugLogEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No debug events yet.'**
+  String get debugLogEmpty;
+
+  /// No description provided for @updateOutcomeUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-update is not supported on this platform.'**
+  String get updateOutcomeUnsupportedPlatform;
+
+  /// No description provided for @updateOutcomeMissingAsset.
+  ///
+  /// In en, this message translates to:
+  /// **'The release does not include an installer for this platform.'**
+  String get updateOutcomeMissingAsset;
+
+  /// No description provided for @updateOutcomeMissingChecksums.
+  ///
+  /// In en, this message translates to:
+  /// **'The release does not include a checksums file. Cannot verify download.'**
+  String get updateOutcomeMissingChecksums;
+
+  /// No description provided for @updateOutcomeMissingSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'The release does not include a signed update manifest. Cannot verify update authenticity.'**
+  String get updateOutcomeMissingSignature;
+
+  /// No description provided for @updateOutcomeDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed.'**
+  String get updateOutcomeDownloadFailed;
+
+  /// No description provided for @updateOutcomeChecksumMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded file failed checksum verification. Refusing to install.'**
+  String get updateOutcomeChecksumMismatch;
+
+  /// No description provided for @updateOutcomeExtractionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not extract the update package.'**
+  String get updateOutcomeExtractionFailed;
+
+  /// No description provided for @updateOutcomeSignatureInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app failed code-signature verification.'**
+  String get updateOutcomeSignatureInvalid;
+
+  /// No description provided for @updateOutcomeBundleIdMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app has an unexpected bundle identifier. Refusing to install.'**
+  String get updateOutcomeBundleIdMismatch;
+
+  /// No description provided for @updateOutcomeVersionMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app version does not match the selected update. Refusing to install.'**
+  String get updateOutcomeVersionMismatch;
+
+  /// No description provided for @updateOutcomeTeamIdMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded app is signed by an unexpected developer. Refusing to install.'**
+  String get updateOutcomeTeamIdMismatch;
+
+  /// No description provided for @updateOutcomeGatekeeperRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-update is not available on this build (missing signing configuration).'**
+  String get updateOutcomeGatekeeperRejected;
+
+  /// No description provided for @updateOutcomeSpawnFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch the installer.'**
+  String get updateOutcomeSpawnFailed;
+
+  /// No description provided for @updateOutcomeStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Update started.'**
+  String get updateOutcomeStarted;
 
   /// No description provided for @windowMinimize.
   ///
@@ -969,6 +1551,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Volume {pct} percent'**
   String volumePercent(int pct);
+
+  /// No description provided for @shortcutOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open file'**
+  String get shortcutOpenFile;
+
+  /// No description provided for @shortcutReopenLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen last file'**
+  String get shortcutReopenLast;
+
+  /// No description provided for @shortcutPlayPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Play / pause'**
+  String get shortcutPlayPause;
+
+  /// No description provided for @shortcutSeekForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek forward'**
+  String get shortcutSeekForward;
+
+  /// No description provided for @shortcutSeekBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek backward'**
+  String get shortcutSeekBack;
+
+  /// No description provided for @shortcutVolumeUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume up'**
+  String get shortcutVolumeUp;
+
+  /// No description provided for @shortcutVolumeDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume down'**
+  String get shortcutVolumeDown;
+
+  /// No description provided for @shortcutToggleMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle mute'**
+  String get shortcutToggleMute;
+
+  /// No description provided for @shortcutToggleFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle fullscreen'**
+  String get shortcutToggleFullscreen;
+
+  /// No description provided for @shortcutExitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit fullscreen'**
+  String get shortcutExitFullscreen;
+
+  /// No description provided for @shortcutChapterNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next chapter'**
+  String get shortcutChapterNext;
+
+  /// No description provided for @shortcutChapterPrev.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous chapter'**
+  String get shortcutChapterPrev;
+
+  /// No description provided for @shortcutScreenshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Save screenshot'**
+  String get shortcutScreenshot;
+
+  /// No description provided for @shortcutCycleAudioTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle audio track'**
+  String get shortcutCycleAudioTrack;
+
+  /// No description provided for @shortcutCycleSubtitleTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle subtitle track'**
+  String get shortcutCycleSubtitleTrack;
+
+  /// No description provided for @shortcutToggleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle subtitle visibility'**
+  String get shortcutToggleSubtitle;
+
+  /// No description provided for @shortcutToggleEqualizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle equalizer'**
+  String get shortcutToggleEqualizer;
+
+  /// No description provided for @shortcutPlaylistNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next in queue'**
+  String get shortcutPlaylistNext;
+
+  /// No description provided for @shortcutPlaylistPrev.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous in queue'**
+  String get shortcutPlaylistPrev;
+
+  /// No description provided for @shortcutToggleCompactMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle mini-player'**
+  String get shortcutToggleCompactMode;
+
+  /// No description provided for @shortcutNewWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Open new window'**
+  String get shortcutNewWindow;
+
+  /// No description provided for @eqPresetFlat.
+  ///
+  /// In en, this message translates to:
+  /// **'Flat'**
+  String get eqPresetFlat;
+
+  /// No description provided for @eqPresetBassBoost.
+  ///
+  /// In en, this message translates to:
+  /// **'Bass Boost'**
+  String get eqPresetBassBoost;
+
+  /// No description provided for @eqPresetBassReduce.
+  ///
+  /// In en, this message translates to:
+  /// **'Bass Reduce'**
+  String get eqPresetBassReduce;
+
+  /// No description provided for @eqPresetTrebleBoost.
+  ///
+  /// In en, this message translates to:
+  /// **'Treble Boost'**
+  String get eqPresetTrebleBoost;
+
+  /// No description provided for @eqPresetVocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Vocal'**
+  String get eqPresetVocal;
+
+  /// No description provided for @eqPresetRock.
+  ///
+  /// In en, this message translates to:
+  /// **'Rock'**
+  String get eqPresetRock;
+
+  /// No description provided for @eqPresetElectronic.
+  ///
+  /// In en, this message translates to:
+  /// **'Electronic'**
+  String get eqPresetElectronic;
+
+  /// No description provided for @eqPresetAcoustic.
+  ///
+  /// In en, this message translates to:
+  /// **'Acoustic'**
+  String get eqPresetAcoustic;
+
+  /// No description provided for @eqPresetLoudness.
+  ///
+  /// In en, this message translates to:
+  /// **'Loudness'**
+  String get eqPresetLoudness;
+
+  /// No description provided for @eqPresetClassical.
+  ///
+  /// In en, this message translates to:
+  /// **'Classical'**
+  String get eqPresetClassical;
+
+  /// No description provided for @subtitleTrackOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get subtitleTrackOff;
+
+  /// No description provided for @keybindsTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: press F1 or ? at any time to reopen this dialog.'**
+  String get keybindsTip;
+
+  /// No description provided for @keybindsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'(none)'**
+  String get keybindsNone;
+
+  /// No description provided for @dismissBarrierLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get dismissBarrierLabel;
+
+  /// No description provided for @chapterFallbackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter {index}'**
+  String chapterFallbackLabel(int index);
+
+  /// No description provided for @trackFallbackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Track {id}'**
+  String trackFallbackLabel(String id);
+
+  /// No description provided for @hwAccelStateYes.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get hwAccelStateYes;
+
+  /// No description provided for @hwAccelStateNo.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get hwAccelStateNo;
+
+  /// No description provided for @accentColorBlueGrey.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue Grey'**
+  String get accentColorBlueGrey;
+
+  /// No description provided for @accentColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get accentColorBlue;
+
+  /// No description provided for @accentColorTeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get accentColorTeal;
+
+  /// No description provided for @accentColorPurple.
+  ///
+  /// In en, this message translates to:
+  /// **'Purple'**
+  String get accentColorPurple;
+
+  /// No description provided for @accentColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get accentColorRed;
+
+  /// No description provided for @accentColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get accentColorOrange;
+
+  /// No description provided for @accentColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get accentColorGreen;
+
+  /// No description provided for @accentColorPink.
+  ///
+  /// In en, this message translates to:
+  /// **'Pink'**
+  String get accentColorPink;
 }
 
 class _AppLocalizationsDelegate

@@ -44,10 +44,10 @@ function normalizeArch(raw) {
     value === "x64" ||
     value === "x86-64"
   ) {
-    return "x64";
+    return "x86_64";
   }
   if (value === "aarch64" || value === "arm64") {
-    return "arm64";
+    return "aarch64";
   }
   return value || "unknown";
 }
@@ -64,6 +64,14 @@ function detectArch() {
   }
 
   return normalizeArch(process.arch);
+}
+
+function olderThan(targetPath, referencePath) {
+  try {
+    return fs.statSync(targetPath).mtimeMs < fs.statSync(referencePath).mtimeMs;
+  } catch {
+    return true;
+  }
 }
 
 function resolveManifestPath() {
@@ -105,17 +113,41 @@ function main() {
     );
   }
 
-  run("flatpak-builder", [
-    "--repo=flatpak-repo",
-    "--force-clean",
-    "flatpak-build",
-    path.relative(root, manifestPath),
-  ]);
+  // Flatpak export rejects icons larger than 512x512. The source icon is
+  // 1024x1024, so resize it for the flatpak build.
+  const sourceIcon = path.join(root, "assets", "icon", "icon.png");
+  const flatpakIcon = path.join(root, "build", "flatpak-icon-512.png");
+  if (!fs.existsSync(flatpakIcon) || olderThan(flatpakIcon, sourceIcon)) {
+    console.log("Resizing icon to 512x512 for Flatpak...");
+    run("magick", [sourceIcon, "-resize", "512x512", flatpakIcon]);
+  }
+
+  const rootManifest = path.join(root, "run.rosie.dacx.yaml");
+  const manifestIsAtRoot =
+    path.resolve(manifestPath) === path.resolve(rootManifest);
+  let tempManifestCreated = false;
+  if (!manifestIsAtRoot) {
+    fs.copyFileSync(manifestPath, rootManifest);
+    tempManifestCreated = true;
+  }
+
+  try {
+    run("flatpak-builder", [
+      "--repo=flatpak-repo",
+      "--force-clean",
+      "flatpak-build",
+      "run.rosie.dacx.yaml",
+    ]);
+  } finally {
+    if (tempManifestCreated) {
+      fs.rmSync(rootManifest, { force: true });
+    }
+  }
 
   const arch = detectArch();
-  const distDir = path.join(root, "dist");
-  fs.mkdirSync(distDir, { recursive: true });
-  const bundlePath = path.join(distDir, `Dacx-Linux-${arch}.flatpak`);
+  const releaseDir = path.join(root, "release");
+  fs.mkdirSync(releaseDir, { recursive: true });
+  const bundlePath = path.join(releaseDir, `Dacx-Linux-${arch}.flatpak`);
 
   run("flatpak", [
     "build-bundle",

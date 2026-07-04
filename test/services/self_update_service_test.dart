@@ -206,7 +206,12 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
         expect(script, contains('Add-Content'));
         expect(script, isNot(contains('Start-Sleep -Seconds 1')));
         expect(script, contains('Get-FileHash -Algorithm SHA256'));
-        expect(script, contains("Start-Process -FilePath 'msiexec.exe'"));
+        expect(
+          script,
+          contains(
+            r"Start-Process -FilePath 'C:\Windows\System32\msiexec.exe'",
+          ),
+        );
         expect(script, contains('-Verb RunAs'));
         expect(script, isNot(contains('-UseShellExecute')));
         expect(script, isNot(contains('tasklist')));
@@ -221,7 +226,7 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
         r'C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1',
       );
 
-      expect(cmd, startsWith('powershell.exe'));
+      expect(cmd, isNot(contains('powershell.exe')));
       expect(cmd, contains('-NoProfile'));
       expect(cmd, contains('-ExecutionPolicy Bypass'));
       expect(cmd, contains('-WindowStyle Hidden'));

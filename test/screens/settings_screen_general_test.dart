@@ -126,13 +126,8 @@ void main() {
       await tester.pumpWidget(_wrap(svc.settings, svc.debugLog));
       await tester.pumpAndSettle();
 
-      await _scrollTo(
-        tester,
-        find.bySemanticsLabel('Accent color ${AccentColor.teal.name}'),
-      );
-      await tester.tap(
-        find.bySemanticsLabel('Accent color ${AccentColor.teal.name}'),
-      );
+      await _scrollTo(tester, find.bySemanticsLabel('Accent color Teal'));
+      await tester.tap(find.bySemanticsLabel('Accent color Teal'));
       await tester.pumpAndSettle();
 
       expect(svc.settings.accentColor, AccentColor.teal);

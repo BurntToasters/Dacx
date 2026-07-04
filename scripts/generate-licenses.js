@@ -98,6 +98,8 @@ function detectLicenseType(text) {
 
 const NOTICES_FILE = "THIRD_PARTY_NOTICES.txt";
 const NATIVE_DEPS_DOC = "docs/NATIVE_DEPENDENCIES.md";
+const FLUTTER_SDK_LICENSE_TEXT =
+  "This package is distributed as part of the Flutter SDK. Flutter is licensed under a BSD-style license. See the Flutter SDK LICENSE file for the full license text.";
 
 function writeThirdPartyNotices(licenses, outDir) {
   const lines = [
@@ -105,7 +107,7 @@ function writeThirdPartyNotices(licenses, outDir) {
     "==========================",
     "",
     "Dacx (run.rosie.dacx) is licensed under the GNU General Public License",
-    "v3.0 or later. The full license text is in the LICENSE file shipped with",
+    "v3.0 only. The full license text is in the LICENSE file shipped with",
     "this distribution.",
     "",
     "This file lists open-source components used in or with Dacx. For bundled",
@@ -143,15 +145,28 @@ function main() {
   const deps = getDependencies();
   console.log(`Found ${deps.length} dependencies.\n`);
 
-  // Skip the project itself and SDK packages
-  const sdkPackages = new Set(["flutter", "flutter_test", "flutter_web_plugins", "sky_engine", "flutter_driver"]);
+  // Skip dev/test SDK packages; include runtime SDK packages with a known SDK
+  // license fallback so release notices do not report them as missing.
+  const skippedSdkPackages = new Set(["flutter", "flutter_test", "flutter_web_plugins", "sky_engine", "flutter_driver"]);
+  const licensedSdkPackages = new Set(["flutter_localizations"]);
 
   const licenses = [];
   let found = 0;
   let missing = 0;
 
   for (const { name, version } of deps) {
-    if (sdkPackages.has(name) || name === "dacx") continue;
+    if (name === "dacx" || skippedSdkPackages.has(name)) continue;
+
+    if (licensedSdkPackages.has(name)) {
+      found++;
+      licenses.push({
+        name,
+        version,
+        license: "BSD-3-Clause",
+        text: FLUTTER_SDK_LICENSE_TEXT,
+      });
+      continue;
+    }
 
     const text = findLicenseText(name, version, pubCache);
     const type = detectLicenseType(text);

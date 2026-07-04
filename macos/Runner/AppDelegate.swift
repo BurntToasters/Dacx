@@ -72,7 +72,7 @@ class AppDelegate: FlutterAppDelegate {
   private let windowMethodChannelName = "run.rosie.dacx/window/methods"
 
   private var registrations: [ObjectIdentifier: EngineRegistration] = [:]
-  private var pendingOpenFiles: [String] = []
+  private var pendingOpenFiles: [[String: String]] = []
   private var auxiliaryWindows: [MainFlutterWindow] = []
   // MPNowPlayingInfoCenter / MPRemoteCommandCenter are process singletons;
   // one bridge attached to every engine's messenger.
@@ -145,7 +145,7 @@ class AppDelegate: FlutterAppDelegate {
         guard let self else { return }
         // Drain queued paths into the first sink that comes online.
         let pending = self.drainPendingOpenFiles()
-        for path in pending { sink(path) }
+        for payload in pending { sink(payload) }
       },
       onCancel: {}
     )
@@ -195,24 +195,42 @@ class AppDelegate: FlutterAppDelegate {
            log: dacxLog, type: .debug, registrations.count, pendingOpenFiles.count)
   }
 
-  private func drainPendingOpenFiles() -> [String] {
+  private func drainPendingOpenFiles() -> [[String: String]] {
     let files = pendingOpenFiles
     pendingOpenFiles.removeAll()
     return files
   }
 
-  private func handleOpenFile(_ rawPath: String) {
+  private func handleOpenFile(_ rawPath: String, bookmark: String? = nil) {
     let path = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
     if path.isEmpty { return }
+    var payload = ["path": path]
+    if let bookmark, !bookmark.isEmpty {
+      payload["bookmark"] = bookmark
+    }
 
     configureOpenFileChannelsIfNeeded()
 
     // Prefer the key/main window's sink; fall back to any active sink, else queue.
     if let preferred = preferredActiveSink() {
-      preferred(path)
+      preferred(payload)
       return
     }
-    pendingOpenFiles.append(path)
+    pendingOpenFiles.append(payload)
+  }
+
+  private func securityScopedBookmark(for url: URL) -> String? {
+    guard url.isFileURL else { return nil }
+    do {
+      let data = try url.bookmarkData(options: [.withSecurityScope],
+                                      includingResourceValuesForKeys: nil,
+                                      relativeTo: nil)
+      return data.base64EncodedString()
+    } catch {
+      os_log("security-scoped bookmark create failed for %{private}@: %{public}@",
+             log: dacxLog, type: .error, url.path, "\(error)")
+      return nil
+    }
   }
 
   private func preferredActiveSink() -> FlutterEventSink? {
@@ -303,7 +321,7 @@ class AppDelegate: FlutterAppDelegate {
       }
       if url.isFileURL {
         os_log("handling file URL: %{private}@ (scoped=%{public}@)", log: dacxLog, type: .info, url.path, scoped ? "true" : "false")
-        handleOpenFile(url.path)
+        handleOpenFile(url.path, bookmark: securityScopedBookmark(for: url))
       } else {
         os_log("handling non-file URL: %{private}@", log: dacxLog, type: .info, url.absoluteString)
         handleOpenFile(url.absoluteString)
@@ -313,7 +331,8 @@ class AppDelegate: FlutterAppDelegate {
 
   override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
     os_log("application(_:openFile:) received: %{private}@", log: dacxLog, type: .info, filename)
-    handleOpenFile(filename)
+    let url = URL(fileURLWithPath: filename)
+    handleOpenFile(filename, bookmark: securityScopedBookmark(for: url))
     return true
   }
 

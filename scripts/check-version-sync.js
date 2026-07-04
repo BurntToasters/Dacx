@@ -22,6 +22,10 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkgVersion ?? "")) {
   failures.push(`package.json version invalid: "${pkgVersion}"`);
 }
 
+function semverToDebianVersion(semver) {
+  return semver.split("+")[0].replace("-", "~");
+}
+
 const pubspec = readText("pubspec.yaml");
 const pubMatch = pubspec.match(
   /^version:\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\+(\d+)\s*$/m,
@@ -61,16 +65,17 @@ function checkLinuxPackageTemplate(rel) {
   if (!fs.existsSync(path.join(root, rel))) return;
   const text = readText(rel);
   const match = text.match(
-    /^Version:\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*$/m,
+    /^Version:\s*(\d+\.\d+\.\d+(?:[-~][0-9A-Za-z.-]+)?)\s*$/m,
   );
   if (!match) {
     failures.push(`${rel} Version line not found or malformed`);
     return;
   }
   const [, templateVersion] = match;
-  if (templateVersion !== pkgVersion) {
+  const expectedVersion = semverToDebianVersion(pkgVersion);
+  if (templateVersion !== expectedVersion) {
     failures.push(
-      `version drift: package.json=${pkgVersion} ${rel}=${templateVersion}`,
+      `version drift: package.json=${pkgVersion} ${rel}=${templateVersion} expected ${expectedVersion}`,
     );
   }
 }

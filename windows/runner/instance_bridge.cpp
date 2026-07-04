@@ -214,6 +214,11 @@ void PipeServerLoop() {
     if (acl) LocalFree(acl);
     if (sd) LocalFree(sd);
     if (user_sid) LocalFree(user_sid);
+    if (!restricted) {
+      if (pipe != INVALID_HANDLE_VALUE) CloseHandle(pipe);
+      Sleep(1000);
+      continue;
+    }
     if (pipe == INVALID_HANDLE_VALUE) {
       Sleep(250);
       continue;

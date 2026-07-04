@@ -255,6 +255,25 @@ struct DownloadFailure: Error, CustomStringConvertible {
     let description: String
 }
 
+final class AllowlistedRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    private(set) var blockedRedirect: URL?
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let url = request.url,
+              url.scheme?.lowercased() == "https",
+              isAllowedHost(url.host) else {
+            blockedRedirect = request.url
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
+    }
+}
+
 func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
     let destDir = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("dacx-update-\(UUID().uuidString)", isDirectory: true)
@@ -270,8 +289,16 @@ func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
 
     var request = URLRequest(url: url)
     request.timeoutInterval = 600
-    let task = URLSession.shared.downloadTask(with: request) { tmpUrl, response, error in
+    let redirectDelegate = AllowlistedRedirectDelegate()
+    let session = URLSession(configuration: .ephemeral,
+                             delegate: redirectDelegate,
+                             delegateQueue: nil)
+    let task = session.downloadTask(with: request) { tmpUrl, response, error in
         defer { semaphore.signal() }
+        if let blocked = redirectDelegate.blockedRedirect {
+            result = .failure(DownloadFailure(description: "blocked redirect to \(blocked)"))
+            return
+        }
         if let error = error {
             result = .failure(DownloadFailure(description: "download error: \(error.localizedDescription)"))
             return
@@ -297,6 +324,7 @@ func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
     }
     task.resume()
     semaphore.wait()
+    session.finishTasksAndInvalidate()
     return result
 }
 
@@ -664,6 +692,20 @@ private let allowedHosts: Set<String> = [
     "objects.githubusercontent.com",
 ]
 
+/// Mirrors the Dart `SelfUpdateService._isAllowedHost` allowlist: the static
+/// GitHub hosts above plus any `*.githubusercontent.com` subdomain. GitHub
+/// serves release-asset downloads from rotating CDN hosts such as
+/// `release-assets.githubusercontent.com`, so an exact-match set rejects
+/// otherwise-legitimate redirects. The leading dot anchors the suffix so
+/// lookalikes like `evilgithubusercontent.com` cannot match. Download
+/// integrity is still enforced separately via SHA256 + codesign team-ID +
+/// Gatekeeper, so this allowlist is defense-in-depth, not the trust anchor.
+private func isAllowedHost(_ rawHost: String?) -> Bool {
+    guard let host = rawHost?.lowercased(), !host.isEmpty else { return false }
+    if allowedHosts.contains(host) { return true }
+    return host == "githubusercontent.com" || host.hasSuffix(".githubusercontent.com")
+}
+
 private let helperOperationDeadlineSeconds: TimeInterval = 840
 
 // MARK: - XPC service implementation
@@ -705,8 +747,8 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
         }
         guard let parsedUrl = URL(string: zipUrl),
               parsedUrl.scheme == "https",
-              allowedHosts.contains(parsedUrl.host ?? "") else {
-            reply(false, "zipUrl must be https and on an allowed host (github.com / objects.githubusercontent.com)")
+              isAllowedHost(parsedUrl.host) else {
+            reply(false, "zipUrl must be https and on an allowed GitHub host")
             return
         }
         guard checksumHex.count == 64,

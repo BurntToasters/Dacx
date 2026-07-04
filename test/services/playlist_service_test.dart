@@ -1,6 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/models/playable_source.dart';
 import 'package:dacx/services/playlist_service.dart';
+
+List<String> _values(PlaylistService service) =>
+    service.items.map((source) => source.value).toList(growable: false);
+
+String? _currentValue(PlaylistService service) => service.current?.value;
 
 void main() {
   group('PlaylistService basic queue ops', () {
@@ -18,13 +26,13 @@ void main() {
       s.replace(['a', 'b', 'c'], startIndex: 1);
       expect(s.length, 3);
       expect(s.index, 1);
-      expect(s.current, 'b');
+      expect(_currentValue(s), 'b');
     });
 
     test('replace filters empty/whitespace entries', () {
       final s = PlaylistService();
       s.replace(['a', '', '  ', 'b']);
-      expect(s.items, ['a', 'b']);
+      expect(_values(s), ['a', 'b']);
     });
 
     test('replace clamps startIndex into bounds', () {
@@ -57,14 +65,14 @@ void main() {
       final s = PlaylistService();
       s.replace(['a', 'b', 'c'], startIndex: 0);
       s.playNext('x');
-      expect(s.items, ['a', 'x', 'b', 'c']);
+      expect(_values(s), ['a', 'x', 'b', 'c']);
       expect(s.index, 0);
     });
 
     test('playNext on empty queue starts playback', () {
       final s = PlaylistService();
       s.playNext('only');
-      expect(s.items, ['only']);
+      expect(_values(s), ['only']);
       expect(s.index, 0);
     });
 
@@ -72,16 +80,16 @@ void main() {
       final s = PlaylistService();
       s.replace(['a', 'b', 'c'], startIndex: 2);
       s.removeAt(0);
-      expect(s.items, ['b', 'c']);
+      expect(_values(s), ['b', 'c']);
       expect(s.index, 1);
-      expect(s.current, 'c');
+      expect(_currentValue(s), 'c');
     });
 
     test('removeAt of last current clamps to new last', () {
       final s = PlaylistService();
       s.replace(['a', 'b', 'c'], startIndex: 2);
       s.removeAt(2);
-      expect(s.items, ['a', 'b']);
+      expect(_values(s), ['a', 'b']);
       expect(s.index, 1);
     });
 
@@ -96,9 +104,9 @@ void main() {
     test('advance honors bounds and updates index', () {
       final s = PlaylistService();
       s.replace(['a', 'b', 'c'], startIndex: 0);
-      expect(s.advance(1), 'b');
+      expect(s.advance(1)?.value, 'b');
       expect(s.index, 1);
-      expect(s.advance(-1), 'a');
+      expect(s.advance(-1)?.value, 'a');
       expect(s.advance(-1), isNull);
       expect(s.index, 0);
       s.replace(['a', 'b'], startIndex: 1);
@@ -131,7 +139,7 @@ void main() {
       final s = PlaylistService();
       s.replace(List.generate(20, (i) => 'item$i'), startIndex: 7);
       s.setShuffle(true);
-      expect(s.current, 'item7');
+      expect(_currentValue(s), 'item7');
       expect(s.hasPrevious, isFalse);
     });
 
@@ -140,11 +148,11 @@ void main() {
       final items = List.generate(10, (i) => 'i$i');
       s.replace(items, startIndex: 0);
       s.setShuffle(true);
-      final visited = <String>{s.current!};
+      final visited = <String>{s.current!.value};
       for (var k = 0; k < items.length - 1; k++) {
         final next = s.advance(1);
         expect(next, isNotNull);
-        visited.add(next!);
+        visited.add(next!.value);
       }
       expect(visited.length, items.length);
       expect(s.advance(1), isNull);
@@ -155,7 +163,7 @@ void main() {
       s.replace(['a', 'b', 'c']);
       s.setShuffle(true);
       s.setShuffle(false);
-      expect(s.advance(1), 'b');
+      expect(s.advance(1)?.value, 'b');
     });
 
     test('notifies listeners on mutation', () {
@@ -167,6 +175,35 @@ void main() {
       s.removeAt(0);
       s.clear();
       expect(fired, greaterThanOrEqualTo(4));
+    });
+
+    test('supports mixed file and URL sources', () {
+      final s = PlaylistService();
+      s.replaceSources([
+        PlayableSource.file('/tmp/local.mp3'),
+        PlayableSource.url('https://example.com/live.m3u8'),
+      ]);
+
+      expect(s.current?.isFile, isTrue);
+      expect(s.advance(1)?.isUrl, isTrue);
+      expect(_values(s), ['/tmp/local.mp3', 'https://example.com/live.m3u8']);
+    });
+
+    test('removeMissingFiles drops missing files and keeps URLs', () async {
+      final dir = Directory.systemTemp.createTempSync('dacx_playlist_test_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final existing = File('${dir.path}/keep.mp3')..writeAsStringSync('x');
+      final missing = '${dir.path}/missing.mp3';
+      final s = PlaylistService();
+      s.replaceSources([
+        PlayableSource.file(existing.path),
+        PlayableSource.file(missing),
+        PlayableSource.url('https://example.com/live.m3u8'),
+      ]);
+
+      expect(await s.removeMissingFiles(), 1);
+
+      expect(_values(s), [existing.path, 'https://example.com/live.m3u8']);
     });
   });
 }

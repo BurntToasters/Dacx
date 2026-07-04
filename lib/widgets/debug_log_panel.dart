@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
 
 class DebugLogPanel extends StatelessWidget {
@@ -11,6 +12,7 @@ class DebugLogPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       child: DecoratedBox(
@@ -32,14 +34,14 @@ class DebugLogPanel extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Debug Log',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                          l10n.debugLogTitle,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                       Text(
-                        '${debugLog.entryCount} entries',
+                        l10n.debugLogEntryCount(debugLog.entryCount),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -50,7 +52,7 @@ class DebugLogPanel extends StatelessWidget {
                       TextButton.icon(
                         onPressed: () => _copyDebugLog(context),
                         icon: const Icon(Icons.copy_all_outlined, size: 18),
-                        label: const Text('Copy Log'),
+                        label: Text(l10n.debugLogCopyButton),
                       ),
                       const SizedBox(width: 8),
                       TextButton.icon(
@@ -58,15 +60,15 @@ class DebugLogPanel extends StatelessWidget {
                             ? () => _clearDebugLog(context)
                             : null,
                         icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Clear Log'),
+                        label: Text(l10n.debugLogClearButton),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   if (entries.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 10),
-                      child: Text('No debug events yet.'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text(l10n.debugLogEmpty),
                     )
                   else
                     SizedBox(
@@ -107,43 +109,22 @@ class DebugLogPanel extends StatelessWidget {
       details: {'entry_count': debugLog.entryCount},
     );
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Redacted debug log copied to clipboard.')),
-    );
+    final l10n = AppLocalizations.of(context);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCopied)));
   }
 
   void _clearDebugLog(BuildContext context) {
     debugLog.clear();
     if (!context.mounted) return;
+    final l10n = AppLocalizations.of(context);
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Debug log cleared.')));
+    ).showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCleared)));
   }
 
   static String renderDebugEntry(DebugLogEntry entry) {
-    final detailsText = _renderDebugDetails(entry.details);
-    final base =
-        '[${entry.timestamp.toIso8601String()}] '
-        '[${entry.severity.name.toUpperCase()}] '
-        '[${entry.category.name}] '
-        '${entry.event}';
-    final msg = entry.message?.trim();
-    if (msg != null && msg.isNotEmpty && detailsText.isNotEmpty) {
-      return '$base - $msg | $detailsText';
-    }
-    if (msg != null && msg.isNotEmpty) return '$base - $msg';
-    if (detailsText.isNotEmpty) return '$base | $detailsText';
-    return base;
-  }
-
-  static String _renderDebugDetails(Map<String, Object?> details) {
-    if (details.isEmpty) return '';
-    final keys = details.keys.toList()..sort();
-    return keys
-        .map((key) {
-          final safe = details[key]?.toString().replaceAll('\n', r'\n');
-          return '$key=$safe';
-        })
-        .join(', ');
+    return DebugLogService.formatEntry(entry);
   }
 }

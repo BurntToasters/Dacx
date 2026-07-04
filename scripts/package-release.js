@@ -21,6 +21,7 @@
  *   release/Dacx-Linux-amd64.deb     (Debian package via dpkg-deb)
  *   release/Dacx-Linux-x86_64.rpm    (RPM package via rpmbuild)
  *   release/Dacx-Linux-x86_64.AppImage (AppImage via appimagetool)
+ *   release/Dacx-Linux-x86_64.flatpak  (Flatpak bundle via flatpak-builder)
  */
 
 import fs from "fs";
@@ -73,6 +74,7 @@ fs.mkdirSync(releaseDir, { recursive: true });
 const THIRD_PARTY_NOTICES = "THIRD_PARTY_NOTICES.txt";
 const noticesBuildPath = path.join(root, "build", THIRD_PARTY_NOTICES);
 const licensePath = path.join(root, "LICENSE");
+const nativeDependenciesDocPath = path.join(root, "docs", "NATIVE_DEPENDENCIES.md");
 
 function ensureThirdPartyNotices() {
   if (fs.existsSync(noticesBuildPath)) return;
@@ -91,6 +93,17 @@ function installLegalFilesInDir(destDir) {
   if (fs.existsSync(licensePath)) {
     fs.copyFileSync(licensePath, path.join(destDir, "LICENSE"));
   }
+  if (fs.existsSync(nativeDependenciesDocPath)) {
+    fs.copyFileSync(
+      nativeDependenciesDocPath,
+      path.join(destDir, "NATIVE_DEPENDENCIES.md"),
+    );
+  }
+}
+
+function semverToDebianVersion(semver) {
+  const stripped = semver.split("+")[0];
+  return stripped.replace("-", "~");
 }
 
 function run(cmd, opts = {}) {
@@ -1199,6 +1212,9 @@ function packageLinux() {
 
   // 4. .AppImage
   buildAppImage(buildDir, desktopFile, iconFile);
+
+  // 5. .flatpak
+  buildFlatpak();
 }
 
 function findIcon() {
@@ -1235,12 +1251,14 @@ function buildDeb(buildDir, desktopFile, iconFile) {
   const binDir = path.join(debRoot, "usr", "bin");
   const appsDir = path.join(debRoot, "usr", "share", "applications");
   const iconDir = path.join(debRoot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const docDir = path.join(debRoot, "usr", "share", "doc", "dacx");
   const debianDir = path.join(debRoot, "DEBIAN");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
   fs.mkdirSync(iconDir, { recursive: true });
+  fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(debianDir, { recursive: true });
 
   // Copy bundle to /opt/dacx
@@ -1266,11 +1284,13 @@ function buildDeb(buildDir, desktopFile, iconFile) {
     fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
   }
 
+  installLegalFilesInDir(docDir);
+
   // Generate control file from template
   const controlTemplate = path.join(root, "linux", "packaging", "control.template");
   if (fs.existsSync(controlTemplate)) {
     let control = fs.readFileSync(controlTemplate, "utf-8");
-    control = control.replace(/\{\{VERSION\}\}/g, VERSION);
+    control = control.replace(/\{\{VERSION\}\}/g, semverToDebianVersion(VERSION));
     // Remove the shebang line if present (it's a template marker, not a real script)
     control = control.replace(/^#!.*\n/, "");
     // Calculate installed size in KB
@@ -1326,11 +1346,13 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   const binDir = path.join(buildroot, "usr", "bin");
   const appsDir = path.join(buildroot, "usr", "share", "applications");
   const iconDir = path.join(buildroot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const docDir = path.join(buildroot, "usr", "share", "doc", "dacx");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
   fs.mkdirSync(iconDir, { recursive: true });
+  fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(specsDir, { recursive: true });
   fs.mkdirSync(rpmsDir, { recursive: true });
 
@@ -1355,6 +1377,8 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   if (iconFile) {
     fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
   }
+
+  installLegalFilesInDir(docDir);
 
   // Generate spec from template
   const specTemplate = path.join(root, "linux", "packaging", "dacx.spec.template");
@@ -1454,12 +1478,41 @@ exec "$HERE/opt/dacx/dacx" "$@"
   const appImagePath = path.join(releaseDir, appImageName);
   removeIfExists(appImagePath);
 
-  // ARCH must be set for appimagetool
-  run(`ARCH=x86_64 "${appimageToolCmd}" "${appDir}" "${appImagePath}"`);
+  // ARCH must be set for appimagetool. APPIMAGE_EXTRACT_AND_RUN lets the
+  // appimagetool AppImage self-extract instead of requiring a mounted FUSE,
+  // so the build works on headless/CI hosts without libfuse2 installed.
+  run(
+    `ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "${appimageToolCmd}" "${appDir}" "${appImagePath}"`,
+  );
 
   // Cleanup
   fs.rmSync(appDir, { recursive: true });
   console.log(`  ✓ ${appImageName}`);
+}
+
+function buildFlatpak() {
+  if (process.platform !== "linux") {
+    console.warn("  ⚠ Flatpak bundling requires a Linux host — skipping .flatpak");
+    return;
+  }
+
+  if (!hasCommand("flatpak-builder") || !hasCommand("flatpak")) {
+    console.warn("  ⚠ flatpak/flatpak-builder not found — skipping .flatpak");
+    console.warn("    Install: sudo apt-get install -y flatpak flatpak-builder");
+    console.warn("    Then re-run: npm run setup:linux");
+    return;
+  }
+
+  // Non-fatal: a Flatpak failure must not discard the tarball/.deb/.rpm/.AppImage
+  // already produced in this same run. flatpak-bundle.js prints the exact
+  // output path (with the correct arch) on success.
+  try {
+    run(`node "${path.join(root, "scripts", "flatpak-bundle.js")}"`);
+  } catch {
+    console.warn(
+      "  ⚠ Flatpak bundling failed — skipping .flatpak (other artifacts unaffected).",
+    );
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────

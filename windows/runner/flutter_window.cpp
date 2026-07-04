@@ -45,6 +45,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
+    dacx::UnregisterMediaSession(
+        flutter_controller_->engine()->messenger());
     flutter_controller_ = nullptr;
   }
   // Aux windows: ask the registry to drop us. No-op for primary.
@@ -69,7 +71,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      if (flutter_controller_) {
+        flutter_controller_->engine()->ReloadSystemFonts();
+      }
       break;
   }
 

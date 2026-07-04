@@ -339,6 +339,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
+  String _accentColorName(AppLocalizations l10n, AccentColor ac) {
+    return switch (ac) {
+      AccentColor.blueGrey => l10n.accentColorBlueGrey,
+      AccentColor.blue => l10n.accentColorBlue,
+      AccentColor.teal => l10n.accentColorTeal,
+      AccentColor.purple => l10n.accentColorPurple,
+      AccentColor.red => l10n.accentColorRed,
+      AccentColor.orange => l10n.accentColorOrange,
+      AccentColor.green => l10n.accentColorGreen,
+      AccentColor.pink => l10n.accentColorPink,
+    };
+  }
+
   Widget _loopModeTile() {
     final l10n = AppLocalizations.of(context);
     return ListTile(
@@ -378,7 +391,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_s.debugModeEnabled) ...[
             const SizedBox(height: 4),
             Text(
-              l10n.settingsHwAccelDebugActive(hwAccelEnabled ? 'Yes' : 'No'),
+              l10n.settingsHwAccelDebugActive(
+                hwAccelEnabled ? l10n.hwAccelStateYes : l10n.hwAccelStateNo,
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w600,
@@ -463,7 +478,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: AccentColor.values.map((ac) {
           final isSelected = ac == _s.accentColor;
           return Semantics(
-            label: 'Accent color ${ac.name}',
+            label: l10n.semanticsAccentColor(_accentColorName(l10n, ac)),
             button: true,
             selected: isSelected,
             child: GestureDetector(
@@ -794,9 +809,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Dacx v${update.version} is available!'),
+            content: Text(
+              AppLocalizations.of(context).snackUpdateAvailable(update.version),
+            ),
             action: SnackBarAction(
-              label: updateActionLabel(),
+              label: updateActionLabel(AppLocalizations.of(context)),
               onPressed: () => triggerUpdateAction(
                 context: context,
                 info: update,
@@ -1036,6 +1053,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         scrolledUnderElevation: 0,
         leadingWidth: Platform.isMacOS ? 144 : base.appBarTheme.leadingWidth,
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          fixedSize: Platform.isMacOS ? const Size(120, 48) : null,
+          alignment: Platform.isMacOS
+              ? Alignment.centerRight
+              : Alignment.center,
+          padding: Platform.isMacOS ? EdgeInsets.zero : null,
+          shape: Platform.isMacOS
+              ? const _OffsetCircleBorder(72.0)
+              : const CircleBorder(),
+        ),
+      ),
     );
 
     Navigator.of(context).push(
@@ -1184,5 +1213,39 @@ class _ShortcutRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _OffsetCircleBorder extends CircleBorder {
+  final double offset;
+  const _OffsetCircleBorder(this.offset, {super.side});
+
+  Rect _shift(Rect rect) {
+    return Rect.fromLTWH(
+      rect.left + offset,
+      rect.top,
+      rect.height,
+      rect.height,
+    );
+  }
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
+    return super.getInnerPath(_shift(rect), textDirection: textDirection);
+  }
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    return super.getOuterPath(_shift(rect), textDirection: textDirection);
+  }
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    super.paint(canvas, _shift(rect), textDirection: textDirection);
+  }
+
+  @override
+  _OffsetCircleBorder copyWith({BorderSide? side, double? eccentricity}) {
+    return _OffsetCircleBorder(offset, side: side ?? this.side);
   }
 }

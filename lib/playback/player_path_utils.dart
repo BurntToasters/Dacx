@@ -1,5 +1,11 @@
 import 'dart:io';
 
+class OpenFileRequest {
+  final String path;
+  final String? bookmark;
+  const OpenFileRequest({required this.path, this.bookmark});
+}
+
 /// Path normalization and error classification for open-file / drag-drop flows.
 abstract final class PlayerPathUtils {
   static const audioExtensions = {
@@ -30,10 +36,28 @@ abstract final class PlayerPathUtils {
 
   /// Coerces platform bridge payloads to a trimmed path string.
   static String? coerceOpenPath(Object? value) {
-    if (value is! String) return null;
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    return trimmed;
+    return coerceOpenRequest(value)?.path;
+  }
+
+  /// Coerces platform bridge payloads to path plus optional native bookmark.
+  static OpenFileRequest? coerceOpenRequest(Object? value) {
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      return OpenFileRequest(path: trimmed);
+    }
+    if (value is Map) {
+      final rawPath = value['path'];
+      if (rawPath is! String) return null;
+      final path = rawPath.trim();
+      if (path.isEmpty) return null;
+      final rawBookmark = value['bookmark'];
+      final bookmark = rawBookmark is String && rawBookmark.trim().isNotEmpty
+          ? rawBookmark.trim()
+          : null;
+      return OpenFileRequest(path: path, bookmark: bookmark);
+    }
+    return null;
   }
 
   /// Decodes `file://` URIs from drag-and-drop payloads.

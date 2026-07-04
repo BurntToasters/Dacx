@@ -104,7 +104,9 @@ class SeekPreviewService {
     try {
       await player.setVolume(0);
     } catch (e) {
-      debugPrint('Dacx: seek-preview ensurePlayer setVolume failed: $e');
+      if (kDebugMode) {
+        debugPrint('Dacx: seek-preview ensurePlayer setVolume failed: $e');
+      }
     }
     await _applyTuning(player);
   }

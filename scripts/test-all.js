@@ -1,7 +1,7 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import crossSpawn from "cross-spawn";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -75,10 +75,9 @@ function parseTest(output, results) {
 function runCommand(name, command, args, parser, results, options = {}) {
   console.log(`${colors.blue}${colors.bold}Running ${name}...${colors.reset}`);
   const timeout = options.timeout ?? defaultTimeoutMs;
-  const run = spawnSync(command, args, {
+  const run = crossSpawn.sync(command, args, {
     encoding: "utf8",
     stdio: "pipe",
-    shell: process.platform === "win32",
     windowsHide: true,
     timeout,
   });

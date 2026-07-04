@@ -6,6 +6,7 @@ import { execSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { homedir } from 'node:os';
+import crossSpawn from 'cross-spawn';
 
 // Pub installs global executables here; fvm lands here after activation.
 // We prepend this to PATH for child processes so `fvm` resolves even on
@@ -23,22 +24,41 @@ const childEnv = {
   PATH: `${pubBinDir()}${delimiter}${process.env.PATH || ''}`,
 };
 
-function sh(cmd, opts = {}) {
-  return execSync(cmd, { stdio: 'inherit', shell: true, env: childEnv, ...opts });
+function run(cmd, args, opts = {}) {
+  const result = crossSpawn.sync(cmd, args, {
+    stdio: 'inherit',
+    env: childEnv,
+    windowsHide: true,
+    ...opts,
+  });
+  if (result.error) throw result.error;
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(`${cmd} ${args.join(' ')} exited with ${result.status}`);
+  }
+  return result;
 }
 
-function shCapture(cmd) {
-  return execSync(cmd, { shell: true, env: childEnv }).toString().trim();
+function capture(cmd, args) {
+  const result = crossSpawn.sync(cmd, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: childEnv,
+    windowsHide: true,
+  });
+  if (result.error) throw result.error;
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(result.stderr || `${cmd} ${args.join(' ')} exited with ${result.status}`);
+  }
+  return (result.stdout || '').trim();
 }
 
 function has(cmd) {
-  try {
-    execSync(process.platform === 'win32' ? `where ${cmd}` : `command -v ${cmd}`,
-      { stdio: 'ignore', shell: true, env: childEnv });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = crossSpawn.sync(
+    process.platform === 'win32' ? 'where' : 'which',
+    [cmd],
+    { stdio: 'ignore', env: childEnv, windowsHide: true },
+  );
+  return result.status === 0;
 }
 
 const fvmrcPath = join(process.cwd(), '.fvmrc');
@@ -47,9 +67,19 @@ if (!existsSync(fvmrcPath)) {
   process.exit(1);
 }
 
-const pinned = JSON.parse(readFileSync(fvmrcPath, 'utf8')).flutter;
+let pinned = '';
+try {
+  pinned = JSON.parse(readFileSync(fvmrcPath, 'utf8')).flutter;
+} catch (e) {
+  console.error(`✖ Could not parse .fvmrc: ${e.message ?? e}`);
+  process.exit(1);
+}
 if (!pinned) {
   console.error('✖ .fvmrc has no `flutter` field.');
+  process.exit(1);
+}
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pinned)) {
+  console.error(`✖ .fvmrc flutter version is not a valid pinned version: "${pinned}"`);
   process.exit(1);
 }
 
@@ -57,12 +87,12 @@ console.log(`Pinned Flutter version: ${pinned}`);
 
 if (!has('fvm')) {
   console.log('▶ fvm not found — installing via `dart pub global activate fvm`');
-  sh('dart pub global activate fvm');
+  run('dart', ['pub', 'global', 'activate', 'fvm']);
 }
 
 let installed = '';
 try {
-  installed = shCapture('fvm api list');
+  installed = capture('fvm', ['api', 'list']);
 } catch {
   installed = '';
 }
@@ -70,11 +100,11 @@ if (installed.includes(`"${pinned}"`)) {
   console.log(`✓ Flutter ${pinned} already installed via fvm`);
 } else {
   console.log(`▶ Installing Flutter ${pinned} via fvm`);
-  sh(`fvm install ${pinned}`);
+  run('fvm', ['install', pinned]);
 }
 
 // Verify by running `fvm flutter --version` so any download/setup completes.
-sh('fvm flutter --version');
+run('fvm', ['flutter', '--version']);
 
 // Persist `fvm` on the user's shell PATH so subsequent npm scripts that call
 // `fvm flutter` directly resolve it. Idempotent — checked before writing.

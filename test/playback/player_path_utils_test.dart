@@ -10,10 +10,27 @@ void main() {
       expect(PlayerPathUtils.coerceOpenPath('  /a/b.mp3  '), '/a/b.mp3');
     });
 
+    test('returns path from map payloads', () {
+      expect(
+        PlayerPathUtils.coerceOpenPath({'path': '  /a/b.mp3  '}),
+        '/a/b.mp3',
+      );
+    });
+
+    test('coerces optional native bookmark payloads', () {
+      final request = PlayerPathUtils.coerceOpenRequest({
+        'path': '  /a/b.mp3  ',
+        'bookmark': '  token  ',
+      });
+      expect(request?.path, '/a/b.mp3');
+      expect(request?.bookmark, 'token');
+    });
+
     test('rejects non-strings and empty values', () {
       expect(PlayerPathUtils.coerceOpenPath(42), isNull);
       expect(PlayerPathUtils.coerceOpenPath(''), isNull);
       expect(PlayerPathUtils.coerceOpenPath('   '), isNull);
+      expect(PlayerPathUtils.coerceOpenPath({'path': '   '}), isNull);
     });
   });
 

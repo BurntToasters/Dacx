@@ -23,7 +23,11 @@ enum UpdateHelperService {
         }
 
         // Default: vend the XPC service.
-        let requirement = buildCallerRequirement()
+        guard let requirement = buildCallerRequirement() else {
+            os_log("XPC listener REFUSING to start: could not resolve own Team ID. Exiting.",
+                   log: serviceLog, type: .fault)
+            exit(1)
+        }
         os_log("XPC listener starting; caller requirement: %{public}@",
                log: serviceLog, type: .info, requirement)
 
@@ -40,10 +44,10 @@ enum UpdateHelperService {
 // and (when our own team id is resolvable) restrict to that team's OU. The
 // team is read from our running code so it stays in sync with whatever cert
 // the parent .app was signed by — no build-time bake-in required.
-private func buildCallerRequirement() -> String {
+private func buildCallerRequirement() -> String? {
     let team = ownTeamIdentifier() ?? ""
     if team.isEmpty {
-        return "identifier \"\(kDacxBundleIdentifier)\" and anchor apple generic"
+        return nil
     }
     return "identifier \"\(kDacxBundleIdentifier)\" and anchor apple generic " +
            "and certificate leaf[subject.OU] = \"\(team)\""

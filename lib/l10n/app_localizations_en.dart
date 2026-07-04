@@ -376,10 +376,38 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get snackInvalidStreamUrl => 'Enter a valid http:// or https:// URL.';
+
+  @override
+  String get snackNoSupportedMediaInFolder =>
+      'No supported media found in that folder.';
+
+  @override
+  String snackFolderScanFailed(String detail) {
+    return 'Could not scan folder. $detail';
+  }
+
+  @override
+  String snackFolderScanSkipped(int count) {
+    return 'Skipped $count unsupported or unreadable item(s).';
+  }
+
+  @override
+  String snackQueueRemovedMissing(int count) {
+    return 'Removed $count missing item(s).';
+  }
+
+  @override
   String get emptyStateMessage => 'Drop a file here or click Open';
 
   @override
   String get buttonOpenFile => 'Open File';
+
+  @override
+  String get buttonOpenFolder => 'Open Folder';
+
+  @override
+  String get buttonOpenUrl => 'Open URL';
 
   @override
   String get buttonReopenLast => 'Reopen Last';
@@ -415,6 +443,165 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dialogKeyCaptureTitle => 'Press a key combination';
 
   @override
+  String get dialogOpenUrlTitle => 'Open URL';
+
+  @override
+  String get dialogOpenUrlHint => 'https://example.com/stream.m3u8';
+
+  @override
+  String get dialogMediaInfoTitle => 'Media info';
+
+  @override
+  String get dialogMacInstallLocationTitle => 'Move Dacx to Applications';
+
+  @override
+  String get dialogMacInstallLocationMessage =>
+      'Dacx is meant to run from /Applications/Dacx.app. Move it to the Applications folder for the best update experience.';
+
+  @override
+  String get mediaInfoSource => 'Source';
+
+  @override
+  String get mediaInfoType => 'Type';
+
+  @override
+  String get mediaInfoDuration => 'Duration';
+
+  @override
+  String get mediaInfoResolution => 'Resolution';
+
+  @override
+  String get mediaInfoAudioTracks => 'Audio tracks';
+
+  @override
+  String get mediaInfoSubtitleTracks => 'Subtitle tracks';
+
+  @override
+  String get mediaInfoChapters => 'Chapters';
+
+  @override
+  String get mediaInfoAudioSelection => 'Selected audio';
+
+  @override
+  String get mediaInfoSubtitleSelection => 'Selected subtitles';
+
+  @override
+  String get mediaInfoTypeUrlStream => 'URL stream';
+
+  @override
+  String get mediaInfoTypeAudioFile => 'Audio file';
+
+  @override
+  String get mediaInfoTypeVideoFile => 'Video file';
+
+  @override
+  String get mediaInfoUnknown => 'Unknown';
+
+  @override
+  String get menuTakeScreenshot => 'Take screenshot';
+
+  @override
+  String get menuMixAllAudioTracks => 'Mix all audio tracks';
+
+  @override
+  String get menuSeekThumbnailsBeta =>
+      'Seek thumbnails (beta: uses more resources)';
+
+  @override
+  String get menuQueueEmpty => 'Queue (empty)';
+
+  @override
+  String menuQueueCount(int count) {
+    return 'Queue ($count)';
+  }
+
+  @override
+  String get menuAddFilesToQueue => 'Add files to queue…';
+
+  @override
+  String get menuShuffleQueue => 'Shuffle queue';
+
+  @override
+  String get menuMiniPlayer => 'Mini-player (always on top)';
+
+  @override
+  String osdAudioTrack(String label) {
+    return 'Audio: $label';
+  }
+
+  @override
+  String get osdSubtitlesOff => 'Subtitles: Off';
+
+  @override
+  String osdSubtitlesTrack(String label) {
+    return 'Subtitles: $label';
+  }
+
+  @override
+  String osdChapter(String title) {
+    return 'Chapter: $title';
+  }
+
+  @override
+  String get osdScreenshotFailed => 'Screenshot failed';
+
+  @override
+  String get osdScreenshotSaved => 'Screenshot saved';
+
+  @override
+  String get osdScreenshotSaveFailed => 'Screenshot save failed';
+
+  @override
+  String osdEqualizer(String state) {
+    return 'Equalizer: $state';
+  }
+
+  @override
+  String get osdStateOn => 'On';
+
+  @override
+  String get osdStateOff => 'Off';
+
+  @override
+  String get osdAudioMixOff => 'Audio mix off';
+
+  @override
+  String get osdAudioMixUnsupportedIds => 'Cannot mix: unsupported track ids';
+
+  @override
+  String osdAudioMixActive(int count) {
+    return 'Mixing $count audio tracks';
+  }
+
+  @override
+  String get osdAudioMixFailed => 'Could not enable audio mix';
+
+  @override
+  String osdResumedAt(String time) {
+    return 'Resumed at $time';
+  }
+
+  @override
+  String get osdNextInQueue => 'Next in queue';
+
+  @override
+  String get osdPreviousInQueue => 'Previous in queue';
+
+  @override
+  String get osdAddedToQueue => 'Added to queue';
+
+  @override
+  String osdAddedMultipleToQueue(int count) {
+    return 'Added $count to queue';
+  }
+
+  @override
+  String get osdMiniPlayerOff => 'Mini-player off';
+
+  @override
+  String get osdMiniPlayerOn => 'Mini-player on';
+
+  @override
   String get actionReset => 'Reset';
 
   @override
@@ -433,7 +620,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionSave => 'Save';
 
   @override
+  String get actionOpen => 'Open';
+
+  @override
   String get actionRemove => 'Remove';
+
+  @override
+  String get actionRemoveMissing => 'Remove missing';
 
   @override
   String get actionSetNewBinding => 'Set new binding';
@@ -460,7 +653,156 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipOpenFile => 'Open file';
 
   @override
+  String get tooltipOpenFolder => 'Open folder';
+
+  @override
+  String get tooltipOpenUrl => 'Open URL';
+
+  @override
   String get tooltipRecentFiles => 'Recent files';
+
+  @override
+  String get tooltipMediaInfo => 'Media info';
+
+  @override
+  String get tooltipPreviousTrack => 'Previous Track (PageUp)';
+
+  @override
+  String get tooltipNextTrack => 'Next Track (PageDown)';
+
+  @override
+  String get tooltipPlayQueue => 'Play Queue';
+
+  @override
+  String get tooltipExitMiniPlayer => 'Exit mini-player';
+
+  @override
+  String get semanticsSeekBar => 'Seek bar';
+
+  @override
+  String semanticsSeekBarValue(String position, String duration) {
+    return '$position of $duration';
+  }
+
+  @override
+  String semanticsAccentColor(String name) {
+    return 'Accent color $name';
+  }
+
+  @override
+  String updateDialogInstallingTitle(String version) {
+    return 'Installing Dacx $version';
+  }
+
+  @override
+  String get updateDialogDownloadingVerifying =>
+      'Downloading and verifying in the update helper...';
+
+  @override
+  String get updateDialogVerifyingSignature => 'Verifying signature...';
+
+  @override
+  String updateDialogDownloadingProgress(String downloaded, String total) {
+    return 'Downloading $downloaded / $total';
+  }
+
+  @override
+  String get updateDialogDownloading => 'Downloading...';
+
+  @override
+  String get updateDialogWillClose => 'Dacx will close to apply the update.';
+
+  @override
+  String get updateDialogFailedTitle => 'Update failed';
+
+  @override
+  String get updateDialogOpenReleasePage => 'Open release page';
+
+  @override
+  String get updateActionInstall => 'Install';
+
+  @override
+  String get updateActionView => 'View';
+
+  @override
+  String snackUpdatedToVersion(String version) {
+    return 'Updated to v$version';
+  }
+
+  @override
+  String snackUpdateMayHaveFailed(String version) {
+    return 'Update to v$version may have failed.';
+  }
+
+  @override
+  String get debugLogTitle => 'Debug Log';
+
+  @override
+  String debugLogEntryCount(int count) {
+    return '$count entries';
+  }
+
+  @override
+  String get debugLogCopyButton => 'Copy Log';
+
+  @override
+  String get debugLogClearButton => 'Clear Log';
+
+  @override
+  String get debugLogEmpty => 'No debug events yet.';
+
+  @override
+  String get updateOutcomeUnsupportedPlatform =>
+      'Self-update is not supported on this platform.';
+
+  @override
+  String get updateOutcomeMissingAsset =>
+      'The release does not include an installer for this platform.';
+
+  @override
+  String get updateOutcomeMissingChecksums =>
+      'The release does not include a checksums file. Cannot verify download.';
+
+  @override
+  String get updateOutcomeMissingSignature =>
+      'The release does not include a signed update manifest. Cannot verify update authenticity.';
+
+  @override
+  String get updateOutcomeDownloadFailed => 'Download failed.';
+
+  @override
+  String get updateOutcomeChecksumMismatch =>
+      'Downloaded file failed checksum verification. Refusing to install.';
+
+  @override
+  String get updateOutcomeExtractionFailed =>
+      'Could not extract the update package.';
+
+  @override
+  String get updateOutcomeSignatureInvalid =>
+      'Downloaded app failed code-signature verification.';
+
+  @override
+  String get updateOutcomeBundleIdMismatch =>
+      'Downloaded app has an unexpected bundle identifier. Refusing to install.';
+
+  @override
+  String get updateOutcomeVersionMismatch =>
+      'Downloaded app version does not match the selected update. Refusing to install.';
+
+  @override
+  String get updateOutcomeTeamIdMismatch =>
+      'Downloaded app is signed by an unexpected developer. Refusing to install.';
+
+  @override
+  String get updateOutcomeGatekeeperRejected =>
+      'Self-update is not available on this build (missing signing configuration).';
+
+  @override
+  String get updateOutcomeSpawnFailed => 'Could not launch the installer.';
+
+  @override
+  String get updateOutcomeStarted => 'Update started.';
 
   @override
   String get windowMinimize => 'Minimize window';
@@ -499,4 +841,150 @@ class AppLocalizationsEn extends AppLocalizations {
   String volumePercent(int pct) {
     return 'Volume $pct percent';
   }
+
+  @override
+  String get shortcutOpenFile => 'Open file';
+
+  @override
+  String get shortcutReopenLast => 'Reopen last file';
+
+  @override
+  String get shortcutPlayPause => 'Play / pause';
+
+  @override
+  String get shortcutSeekForward => 'Seek forward';
+
+  @override
+  String get shortcutSeekBack => 'Seek backward';
+
+  @override
+  String get shortcutVolumeUp => 'Volume up';
+
+  @override
+  String get shortcutVolumeDown => 'Volume down';
+
+  @override
+  String get shortcutToggleMute => 'Toggle mute';
+
+  @override
+  String get shortcutToggleFullscreen => 'Toggle fullscreen';
+
+  @override
+  String get shortcutExitFullscreen => 'Exit fullscreen';
+
+  @override
+  String get shortcutChapterNext => 'Next chapter';
+
+  @override
+  String get shortcutChapterPrev => 'Previous chapter';
+
+  @override
+  String get shortcutScreenshot => 'Save screenshot';
+
+  @override
+  String get shortcutCycleAudioTrack => 'Cycle audio track';
+
+  @override
+  String get shortcutCycleSubtitleTrack => 'Cycle subtitle track';
+
+  @override
+  String get shortcutToggleSubtitle => 'Toggle subtitle visibility';
+
+  @override
+  String get shortcutToggleEqualizer => 'Toggle equalizer';
+
+  @override
+  String get shortcutPlaylistNext => 'Next in queue';
+
+  @override
+  String get shortcutPlaylistPrev => 'Previous in queue';
+
+  @override
+  String get shortcutToggleCompactMode => 'Toggle mini-player';
+
+  @override
+  String get shortcutNewWindow => 'Open new window';
+
+  @override
+  String get eqPresetFlat => 'Flat';
+
+  @override
+  String get eqPresetBassBoost => 'Bass Boost';
+
+  @override
+  String get eqPresetBassReduce => 'Bass Reduce';
+
+  @override
+  String get eqPresetTrebleBoost => 'Treble Boost';
+
+  @override
+  String get eqPresetVocal => 'Vocal';
+
+  @override
+  String get eqPresetRock => 'Rock';
+
+  @override
+  String get eqPresetElectronic => 'Electronic';
+
+  @override
+  String get eqPresetAcoustic => 'Acoustic';
+
+  @override
+  String get eqPresetLoudness => 'Loudness';
+
+  @override
+  String get eqPresetClassical => 'Classical';
+
+  @override
+  String get subtitleTrackOff => 'Off';
+
+  @override
+  String get keybindsTip =>
+      'Tip: press F1 or ? at any time to reopen this dialog.';
+
+  @override
+  String get keybindsNone => '(none)';
+
+  @override
+  String get dismissBarrierLabel => 'Dismiss';
+
+  @override
+  String chapterFallbackLabel(int index) {
+    return 'Chapter $index';
+  }
+
+  @override
+  String trackFallbackLabel(String id) {
+    return 'Track $id';
+  }
+
+  @override
+  String get hwAccelStateYes => 'Yes';
+
+  @override
+  String get hwAccelStateNo => 'No';
+
+  @override
+  String get accentColorBlueGrey => 'Blue Grey';
+
+  @override
+  String get accentColorBlue => 'Blue';
+
+  @override
+  String get accentColorTeal => 'Teal';
+
+  @override
+  String get accentColorPurple => 'Purple';
+
+  @override
+  String get accentColorRed => 'Red';
+
+  @override
+  String get accentColorOrange => 'Orange';
+
+  @override
+  String get accentColorGreen => 'Green';
+
+  @override
+  String get accentColorPink => 'Pink';
 }

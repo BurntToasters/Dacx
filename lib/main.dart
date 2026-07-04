@@ -13,10 +13,11 @@ import 'package:window_manager/window_manager.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/player_screen.dart';
 import 'services/debug_log_service.dart';
-import 'services/trusted_http.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
+import 'services/macos_install_location_service.dart';
 import 'services/settings_service.dart';
+import 'services/trusted_http.dart';
 import 'services/update_service.dart';
 import 'theme/window_visuals.dart';
 
@@ -80,7 +81,14 @@ void main(List<String> args) async {
 
   // Restore saved window geometry or use defaults.
   final savedSize = settings.rememberWindow ? settings.windowSize : null;
-  final savedPos = settings.rememberWindow ? settings.windowPosition : null;
+  var savedPos = settings.rememberWindow ? settings.windowPosition : null;
+
+  if (savedPos != null) {
+    final effectiveSize = savedSize ?? const Size(960, 600);
+    if (!_isPositionOnScreen(savedPos, effectiveSize)) {
+      savedPos = null;
+    }
+  }
 
   final windowOptions = WindowOptions(
     size: savedSize ?? const Size(960, 600),
@@ -185,6 +193,34 @@ void main(List<String> args) async {
       await showWindowIfReady();
     }),
   );
+}
+
+bool _isPositionOnScreen(Offset pos, Size windowSize) {
+  // The Flutter 3.44 Display API exposes each display's size but not its
+  // origin, so an exact multi-monitor bounds check is impossible here. Use the
+  // summed logical extent of all connected displays as a generous upper bound.
+  // Empty display list (info not yet available) means "don't reset" so we never
+  // regress a valid position. This catches the common failure mode: a position
+  // saved on a monitor that has since been disconnected, leaving the window
+  // far beyond the remaining desktop extent.
+  final displays = PlatformDispatcher.instance.displays;
+  if (displays.isEmpty) return true;
+  var totalW = 0.0;
+  var totalH = 0.0;
+  for (final d in displays) {
+    final dpr = d.devicePixelRatio <= 0 ? 1.0 : d.devicePixelRatio;
+    totalW += d.size.width / dpr;
+    totalH += d.size.height / dpr;
+  }
+  if (totalW <= 0 || totalH <= 0) return true;
+  const margin = 80.0;
+  final left = pos.dx;
+  final top = pos.dy;
+  final right = pos.dx + windowSize.width;
+  final bottom = pos.dy + windowSize.height;
+  final withinX = right > (-totalW + margin) && left < (totalW - margin);
+  final withinY = bottom > (-totalH + margin) && top < (totalH - margin);
+  return withinX && withinY;
 }
 
 /// Extracts the first CLI argument that looks like a file path.
@@ -528,6 +564,10 @@ class _DacxAppState extends State<DacxApp>
           themeMode: s.themeMode,
           theme: themes.light,
           darkTheme: themes.dark,
+          builder: (context, child) => _MacInstallLocationWarning(
+            debugLog: widget.debugLog,
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: PlayerScreen(
             settings: s,
             debugLog: widget.debugLog,
@@ -600,6 +640,65 @@ class _DacxAppState extends State<DacxApp>
       ),
     );
   }
+}
+
+class _MacInstallLocationWarning extends StatefulWidget {
+  final DebugLogService debugLog;
+  final Widget child;
+
+  const _MacInstallLocationWarning({
+    required this.debugLog,
+    required this.child,
+  });
+
+  @override
+  State<_MacInstallLocationWarning> createState() =>
+      _MacInstallLocationWarningState();
+}
+
+class _MacInstallLocationWarningState
+    extends State<_MacInstallLocationWarning> {
+  bool _scheduled = false;
+  bool _shown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showIfNeeded());
+    });
+  }
+
+  Future<void> _showIfNeeded() async {
+    if (!mounted || _shown) return;
+    if (!MacosInstallLocationService.shouldWarnForCurrentApp()) return;
+    _shown = true;
+    widget.debugLog.log(
+      category: DebugLogCategory.update,
+      event: 'macos_install_location_warning',
+      message: 'Dacx is running outside /Applications.',
+      severity: DebugSeverity.warn,
+    );
+    final l10n = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.dialogMacInstallLocationTitle),
+        content: Text(l10n.dialogMacInstallLocationMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.actionClose),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _ThemeInputs {

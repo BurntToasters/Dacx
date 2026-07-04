@@ -20,7 +20,7 @@
       dark and light themes.
     </p>
   </description>
-  <launchable type="desktop-id">dacx.desktop</launchable>
+  <launchable type="desktop-id">run.rosie.dacx.desktop</launchable>
   <url type="homepage">https://github.com/BurntToasters/Dacx</url>
   <url type="bugtracker">https://github.com/BurntToasters/Dacx/issues</url>
   <url type="vcs-browser">https://github.com/BurntToasters/Dacx</url>
@@ -45,7 +45,7 @@
   <screenshots>
     <screenshot type="default">
       <caption>Dacx playing media with a clean dark interface</caption>
-      <image>https://raw.githubusercontent.com/BurntToasters/Dacx/main/assets/screenshots/main.png</image>
+      <image>https://raw.githubusercontent.com/BurntToasters/Dacx/main/assets/screenshots/dacx_sc.png</image>
     </screenshot>
   </screenshots>
   <supports>
@@ -76,6 +76,14 @@
     <mediatype>video/x-flv</mediatype>
   </provides>
   <releases>
+    <release version="0.9.0" date="2026-07-04"/>
+    <release version="0.9.0-beta.7" date="2026-07-04"/>
+    <release version="0.9.0-beta.6" date="2026-06-24"/>
+    <release version="0.9.0-beta.5" date="2026-06-23"/>
+    <release version="0.9.0-beta.4" date="2026-06-23"/>
+    <release version="0.9.0-beta.3" date="2026-06-23"/>
+    <release version="0.9.0-beta.2" date="2026-06-23"/>
+    <release version="0.9.0-beta.1" date="2026-06-23"/>
     <release version="0.8.1" date="2026-06-13"/>
     <release version="0.8.0" date="2026-05-30"/>
     <release version="0.8.0-beta.17" date="2026-05-30"/>
