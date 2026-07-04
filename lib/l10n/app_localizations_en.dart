@@ -680,6 +680,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get semanticsSeekBar => 'Seek bar';
 
   @override
+  String semanticsSeekBarValue(String position, String duration) {
+    return '$position of $duration';
+  }
+
+  @override
   String semanticsAccentColor(String name) {
     return 'Accent color $name';
   }
@@ -836,4 +841,150 @@ class AppLocalizationsEn extends AppLocalizations {
   String volumePercent(int pct) {
     return 'Volume $pct percent';
   }
+
+  @override
+  String get shortcutOpenFile => 'Open file';
+
+  @override
+  String get shortcutReopenLast => 'Reopen last file';
+
+  @override
+  String get shortcutPlayPause => 'Play / pause';
+
+  @override
+  String get shortcutSeekForward => 'Seek forward';
+
+  @override
+  String get shortcutSeekBack => 'Seek backward';
+
+  @override
+  String get shortcutVolumeUp => 'Volume up';
+
+  @override
+  String get shortcutVolumeDown => 'Volume down';
+
+  @override
+  String get shortcutToggleMute => 'Toggle mute';
+
+  @override
+  String get shortcutToggleFullscreen => 'Toggle fullscreen';
+
+  @override
+  String get shortcutExitFullscreen => 'Exit fullscreen';
+
+  @override
+  String get shortcutChapterNext => 'Next chapter';
+
+  @override
+  String get shortcutChapterPrev => 'Previous chapter';
+
+  @override
+  String get shortcutScreenshot => 'Save screenshot';
+
+  @override
+  String get shortcutCycleAudioTrack => 'Cycle audio track';
+
+  @override
+  String get shortcutCycleSubtitleTrack => 'Cycle subtitle track';
+
+  @override
+  String get shortcutToggleSubtitle => 'Toggle subtitle visibility';
+
+  @override
+  String get shortcutToggleEqualizer => 'Toggle equalizer';
+
+  @override
+  String get shortcutPlaylistNext => 'Next in queue';
+
+  @override
+  String get shortcutPlaylistPrev => 'Previous in queue';
+
+  @override
+  String get shortcutToggleCompactMode => 'Toggle mini-player';
+
+  @override
+  String get shortcutNewWindow => 'Open new window';
+
+  @override
+  String get eqPresetFlat => 'Flat';
+
+  @override
+  String get eqPresetBassBoost => 'Bass Boost';
+
+  @override
+  String get eqPresetBassReduce => 'Bass Reduce';
+
+  @override
+  String get eqPresetTrebleBoost => 'Treble Boost';
+
+  @override
+  String get eqPresetVocal => 'Vocal';
+
+  @override
+  String get eqPresetRock => 'Rock';
+
+  @override
+  String get eqPresetElectronic => 'Electronic';
+
+  @override
+  String get eqPresetAcoustic => 'Acoustic';
+
+  @override
+  String get eqPresetLoudness => 'Loudness';
+
+  @override
+  String get eqPresetClassical => 'Classical';
+
+  @override
+  String get subtitleTrackOff => 'Off';
+
+  @override
+  String get keybindsTip =>
+      'Tip: press F1 or ? at any time to reopen this dialog.';
+
+  @override
+  String get keybindsNone => '(none)';
+
+  @override
+  String get dismissBarrierLabel => 'Dismiss';
+
+  @override
+  String chapterFallbackLabel(int index) {
+    return 'Chapter $index';
+  }
+
+  @override
+  String trackFallbackLabel(String id) {
+    return 'Track $id';
+  }
+
+  @override
+  String get hwAccelStateYes => 'Yes';
+
+  @override
+  String get hwAccelStateNo => 'No';
+
+  @override
+  String get accentColorBlueGrey => 'Blue Grey';
+
+  @override
+  String get accentColorBlue => 'Blue';
+
+  @override
+  String get accentColorTeal => 'Teal';
+
+  @override
+  String get accentColorPurple => 'Purple';
+
+  @override
+  String get accentColorRed => 'Red';
+
+  @override
+  String get accentColorOrange => 'Orange';
+
+  @override
+  String get accentColorGreen => 'Green';
+
+  @override
+  String get accentColorPink => 'Pink';
 }

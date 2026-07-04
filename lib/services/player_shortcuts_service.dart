@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../l10n/app_localizations.dart';
+
 enum PlayerShortcutAction {
   openFile,
   reopenLast,
@@ -49,29 +51,57 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.newWindow: ['Ctrl+N'],
 };
 
-String shortcutActionLabel(PlayerShortcutAction a) => switch (a) {
-  PlayerShortcutAction.openFile => 'Open file',
-  PlayerShortcutAction.reopenLast => 'Reopen last file',
-  PlayerShortcutAction.playPause => 'Play / pause',
-  PlayerShortcutAction.seekForward => 'Seek forward',
-  PlayerShortcutAction.seekBack => 'Seek backward',
-  PlayerShortcutAction.volumeUp => 'Volume up',
-  PlayerShortcutAction.volumeDown => 'Volume down',
-  PlayerShortcutAction.toggleMute => 'Toggle mute',
-  PlayerShortcutAction.toggleFullscreen => 'Toggle fullscreen',
-  PlayerShortcutAction.exitFullscreen => 'Exit fullscreen',
-  PlayerShortcutAction.chapterNext => 'Next chapter',
-  PlayerShortcutAction.chapterPrev => 'Previous chapter',
-  PlayerShortcutAction.screenshot => 'Save screenshot',
-  PlayerShortcutAction.cycleAudioTrack => 'Cycle audio track',
-  PlayerShortcutAction.cycleSubtitleTrack => 'Cycle subtitle track',
-  PlayerShortcutAction.toggleSubtitle => 'Toggle subtitle visibility',
-  PlayerShortcutAction.toggleEqualizer => 'Toggle equalizer',
-  PlayerShortcutAction.playlistNext => 'Next in queue',
-  PlayerShortcutAction.playlistPrev => 'Previous in queue',
-  PlayerShortcutAction.toggleCompactMode => 'Toggle mini-player',
-  PlayerShortcutAction.newWindow => 'Open new window',
-};
+String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
+  if (l10n != null) {
+    return switch (a) {
+      PlayerShortcutAction.openFile => l10n.shortcutOpenFile,
+      PlayerShortcutAction.reopenLast => l10n.shortcutReopenLast,
+      PlayerShortcutAction.playPause => l10n.shortcutPlayPause,
+      PlayerShortcutAction.seekForward => l10n.shortcutSeekForward,
+      PlayerShortcutAction.seekBack => l10n.shortcutSeekBack,
+      PlayerShortcutAction.volumeUp => l10n.shortcutVolumeUp,
+      PlayerShortcutAction.volumeDown => l10n.shortcutVolumeDown,
+      PlayerShortcutAction.toggleMute => l10n.shortcutToggleMute,
+      PlayerShortcutAction.toggleFullscreen => l10n.shortcutToggleFullscreen,
+      PlayerShortcutAction.exitFullscreen => l10n.shortcutExitFullscreen,
+      PlayerShortcutAction.chapterNext => l10n.shortcutChapterNext,
+      PlayerShortcutAction.chapterPrev => l10n.shortcutChapterPrev,
+      PlayerShortcutAction.screenshot => l10n.shortcutScreenshot,
+      PlayerShortcutAction.cycleAudioTrack => l10n.shortcutCycleAudioTrack,
+      PlayerShortcutAction.cycleSubtitleTrack =>
+        l10n.shortcutCycleSubtitleTrack,
+      PlayerShortcutAction.toggleSubtitle => l10n.shortcutToggleSubtitle,
+      PlayerShortcutAction.toggleEqualizer => l10n.shortcutToggleEqualizer,
+      PlayerShortcutAction.playlistNext => l10n.shortcutPlaylistNext,
+      PlayerShortcutAction.playlistPrev => l10n.shortcutPlaylistPrev,
+      PlayerShortcutAction.toggleCompactMode => l10n.shortcutToggleCompactMode,
+      PlayerShortcutAction.newWindow => l10n.shortcutNewWindow,
+    };
+  }
+  return switch (a) {
+    PlayerShortcutAction.openFile => 'Open file',
+    PlayerShortcutAction.reopenLast => 'Reopen last file',
+    PlayerShortcutAction.playPause => 'Play / pause',
+    PlayerShortcutAction.seekForward => 'Seek forward',
+    PlayerShortcutAction.seekBack => 'Seek backward',
+    PlayerShortcutAction.volumeUp => 'Volume up',
+    PlayerShortcutAction.volumeDown => 'Volume down',
+    PlayerShortcutAction.toggleMute => 'Toggle mute',
+    PlayerShortcutAction.toggleFullscreen => 'Toggle fullscreen',
+    PlayerShortcutAction.exitFullscreen => 'Exit fullscreen',
+    PlayerShortcutAction.chapterNext => 'Next chapter',
+    PlayerShortcutAction.chapterPrev => 'Previous chapter',
+    PlayerShortcutAction.screenshot => 'Save screenshot',
+    PlayerShortcutAction.cycleAudioTrack => 'Cycle audio track',
+    PlayerShortcutAction.cycleSubtitleTrack => 'Cycle subtitle track',
+    PlayerShortcutAction.toggleSubtitle => 'Toggle subtitle visibility',
+    PlayerShortcutAction.toggleEqualizer => 'Toggle equalizer',
+    PlayerShortcutAction.playlistNext => 'Next in queue',
+    PlayerShortcutAction.playlistPrev => 'Previous in queue',
+    PlayerShortcutAction.toggleCompactMode => 'Toggle mini-player',
+    PlayerShortcutAction.newWindow => 'Open new window',
+  };
+}
 
 class PlayerShortcutsService {
   /// Resolves a key event into an action.

@@ -8,7 +8,9 @@ abstract final class WindowsSystemPaths {
   static String systemRoot({Map<String, String>? environment}) {
     final env = environment ?? Platform.environment;
     final root = (env['SystemRoot'] ?? env['SYSTEMROOT'] ?? '').trim();
-    return root.isNotEmpty ? root : r'C:\Windows';
+    if (root.isEmpty) return r'C:\Windows';
+    if (root.toLowerCase() == r'c:\windows') return r'C:\Windows';
+    return root;
   }
 
   static String powershell({Map<String, String>? environment}) =>

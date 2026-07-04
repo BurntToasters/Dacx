@@ -11,11 +11,13 @@
 #include <Windows.Media.h>
 #include <SystemMediaTransportControlsInterop.h>
 #include <wrl/client.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include "win32_window.h"
 
@@ -85,11 +87,25 @@ class MediaSession {
 
   void Attach(std::unique_ptr<MethodChannel> channel) {
     std::lock_guard<std::mutex> lock(mutex_);
-    // Multi-window: keep every engine's channel; most-recently-active is
-    // routed to for SMTC button events.
     auto* raw = channel.get();
     channels_.push_back(std::move(channel));
     active_channel_ = raw;
+  }
+
+  void Detach(MethodChannel* channel) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (active_channel_ == channel) {
+      active_channel_ = nullptr;
+    }
+    channels_.erase(
+        std::remove_if(channels_.begin(), channels_.end(),
+                       [channel](const std::unique_ptr<MethodChannel>& c) {
+                         return c.get() == channel;
+                       }),
+        channels_.end());
+    if (active_channel_ == nullptr && !channels_.empty()) {
+      active_channel_ = channels_.back().get();
+    }
   }
 
   void HandleCall(MethodChannel* invoking_channel,
@@ -352,6 +368,11 @@ class MediaSession {
 
 }  // namespace
 
+namespace {
+  std::mutex g_reg_mutex;
+  std::unordered_map<flutter::BinaryMessenger*, MethodChannel*> g_registered;
+}
+
 void RegisterMediaSession(flutter::BinaryMessenger* messenger) {
   auto channel = std::make_unique<MethodChannel>(
       messenger, "run.rosie.dacx/media_session",
@@ -362,7 +383,26 @@ void RegisterMediaSession(flutter::BinaryMessenger* messenger) {
                     std::unique_ptr<MethodResult> result) {
         MediaSession::Get().HandleCall(raw_channel, call, std::move(result));
       });
+  {
+    std::lock_guard<std::mutex> lock(g_reg_mutex);
+    g_registered[messenger] = raw_channel;
+  }
   MediaSession::Get().Attach(std::move(channel));
+}
+
+void UnregisterMediaSession(flutter::BinaryMessenger* messenger) {
+  MethodChannel* raw = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(g_reg_mutex);
+    auto it = g_registered.find(messenger);
+    if (it != g_registered.end()) {
+      raw = it->second;
+      g_registered.erase(it);
+    }
+  }
+  if (raw) {
+    MediaSession::Get().Detach(raw);
+  }
 }
 
 }  // namespace dacx

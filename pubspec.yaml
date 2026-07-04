@@ -1,7 +1,7 @@
 name: dacx
 description: "Quick, lightweight cross-platform media player."
 publish_to: 'none'
-version: 0.9.0-beta.5+900
+version: 0.9.0-beta.7+900
 
 environment:
   sdk: ^3.10.7
@@ -26,7 +26,7 @@ dependencies:
   media_kit_libs_macos_video: ^1.1.4
   media_kit_libs_windows_video: ^1.0.11
   media_kit_video: ^2.0.1
-  package_info_plus: ^10.1.0
+  package_info_plus: ^10.2.0
   path: ^1.9.1
   shared_preferences: ^2.5.3
   url_launcher: ^6.3.1

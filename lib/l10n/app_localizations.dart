@@ -1282,6 +1282,12 @@ abstract class AppLocalizations {
   /// **'Seek bar'**
   String get semanticsSeekBar;
 
+  /// No description provided for @semanticsSeekBarValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{position} of {duration}'**
+  String semanticsSeekBarValue(String position, String duration);
+
   /// No description provided for @semanticsAccentColor.
   ///
   /// In en, this message translates to:
@@ -1545,6 +1551,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Volume {pct} percent'**
   String volumePercent(int pct);
+
+  /// No description provided for @shortcutOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open file'**
+  String get shortcutOpenFile;
+
+  /// No description provided for @shortcutReopenLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen last file'**
+  String get shortcutReopenLast;
+
+  /// No description provided for @shortcutPlayPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Play / pause'**
+  String get shortcutPlayPause;
+
+  /// No description provided for @shortcutSeekForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek forward'**
+  String get shortcutSeekForward;
+
+  /// No description provided for @shortcutSeekBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek backward'**
+  String get shortcutSeekBack;
+
+  /// No description provided for @shortcutVolumeUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume up'**
+  String get shortcutVolumeUp;
+
+  /// No description provided for @shortcutVolumeDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume down'**
+  String get shortcutVolumeDown;
+
+  /// No description provided for @shortcutToggleMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle mute'**
+  String get shortcutToggleMute;
+
+  /// No description provided for @shortcutToggleFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle fullscreen'**
+  String get shortcutToggleFullscreen;
+
+  /// No description provided for @shortcutExitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit fullscreen'**
+  String get shortcutExitFullscreen;
+
+  /// No description provided for @shortcutChapterNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next chapter'**
+  String get shortcutChapterNext;
+
+  /// No description provided for @shortcutChapterPrev.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous chapter'**
+  String get shortcutChapterPrev;
+
+  /// No description provided for @shortcutScreenshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Save screenshot'**
+  String get shortcutScreenshot;
+
+  /// No description provided for @shortcutCycleAudioTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle audio track'**
+  String get shortcutCycleAudioTrack;
+
+  /// No description provided for @shortcutCycleSubtitleTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle subtitle track'**
+  String get shortcutCycleSubtitleTrack;
+
+  /// No description provided for @shortcutToggleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle subtitle visibility'**
+  String get shortcutToggleSubtitle;
+
+  /// No description provided for @shortcutToggleEqualizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle equalizer'**
+  String get shortcutToggleEqualizer;
+
+  /// No description provided for @shortcutPlaylistNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next in queue'**
+  String get shortcutPlaylistNext;
+
+  /// No description provided for @shortcutPlaylistPrev.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous in queue'**
+  String get shortcutPlaylistPrev;
+
+  /// No description provided for @shortcutToggleCompactMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle mini-player'**
+  String get shortcutToggleCompactMode;
+
+  /// No description provided for @shortcutNewWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Open new window'**
+  String get shortcutNewWindow;
+
+  /// No description provided for @eqPresetFlat.
+  ///
+  /// In en, this message translates to:
+  /// **'Flat'**
+  String get eqPresetFlat;
+
+  /// No description provided for @eqPresetBassBoost.
+  ///
+  /// In en, this message translates to:
+  /// **'Bass Boost'**
+  String get eqPresetBassBoost;
+
+  /// No description provided for @eqPresetBassReduce.
+  ///
+  /// In en, this message translates to:
+  /// **'Bass Reduce'**
+  String get eqPresetBassReduce;
+
+  /// No description provided for @eqPresetTrebleBoost.
+  ///
+  /// In en, this message translates to:
+  /// **'Treble Boost'**
+  String get eqPresetTrebleBoost;
+
+  /// No description provided for @eqPresetVocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Vocal'**
+  String get eqPresetVocal;
+
+  /// No description provided for @eqPresetRock.
+  ///
+  /// In en, this message translates to:
+  /// **'Rock'**
+  String get eqPresetRock;
+
+  /// No description provided for @eqPresetElectronic.
+  ///
+  /// In en, this message translates to:
+  /// **'Electronic'**
+  String get eqPresetElectronic;
+
+  /// No description provided for @eqPresetAcoustic.
+  ///
+  /// In en, this message translates to:
+  /// **'Acoustic'**
+  String get eqPresetAcoustic;
+
+  /// No description provided for @eqPresetLoudness.
+  ///
+  /// In en, this message translates to:
+  /// **'Loudness'**
+  String get eqPresetLoudness;
+
+  /// No description provided for @eqPresetClassical.
+  ///
+  /// In en, this message translates to:
+  /// **'Classical'**
+  String get eqPresetClassical;
+
+  /// No description provided for @subtitleTrackOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get subtitleTrackOff;
+
+  /// No description provided for @keybindsTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: press F1 or ? at any time to reopen this dialog.'**
+  String get keybindsTip;
+
+  /// No description provided for @keybindsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'(none)'**
+  String get keybindsNone;
+
+  /// No description provided for @dismissBarrierLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get dismissBarrierLabel;
+
+  /// No description provided for @chapterFallbackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter {index}'**
+  String chapterFallbackLabel(int index);
+
+  /// No description provided for @trackFallbackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Track {id}'**
+  String trackFallbackLabel(String id);
+
+  /// No description provided for @hwAccelStateYes.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get hwAccelStateYes;
+
+  /// No description provided for @hwAccelStateNo.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get hwAccelStateNo;
+
+  /// No description provided for @accentColorBlueGrey.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue Grey'**
+  String get accentColorBlueGrey;
+
+  /// No description provided for @accentColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get accentColorBlue;
+
+  /// No description provided for @accentColorTeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get accentColorTeal;
+
+  /// No description provided for @accentColorPurple.
+  ///
+  /// In en, this message translates to:
+  /// **'Purple'**
+  String get accentColorPurple;
+
+  /// No description provided for @accentColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get accentColorRed;
+
+  /// No description provided for @accentColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get accentColorOrange;
+
+  /// No description provided for @accentColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get accentColorGreen;
+
+  /// No description provided for @accentColorPink.
+  ///
+  /// In en, this message translates to:
+  /// **'Pink'**
+  String get accentColorPink;
 }
 
 class _AppLocalizationsDelegate

@@ -40,6 +40,7 @@ import '../widgets/custom_title_bar.dart';
 import '../widgets/media_info_dialog.dart';
 import '../widgets/open_url_dialog.dart';
 import '../widgets/osd_overlay.dart';
+import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
 import '../widgets/transport_controls.dart';
@@ -2133,82 +2134,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   final source = items[index];
                                   final name = source.displayName;
 
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    child: Material(
-                                      color: isCurrent
-                                          ? colorScheme.primaryContainer
-                                                .withValues(alpha: 0.58)
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(10),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: InkWell(
-                                        onTap: () {
-                                          _playlist.jumpTo(index);
-                                          unawaited(_loadSource(source));
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 10,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                isCurrent
-                                                    ? Icons.play_arrow
-                                                    : source.isUrl
-                                                    ? Icons.link
-                                                    : Icons.music_note,
-                                                size: 18,
-                                                color: isCurrent
-                                                    ? colorScheme.primary
-                                                    : colorScheme.onSurface
-                                                          .withValues(
-                                                            alpha: 0.54,
-                                                          ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Text(
-                                                  name,
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight: isCurrent
-                                                        ? FontWeight.w600
-                                                        : FontWeight.normal,
-                                                    color: isCurrent
-                                                        ? colorScheme
-                                                              .onPrimaryContainer
-                                                        : colorScheme.onSurface,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.close,
-                                                  size: 16,
-                                                ),
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(),
-                                                onPressed: () {
-                                                  _playlist.removeAt(index);
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                                  return QueueItemTile(
+                                    name: name,
+                                    isCurrent: isCurrent,
+                                    isUrl: source.isUrl,
+                                    playLabel: l10n.actionPlay,
+                                    removeLabel: l10n.actionRemove,
+                                    colorScheme: colorScheme,
+                                    onActivate: () {
+                                      _playlist.jumpTo(index);
+                                      unawaited(_loadSource(source));
+                                    },
+                                    onRemove: () {
+                                      _playlist.removeAt(index);
+                                    },
                                   );
                                 },
                               ),
@@ -2611,14 +2550,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
         title: title,
         language: language,
         fallbackId: fallbackId,
+        fallbackLabel: AppLocalizations.of(
+          context,
+        ).trackFallbackLabel(fallbackId),
       );
 
   // ── Chapters ──────────────────────────────────────────────
 
   Future<void> _refreshChapters({int? expectedCount}) async {
+    final l10n = AppLocalizations.of(context);
     final list = await ChapterListLoader.load(
       readProperty: _playerService.getProperty,
       expectedCount: expectedCount,
+      fallbackTitle: (i) => l10n.chapterFallbackLabel(i + 1),
     );
     if (!mounted) return;
     setState(() => _chapters = list);
@@ -2719,6 +2663,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _settings.eqEnabled ? l10n.osdStateOn : l10n.osdStateOff,
       ),
     );
+  }
+
+  String _eqPresetLabel(AppLocalizations l10n, String id) {
+    return switch (id) {
+      'flat' => l10n.eqPresetFlat,
+      'bass_boost' => l10n.eqPresetBassBoost,
+      'bass_reduce' => l10n.eqPresetBassReduce,
+      'treble_boost' => l10n.eqPresetTrebleBoost,
+      'vocal' => l10n.eqPresetVocal,
+      'rock' => l10n.eqPresetRock,
+      'electronic' => l10n.eqPresetElectronic,
+      'acoustic' => l10n.eqPresetAcoustic,
+      'loudness' => l10n.eqPresetLoudness,
+      'classical' => l10n.eqPresetClassical,
+      _ => id,
+    };
   }
 
   // ── Multi-audio mix ───────────────────────────────────────
@@ -3171,7 +3131,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final result = await showGeneralDialog<String>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: AppLocalizations.of(context).dismissBarrierLabel,
       barrierColor: Colors.black.withValues(alpha: 0.20),
       transitionDuration: _sheetTransitionDuration,
       pageBuilder: (ctx, _, _) {
@@ -3427,9 +3387,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'screenshot':
         unawaited(_takeScreenshot());
         break;
-      case 'mix':
-        unawaited(_applyMultiAudioMix());
-        break;
       case 'keybinds':
         unawaited(_showKeybindsDialog());
         break;
@@ -3519,7 +3476,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Expanded(
                       child: Text(
                         t.id == 'no'
-                            ? 'Off'
+                            ? AppLocalizations.of(ctx).subtitleTrackOff
                             : _trackLabel(t.title, t.language, t.id),
                       ),
                     ),
@@ -3616,7 +3573,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           .map(
                             (p) => DropdownMenuItem(
                               value: p.id,
-                              child: Text(p.label),
+                              child: Text(_eqPresetLabel(l10n, p.id)),
                             ),
                           )
                           .toList(),
@@ -3737,7 +3694,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                         child: Text(
-                          'Tip: press F1 or ? at any time to reopen this dialog.',
+                          AppLocalizations.of(ctx).keybindsTip,
                           style: Theme.of(ctx).textTheme.bodySmall,
                         ),
                       ),
@@ -3748,9 +3705,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             const <String>[];
                         return ListTile(
                           dense: true,
-                          title: Text(shortcutActionLabel(a)),
+                          title: Text(
+                            shortcutActionLabel(
+                              a,
+                              l10n: AppLocalizations.of(ctx),
+                            ),
+                          ),
                           subtitle: Text(
-                            accels.isEmpty ? '(none)' : accels.join(', '),
+                            accels.isEmpty
+                                ? AppLocalizations.of(ctx).keybindsNone
+                                : accels.join(', '),
                             style: Theme.of(ctx).textTheme.bodySmall,
                           ),
                           trailing: Wrap(

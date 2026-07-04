@@ -7,12 +7,14 @@ abstract final class ChapterListLoader {
   static Future<List<ChapterInfo>> load({
     required MpvPropertyReader readProperty,
     int? expectedCount,
+    String Function(int index)? fallbackTitle,
   }) async {
     final count =
         expectedCount ??
         (int.tryParse(await readProperty('chapter-list/count') ?? '') ?? 0);
     if (count <= 0) return const [];
 
+    final fallback = fallbackTitle ?? (i) => 'Chapter ${i + 1}';
     final list = <ChapterInfo>[];
     for (var i = 0; i < count; i++) {
       final title = await readProperty('chapter-list/$i/title');
@@ -21,7 +23,7 @@ abstract final class ChapterListLoader {
       list.add(
         ChapterInfo(
           index: i,
-          title: (title == null || title.isEmpty) ? 'Chapter ${i + 1}' : title,
+          title: (title == null || title.isEmpty) ? fallback(i) : title,
           time: Duration(milliseconds: (time * 1000).round()),
         ),
       );
