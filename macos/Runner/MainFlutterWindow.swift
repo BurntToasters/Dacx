@@ -34,6 +34,9 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     MainFlutterWindowManipulator.start(mainFlutterWindow: self)
+    // start() resets titlebar/background to opaque defaults — undo that so
+    // NSVisualEffectView can show through.
+    restoreVibrancyWindowChrome()
 
     RegisterGeneratedPlugins(
       registry: macOSWindowUtilsViewController.flutterViewController
@@ -53,11 +56,6 @@ class MainFlutterWindow: NSWindow {
     guard let flutterViewController = contentViewController as? FlutterViewController
     else { return }
 
-    titleVisibility = .hidden
-    titlebarAppearsTransparent = true
-    isMovableByWindowBackground = true
-    isOpaque = false
-    backgroundColor = .clear
     flutterViewController.backgroundColor = .clear
 
     let windowFrame = self.frame
@@ -68,6 +66,39 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     MainFlutterWindowManipulator.start(mainFlutterWindow: self)
+    restoreVibrancyWindowChrome()
+  }
+
+  /// Re-apply chrome needed for behind-window vibrancy after
+  /// MainFlutterWindowManipulator.start() (which sets opaque defaults).
+  private func restoreVibrancyWindowChrome() {
+    titleVisibility = .hidden
+    titlebarAppearsTransparent = true
+    isMovableByWindowBackground = true
+    isOpaque = false
+    backgroundColor = .clear
+    // Keep shadow; invalidate after transparency changes so DWM/AppKit
+    // recomputes the silhouette (Flutter #122133).
+    hasShadow = true
+    styleMask.insert(.fullSizeContentView)
+    if let wrapped = contentViewController as? MacOSWindowUtilsViewController {
+      let flutterVC = wrapped.flutterViewController
+      flutterVC.backgroundColor = .clear
+      // Ensure the Flutter NSView itself is not treated as opaque.
+      flutterVC.view.wantsLayer = true
+      flutterVC.view.layer?.backgroundColor = NSColor.clear.cgColor
+      flutterVC.view.layer?.isOpaque = false
+      if let effectView = wrapped.view as? NSVisualEffectView {
+        effectView.blendingMode = .behindWindow
+        effectView.state = .active
+        if #available(macOS 10.14, *) {
+          // underWindowBackground / hudWindow actually blur desktop content;
+          // windowBackground is mostly opaque wallpaper-tint.
+          effectView.material = .underWindowBackground
+        }
+      }
+    }
+    invalidateShadow()
   }
 
   /// Flutter engine for this window (works with or without the blur wrapper).

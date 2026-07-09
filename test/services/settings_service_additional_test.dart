@@ -264,20 +264,20 @@ void main() {
       expect(notifications, 1);
     });
 
-    test('audioWaveformEnabled setter is idempotent for same value', () async {
+    test('audioWaveformEnabled is gated by experimentalFeaturesEnabled',
+        () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
-      var notifications = 0;
-      service.addListener(() => notifications++);
 
+      service.audioWaveformEnabled = true;
       expect(service.audioWaveformEnabled, isFalse);
-      service.audioWaveformEnabled = false;
-      service.audioWaveformEnabled = true;
-      service.audioWaveformEnabled = true;
 
+      service.experimentalFeaturesEnabled = true;
       expect(service.audioWaveformEnabled, isTrue);
-      expect(notifications, 1);
+
+      service.experimentalFeaturesEnabled = false;
+      expect(service.audioWaveformEnabled, isFalse);
     });
 
     test('multiAudioMix is gated by experimentalFeaturesEnabled', () async {

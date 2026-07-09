@@ -542,14 +542,17 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Minimum UI translucency when blur is on (Flutter shell alpha).
+  static const double windowOpacityMin = 0.55;
+
   double get windowOpacity {
     final stored = _prefs.getDouble(_kWindowOpacity);
     if (stored == null) return 1.0;
-    return stored.clamp(0.65, 1.0);
+    return stored.clamp(windowOpacityMin, 1.0);
   }
 
   set windowOpacity(double value) {
-    _prefs.setDouble(_kWindowOpacity, value.clamp(0.65, 1.0));
+    _prefs.setDouble(_kWindowOpacity, value.clamp(windowOpacityMin, 1.0));
     notifyListeners();
   }
 
@@ -692,10 +695,15 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get audioWaveformEnabled =>
-      _prefs.getBool(_kAudioWaveformEnabled) ?? false;
+  /// Audio spectrum visualizer. Experimental — preference is preserved but
+  /// reported as `false` when Experimental Features is off (same pattern as
+  /// [multiAudioMix]).
+  bool get audioWaveformEnabled {
+    if (!experimentalFeaturesEnabled) return false;
+    return _prefs.getBool(_kAudioWaveformEnabled) ?? false;
+  }
+
   set audioWaveformEnabled(bool v) {
-    if (audioWaveformEnabled == v) return;
     _prefs.setBool(_kAudioWaveformEnabled, v);
     notifyListeners();
   }

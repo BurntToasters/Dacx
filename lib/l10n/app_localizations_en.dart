@@ -79,11 +79,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Publish playback to MPRIS / SMTC / Now Playing';
 
   @override
-  String get settingsAudioWaveform => 'Audio waveform visualizer';
+  String get settingsAudioWaveform => 'Audio spectrum visualizer';
 
   @override
   String get settingsAudioWaveformSubtitle =>
-      'Show an animated waveform above the playhead for audio tracks';
+      'Show a bass→treble spectrum above the playhead (simulated; not real FFT yet)';
 
   @override
   String get settingsAllowMultipleWindowsSubtitle =>

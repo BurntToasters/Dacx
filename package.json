@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.10.0-beta.3",
+  "version": "0.10.0-beta.4",
   "private": true,
   "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
   "license": "GPL-3.0-only",
@@ -70,6 +70,7 @@
     "b": "git fetch origin && git reset --hard && git clean -fd && git switch -C beta origin/beta && git reset --hard origin/beta && git clean -fd && npm run vi",
     "r": "git fetch origin && git reset --hard && git clean -fd && git switch -C main origin/main && git reset --hard origin/main && git clean -fd && npm run vi && npm run gitprune:force",
     "u": "npm update && fvm flutter pub upgrade && npm run sync-version && node scripts/update-metainfo.js && npm run format && npm run test:all",
+    "u2": "npm update && fvm flutter pub upgrade && npm run sync-version",
     "win-compiler:x64": "powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command \"& 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\Launch-VsDevShell.ps1' -SkipAutomaticLocation\"",
     "win-compiler:arm64": "powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command \"& 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\Launch-VsDevShell.ps1' -SkipAutomaticLocation -Arch arm64 -HostArch amd64\"",
     "flatpak:bundle": "node scripts/flatpak-bundle.js",

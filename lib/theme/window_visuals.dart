@@ -41,17 +41,20 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     final curvedStrength = Curves.easeOut.transform(strength);
     double withUiOpacity(double alpha) =>
         blurEnabled ? (alpha * opacity).clamp(0.0, 1.0).toDouble() : alpha;
+    // Frosted-glass shell: strong enough to read UI, open enough for native
+    // blur (NSVisualEffectView / acrylic) to show through once the Flutter
+    // root clears its opaque framebuffer with BlendMode.clear.
     final shellAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.62, 0.48, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.55, 0.32, curvedStrength)!)
         : 1.0;
     final barAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.58, 0.44, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.50, 0.30, curvedStrength)!)
         : 0.98;
     final contentAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.52, 0.38, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.48, 0.28, curvedStrength)!)
         : 0.98;
     final overlayAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.60, 0.46, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.52, 0.30, curvedStrength)!)
         : 0.99;
     final borderAlpha = blurEnabled ? lerpDouble(0.18, 0.28, strength)! : 0.14;
     final dividerAlpha = blurEnabled ? lerpDouble(0.14, 0.22, strength)! : 0.12;

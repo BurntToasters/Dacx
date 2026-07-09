@@ -157,13 +157,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onChanged: (v) =>
                                 setState(() => _s.mediaSessionEnabled = v),
                           ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsAudioWaveform),
-                            subtitle: Text(l10n.settingsAudioWaveformSubtitle),
-                            value: _s.audioWaveformEnabled,
-                            onChanged: (v) =>
-                                setState(() => _s.audioWaveformEnabled = v),
-                          ),
                           _hwDecTile(),
                           const Divider(),
                           _sectionHeader(l10n.settingsSectionAppearance),
@@ -175,6 +168,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _experimentalTile(_linuxCompositorBlurTile()),
                             _experimentalTile(_windowBlurTile()),
                             _experimentalTile(_windowBlurStrengthTile()),
+                            _experimentalTile(_audioWaveformTile()),
                           ],
                           SwitchListTile(
                             title: Text(l10n.settingsAlwaysOnTop),
@@ -519,11 +513,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowOpacityTile() {
     final l10n = AppLocalizations.of(context);
-    final opacity = _s.windowOpacity.clamp(0.65, 1.0);
+    final opacity = _s.windowOpacity.clamp(
+      SettingsService.windowOpacityMin,
+      1.0,
+    );
     final percent = (opacity * 100).round();
     final windowsBlurMode =
-        (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
-        _s.windowBlurEnabled;
+      (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+      _s.windowBlurEnabled;
+    const minOpacity = SettingsService.windowOpacityMin;
+    final divisions = ((1.0 - minOpacity) / 0.05).round();
 
     return ListTile(
       leading: _experimentalWarningIcon(),
@@ -535,9 +534,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (windowsBlurMode) Text(l10n.settingsWindowOpacityBlurNote),
           Slider(
             value: opacity,
-            min: 0.65,
+            min: minOpacity,
             max: 1.0,
-            divisions: 14,
+            divisions: divisions,
             label: '$percent%',
             onChanged: (v) => setState(() {
               _s.windowOpacity = v;
@@ -644,6 +643,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _s.linuxCompositorBlurExperimental = v;
         _log(
           'linux_compositor_blur_changed',
+          detailsBuilder: () => {'value': v},
+        );
+      }),
+    );
+  }
+
+  Widget _audioWaveformTile() {
+    final l10n = AppLocalizations.of(context);
+    return SwitchListTile(
+      secondary: _experimentalWarningIcon(),
+      title: Text(l10n.settingsAudioWaveform),
+      subtitle: Text(l10n.settingsAudioWaveformSubtitle),
+      value: _s.audioWaveformEnabled,
+      onChanged: (v) => setState(() {
+        _s.audioWaveformEnabled = v;
+        _log(
+          'audio_waveform_changed',
           detailsBuilder: () => {'value': v},
         );
       }),

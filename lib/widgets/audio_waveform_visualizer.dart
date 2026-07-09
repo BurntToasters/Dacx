@@ -4,8 +4,9 @@ import 'package:flutter/scheduler.dart';
 
 /// Spectrum-style visualizer: left = bass/lows, right = treble/highs.
 ///
-/// Heights are a seeded fake spectrum (no real FFT yet) with a gentle
-/// play-state bounce that keeps bass slower/taller and treble faster/shorter.
+/// Simulated (no real FFT yet). Base band shape is seeded per track; live
+/// reactivity comes from per-band energy that rises on beat impulses and
+/// decays — bass hits harder/slower, treble flickers faster.
 class AudioWaveformVisualizer extends StatefulWidget {
   const AudioWaveformVisualizer({
     super.key,
@@ -27,17 +28,26 @@ class AudioWaveformVisualizer extends StatefulWidget {
 
 class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
     with TickerProviderStateMixin {
+  static const int _barCount = 64;
+
   late Ticker _ticker;
   double _phase = 0.0;
   Duration _lastElapsed = Duration.zero;
   late AnimationController _playPauseController;
 
-  List<double>? _cachedHeights;
+  final math.Random _random = math.Random();
+  // Per-band live energy 0..1 — driven by beat impulses, not a static sine.
+  late List<double> _bandEnergy;
+  double _nextBeatIn = 0.35;
+  double _beatClock = 0.0;
+
+  List<double>? _cachedBase;
   int? _cachedSeed;
 
   @override
   void initState() {
     super.initState();
+    _bandEnergy = List<double>.filled(_barCount, 0.35);
     _playPauseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -55,14 +65,73 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
         final clampedDt = dt.clamp(0.0, 1 / 30);
         setState(() {
           _phase +=
-              1.4 *
+              2.2 *
               clampedDt *
               (widget.isPlaying ? 1.0 : _playPauseController.value);
+          if (widget.isPlaying) {
+            _tickBands(clampedDt);
+          } else {
+            // Fade energy out on pause.
+            for (var i = 0; i < _barCount; i++) {
+              _bandEnergy[i] *= math.pow(0.88, clampedDt * 60).toDouble();
+            }
+          }
         });
       } else {
         _lastElapsed = elapsed;
       }
     })..start();
+  }
+
+  void _tickBands(double dt) {
+    _beatClock += dt;
+    // Decay toward a quiet floor — bass decays slower than treble.
+    for (var i = 0; i < _barCount; i++) {
+      final t = i / (_barCount - 1);
+      final decay = math.pow(0.82 + 0.12 * t, dt * 60).toDouble();
+      final floor = 0.12 + 0.08 * (1.0 - t);
+      _bandEnergy[i] = floor + (_bandEnergy[i] - floor) * decay;
+    }
+
+    // Occasional micro-flutter so bars never look frozen between beats.
+    if (_random.nextDouble() < 0.35) {
+      final i = _random.nextInt(_barCount);
+      final t = i / (_barCount - 1);
+      final flutter = (0.04 + 0.10 * t) * _random.nextDouble();
+      _bandEnergy[i] = (_bandEnergy[i] + flutter).clamp(0.0, 1.0);
+    }
+
+    if (_beatClock < _nextBeatIn) return;
+    _beatClock = 0.0;
+    // ~90–140 BPM-ish spacing with some swing.
+    _nextBeatIn = 0.28 + _random.nextDouble() * 0.32;
+
+    final strength = 0.45 + _random.nextDouble() * 0.55;
+    // Kick: left third. Snare/hat: mid/right with lower chance.
+    final kind = _random.nextDouble();
+    if (kind < 0.55) {
+      _impulse(0.0, 0.38, strength, spread: 0.55);
+      if (_random.nextDouble() < 0.4) {
+        _impulse(0.55, 1.0, strength * 0.35, spread: 0.35);
+      }
+    } else if (kind < 0.82) {
+      _impulse(0.28, 0.62, strength * 0.75, spread: 0.45);
+    } else {
+      _impulse(0.62, 1.0, strength * 0.55, spread: 0.30);
+    }
+  }
+
+  void _impulse(double fromT, double toT, double strength, {double spread = 0.5}) {
+    for (var i = 0; i < _barCount; i++) {
+      final t = i / (_barCount - 1);
+      if (t < fromT || t > toT) continue;
+      final mid = (fromT + toT) / 2;
+      final half = math.max(0.001, (toT - fromT) / 2);
+      final falloff = 1.0 - ((t - mid).abs() / half) * (1.0 - spread);
+      final bump = strength * falloff.clamp(0.0, 1.0) *
+          (0.7 + 0.3 * _random.nextDouble());
+      _bandEnergy[i] = (_bandEnergy[i] + bump).clamp(0.0, 1.0);
+    }
   }
 
   @override
@@ -71,6 +140,8 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
     if (widget.isPlaying != oldWidget.isPlaying) {
       if (widget.isPlaying) {
         _playPauseController.forward();
+        _nextBeatIn = 0.05;
+        _beatClock = 0.0;
       } else {
         _playPauseController.reverse();
       }
@@ -93,57 +164,38 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
     return hash;
   }
 
-  /// Fake frequency spectrum: bass (left) taller + smoother, treble (right)
-  /// shorter + spikier — like a classic media-player EQ visualizer.
-  List<double> _generateSpectrum(int seed, int count) {
+  /// Static per-track band envelope: bass tall, treble short.
+  List<double> _generateBaseSpectrum(int seed, int count) {
     final random = math.Random(seed);
     final List<double> heights = [];
-    double bassSmooth = 0.7;
-    double midSmooth = 0.45;
-    double trebleSmooth = 0.25;
-
+    double smooth = 0.65;
     for (int i = 0; i < count; i++) {
-      final t = i / (count - 1); // 0 = bass, 1 = treble
-
-      // Log-ish falloff: energy concentrates on the left (lows).
-      final bandFloor = 0.12 + 0.78 * math.pow(1.0 - t, 1.35).toDouble();
-      final bandCeil = (bandFloor + 0.18 + 0.22 * (1.0 - t)).clamp(0.15, 1.0);
-
-      // Bass: slow correlated motion. Treble: noisier independent spikes.
-      final noise = random.nextDouble();
-      if (t < 0.33) {
-        final target = bandFloor + (bandCeil - bandFloor) * noise;
-        bassSmooth = bassSmooth * 0.72 + target * 0.28;
-        heights.add(bassSmooth.clamp(0.08, 1.0));
-      } else if (t < 0.66) {
-        final target = bandFloor + (bandCeil - bandFloor) * noise;
-        midSmooth = midSmooth * 0.55 + target * 0.45;
-        heights.add(midSmooth.clamp(0.06, 0.92));
-      } else {
-        final spike = noise > 0.72 ? noise : noise * 0.55;
-        final target = bandFloor + (bandCeil - bandFloor) * spike;
-        trebleSmooth = trebleSmooth * 0.35 + target * 0.65;
-        heights.add(trebleSmooth.clamp(0.05, 0.75));
-      }
+      final t = i / (count - 1);
+      final bandFloor = 0.18 + 0.62 * math.pow(1.0 - t, 1.25).toDouble();
+      final bandCeil = (bandFloor + 0.12 + 0.18 * (1.0 - t)).clamp(0.2, 0.95);
+      final target = bandFloor + (bandCeil - bandFloor) * random.nextDouble();
+      final lerp = 0.55 + 0.25 * t; // treble less correlated
+      smooth = smooth * (1.0 - lerp) + target * lerp;
+      heights.add(smooth.clamp(0.08, 1.0));
     }
     return heights;
   }
 
-  void _generateHeightsIfNeeded() {
+  void _generateBaseIfNeeded() {
     final key = widget.sourceKey ?? '';
     final seed = _getSeed(key, widget.duration);
-    if (_cachedHeights == null || _cachedSeed != seed) {
+    if (_cachedBase == null || _cachedSeed != seed) {
       _cachedSeed = seed;
-      _cachedHeights = _generateSpectrum(seed, 64);
+      _cachedBase = _generateBaseSpectrum(seed, _barCount);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    _generateHeightsIfNeeded();
+    _generateBaseIfNeeded();
 
-    final heights = _cachedHeights ?? const [];
-    if (heights.isEmpty) return const SizedBox.shrink();
+    final base = _cachedBase ?? const <double>[];
+    if (base.isEmpty) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final activeColor = theme.colorScheme.primary;
@@ -153,6 +205,13 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
         ? (widget.position.inMilliseconds / widget.duration.inMilliseconds)
               .clamp(0.0, 1.0)
         : 0.0;
+
+    // Combine static envelope with live energy for the frame.
+    final heights = List<double>.generate(_barCount, (i) {
+      final live = _bandEnergy[i];
+      final combined = base[i] * (0.35 + 0.65 * live);
+      return combined.clamp(0.06, 1.0);
+    });
 
     return RepaintBoundary(
       child: CustomPaint(
@@ -201,15 +260,13 @@ class WaveformPainter extends CustomPainter {
     final inactivePaint = Paint()..color = inactiveColor;
 
     for (int i = 0; i < barCount; i++) {
-      final t = i / (barCount - 1); // 0 bass → 1 treble
-
-      // Bass: slow, wide pulse. Treble: faster, smaller shimmer.
-      final freq = 1.2 + 5.5 * t;
-      final amp = (0.10 - 0.06 * t).clamp(0.03, 0.10);
-      final bounce = math.sin(phase * freq + i * 0.35) * amp * playPauseScale;
-
-      final rawHeight = (heights[i] + bounce).clamp(0.06, 1.0);
-      final barHeight = rawHeight * totalHeight * 0.88;
+      final t = i / (barCount - 1);
+      // Tiny traveling shimmer on top of live energy — keeps motion alive
+      // without dominating the beat response.
+      final shimmer =
+          math.sin(phase * (1.6 + 4.0 * t) + i * 0.4) * 0.04 * playPauseScale;
+      final rawHeight = (heights[i] + shimmer).clamp(0.06, 1.0);
+      final barHeight = rawHeight * totalHeight * 0.88 * (0.25 + 0.75 * playPauseScale);
       final x = i * step + (step - barWidth) / 2;
       final y = (totalHeight - barHeight) / 2;
 
