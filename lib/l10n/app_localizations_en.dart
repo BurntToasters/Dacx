@@ -228,7 +228,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackUpdateCheckFailed => 'Failed to check for updates.';
 
   @override
+  String get snackUpdateRateLimited =>
+      'Update check rate-limited. Please try again in a few minutes.';
+
+  @override
   String get snackUpdateLatest => 'You are on the latest version.';
+
+  @override
+  String get snackUpdateLatestBeta => 'You are on the latest beta.';
+
+  @override
+  String get snackUpdateNetworkError =>
+      'Could not reach the update server. Check your connection.';
 
   @override
   String get settingsKeyboardShortcuts => 'Keyboard shortcuts';

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -32,6 +33,9 @@ class UpdateService {
   final CanLaunchUrlFn _canLaunch;
   final LaunchUrlFn _launch;
   bool _lastCheckSucceeded = false;
+  bool _lastCheckRateLimited = false;
+  bool _lastCheckNetworkError = false;
+  UpdateChannel? _lastEffectiveChannel;
 
   UpdateService({
     DebugLogService? debugLog,
@@ -51,6 +55,9 @@ class UpdateService {
        _launch = launch ?? launchUrl;
 
   bool get lastCheckSucceeded => _lastCheckSucceeded;
+  bool get lastCheckRateLimited => _lastCheckRateLimited;
+  bool get lastCheckNetworkError => _lastCheckNetworkError;
+  UpdateChannel? get lastEffectiveChannel => _lastEffectiveChannel;
 
   void _log(
     String event, {
@@ -160,6 +167,9 @@ class UpdateService {
     UpdateChannel channel = UpdateChannel.auto,
   }) async {
     _lastCheckSucceeded = false;
+    _lastCheckRateLimited = false;
+    _lastCheckNetworkError = false;
+    _lastEffectiveChannel = null;
     try {
       final packageInfo = await _packageInfoLoader();
       final currentVersion = await _currentVersionLoader(packageInfo);
@@ -197,7 +207,28 @@ class UpdateService {
           } else {
             release = betaRelease;
           }
-        } else if (stableRelease != null) {
+        } else if (betaRelease == null && stableRelease != null) {
+          // Beta fetch failed (e.g. rate-limited). If the user is already on
+          // a pre-release newer than the latest stable, we cannot confidently
+          // say "up to date" — treat this as a failed check instead of falling
+          // back to stale stable-only data.
+          final stableVer = stableRelease.tagName
+              .replaceFirst(RegExp(r'^v'), '')
+              .trim();
+          if (currentVersion.contains('-') &&
+              _versionPattern.hasMatch(stableVer) &&
+              compareVersions(currentVersion, stableVer) >= 0) {
+            _log(
+              'check_beta_fetch_failed_fallback_skipped',
+              severity: DebugSeverity.warn,
+              detailsBuilder: () => {
+                'current_version': currentVersion,
+                'stable_version': stableVer,
+              },
+            );
+            return null;
+          }
+          // User is behind the latest stable — offer the stable upgrade.
           release = stableRelease;
           stableWins = true;
         } else {
@@ -229,6 +260,7 @@ class UpdateService {
 
       if (_isNewer(latestVersion, currentVersion)) {
         _lastCheckSucceeded = true;
+        _lastEffectiveChannel = effectiveChannel;
         _log(
           'update_available',
           detailsBuilder: () => {
@@ -249,6 +281,7 @@ class UpdateService {
       }
 
       _lastCheckSucceeded = true;
+      _lastEffectiveChannel = effectiveChannel;
       _log(
         'up_to_date',
         detailsBuilder: () => {
@@ -259,6 +292,9 @@ class UpdateService {
       );
       return null;
     } catch (e) {
+      if (e is SocketException || e is TimeoutException) {
+        _lastCheckNetworkError = true;
+      }
       _log(
         'check_failed',
         severity: DebugSeverity.error,
@@ -303,10 +339,16 @@ class UpdateService {
     ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
+      if (response.statusCode == 403 || response.statusCode == 429) {
+        _lastCheckRateLimited = true;
+      }
       _log(
         'check_http_non_200',
         severity: DebugSeverity.warn,
-        detailsBuilder: () => {'status_code': response.statusCode},
+        detailsBuilder: () => {
+          'status_code': response.statusCode,
+          'endpoint': 'releases_list',
+        },
       );
       return null;
     }
