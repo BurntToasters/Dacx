@@ -43,6 +43,7 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
+import '../widgets/audio_waveform_visualizer.dart';
 import '../widgets/transport_controls.dart';
 import 'chapter_info.dart';
 import 'settings_screen.dart';
@@ -1828,6 +1829,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                                 ),
                                           ),
                                         ),
+                                      if (_currentFile != null &&
+                                          _isAudioFile &&
+                                          _settings.audioWaveformEnabled)
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          bottom: 0,
+                                          height: 40,
+                                          child: AudioWaveformVisualizer(
+                                            isPlaying: _isPlaying,
+                                            position: _position,
+                                            duration: _duration,
+                                            sourceKey: _currentFile,
+                                          ),
+                                        ),
                                       if (_compactMode)
                                         Positioned(
                                           top: 8,
@@ -2354,47 +2370,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
+        final visualizerHeight = _settings.audioWaveformEnabled ? 40.0 : 0.0;
         final shortestSide = MediaQuery.sizeOf(context).shortestSide;
         final shortestSideSize = shortestSide.clamp(220.0, 360.0).toDouble();
-        final maxByHeight = (constraints.maxHeight - 260).clamp(170.0, 360.0);
+        final maxByHeight = (constraints.maxHeight - 260 - visualizerHeight)
+            .clamp(170.0, 360.0);
         final albumArtSize = math.min(shortestSideSize, maxByHeight);
 
-        return Center(
-          child: _buildCenterPanel(
-            maxWidth: 700,
-            children: [
-              if (showAlbumArt)
-                _buildAlbumArtSurface(size: albumArtSize)
-              else
-                _buildCenterIconSurface(
-                  icon: Icons.album,
-                  size: 54,
-                  color: colorScheme.primary.withValues(alpha: 0.88),
+        return Padding(
+          padding: EdgeInsets.only(bottom: visualizerHeight),
+          child: Center(
+            child: _buildCenterPanel(
+              maxWidth: 700,
+              children: [
+                if (showAlbumArt)
+                  _buildAlbumArtSurface(size: albumArtSize)
+                else
+                  _buildCenterIconSurface(
+                    icon: Icons.album,
+                    size: 54,
+                    color: colorScheme.primary.withValues(alpha: 0.88),
+                  ),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    fileName,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.88),
+                      fontWeight: FontWeight.w500,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  fileName,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.88),
-                    fontWeight: FontWeight.w500,
+                const SizedBox(height: 10),
+                Text(
+                  AppLocalizations.of(context).labelAudioPlayback,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withValues(alpha: 0.62),
                     height: 1.2,
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                AppLocalizations.of(context).labelAudioPlayback,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.62),
-                  height: 1.2,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

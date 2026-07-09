@@ -27,6 +27,8 @@
   "settingsResumeSubtitle": "Remember playback position for each file",
   "settingsOsdSubtitle": "Show title and time overlay during playback",
   "settingsMediaSessionSubtitle": "Publish playback to MPRIS / SMTC / Now Playing",
+  "settingsAudioWaveform": "Audio waveform visualizer",
+  "settingsAudioWaveformSubtitle": "Show an animated waveform above the playhead for audio tracks",
   "settingsAllowMultipleWindowsSubtitle": "When off (default), opening a file from your OS reuses the running Dacx window. Press Ctrl/Cmd+N to open an extra window on demand.",
   "settingsSectionPlayback": "Playback",
   "settingsSectionAppearance": "Appearance",

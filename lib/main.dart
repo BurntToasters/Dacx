@@ -397,13 +397,14 @@ class _DacxAppState extends State<DacxApp>
       final s = widget.settings;
       final experimentalEnabled = s.experimentalFeaturesEnabled;
       final blurEnabled = _isEffectiveBlurEnabled(s);
-      final bypassNativeOpacity = Platform.isWindows && blurEnabled;
+      final bypassNativeOpacity =
+          (Platform.isWindows || Platform.isMacOS) && blurEnabled;
       final effectiveOpacity = experimentalEnabled ? s.windowOpacity : 1.0;
 
       try {
         if (bypassNativeOpacity) {
-          // window_manager.setOpacity enables WS_EX_LAYERED on Windows, which
-          // can flatten/disable DWM blur materials.
+          // window_manager.setOpacity enables WS_EX_LAYERED on Windows and alters
+          // alphaValue on macOS, both of which can flatten/disable native blur/vibrancy.
           await windowManager.setIgnoreMouseEvents(false);
         } else {
           await windowManager.setOpacity(effectiveOpacity);
@@ -441,7 +442,7 @@ class _DacxAppState extends State<DacxApp>
             } else {
               final alpha = (220 - (strength * 120)).round().clamp(90, 220);
               await Window.setEffect(
-                effect: WindowEffect.aero,
+                effect: WindowEffect.acrylic,
                 color: dark
                     ? Color.fromARGB(alpha, 24, 30, 37)
                     : Color.fromARGB(alpha, 245, 248, 252),
@@ -537,17 +538,18 @@ class _DacxAppState extends State<DacxApp>
         final blurEnabled = _isEffectiveBlurEnabled(s);
         final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
         final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
-        final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
+        final blurUiOpacity =
+            (Platform.isWindows || Platform.isMacOS) && blurEnabled
             ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
             : 1.0;
         final popupAlpha = blurEnabled
-            ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
+            ? ((Platform.isWindows || Platform.isMacOS) ? blurUiOpacity : 0.96)
             : 1.0;
         final inputs = _ThemeInputs(
           seed: s.accentColor.color,
           blurEnabled: blurEnabled,
           blurStrength: s.windowBlurStrength,
-          windowsBlurUiOpacity: windowsBlurUiOpacity,
+          blurUiOpacity: blurUiOpacity,
           popupAlpha: popupAlpha,
         );
         final themes = _cachedThemeInputs == inputs && _cachedThemes != null
@@ -592,13 +594,13 @@ class _DacxAppState extends State<DacxApp>
       lightScheme,
       blurEnabled: inputs.blurEnabled,
       blurStrength: inputs.blurStrength,
-      uiOpacity: inputs.windowsBlurUiOpacity,
+      uiOpacity: inputs.blurUiOpacity,
     );
     final darkVisuals = WindowVisuals.fromScheme(
       darkScheme,
       blurEnabled: inputs.blurEnabled,
       blurStrength: inputs.blurStrength,
-      uiOpacity: inputs.windowsBlurUiOpacity,
+      uiOpacity: inputs.blurUiOpacity,
     );
     return _ThemeBundle(
       light: ThemeData(
@@ -705,14 +707,14 @@ class _ThemeInputs {
   final Color seed;
   final bool blurEnabled;
   final double blurStrength;
-  final double windowsBlurUiOpacity;
+  final double blurUiOpacity;
   final double popupAlpha;
 
   const _ThemeInputs({
     required this.seed,
     required this.blurEnabled,
     required this.blurStrength,
-    required this.windowsBlurUiOpacity,
+    required this.blurUiOpacity,
     required this.popupAlpha,
   });
 
@@ -722,7 +724,7 @@ class _ThemeInputs {
       other.seed.toARGB32() == seed.toARGB32() &&
       other.blurEnabled == blurEnabled &&
       other.blurStrength == blurStrength &&
-      other.windowsBlurUiOpacity == windowsBlurUiOpacity &&
+      other.blurUiOpacity == blurUiOpacity &&
       other.popupAlpha == popupAlpha;
 
   @override
@@ -730,7 +732,7 @@ class _ThemeInputs {
     seed.toARGB32(),
     blurEnabled,
     blurStrength,
-    windowsBlurUiOpacity,
+    blurUiOpacity,
     popupAlpha,
   );
 }
