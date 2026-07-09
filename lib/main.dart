@@ -720,13 +720,26 @@ class _DacxAppState extends State<DacxApp>
         canvasColor: lightVisuals.contentColor,
         dividerColor: lightVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: lightVisuals.contentColor.withValues(alpha: inputs.popupAlpha),
+          color: lightVisuals.panelTopColor.withValues(alpha: inputs.popupAlpha),
           surfaceTintColor: Colors.transparent,
+          elevation: inputs.blurEnabled
+              ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
+              : 8,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: lightVisuals.borderColor),
+            side: BorderSide(color: lightVisuals.panelBorderColor),
           ),
         ),
+        cardTheme: inputs.blurEnabled
+            ? CardThemeData(
+                color: lightVisuals.panelTopColor.withValues(alpha: 0.92),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: lightVisuals.panelBorderColor),
+                ),
+              )
+            : null,
         snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
         extensions: [lightVisuals],
       ),
@@ -740,13 +753,26 @@ class _DacxAppState extends State<DacxApp>
         canvasColor: darkVisuals.contentColor,
         dividerColor: darkVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: darkVisuals.contentColor.withValues(alpha: inputs.popupAlpha),
+          color: darkVisuals.panelTopColor.withValues(alpha: inputs.popupAlpha),
           surfaceTintColor: Colors.transparent,
+          elevation: inputs.blurEnabled
+              ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
+              : 8,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: darkVisuals.borderColor),
+            side: BorderSide(color: darkVisuals.panelBorderColor),
           ),
         ),
+        cardTheme: inputs.blurEnabled
+            ? CardThemeData(
+                color: darkVisuals.panelTopColor.withValues(alpha: 0.92),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: darkVisuals.panelBorderColor),
+                ),
+              )
+            : null,
         snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
         extensions: [darkVisuals],
       ),
