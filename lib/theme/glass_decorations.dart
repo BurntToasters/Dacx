@@ -8,7 +8,7 @@ import 'window_visuals.dart';
 extension GlassDecorations on WindowVisuals {
   bool get isGlass => blurEnabled;
 
-  /// Window backdrop wash — subtle accent tint over native blur.
+  /// Window backdrop wash — gradient in glass mode, solid otherwise.
   LinearGradient get shellGradient => LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
@@ -22,6 +22,12 @@ extension GlassDecorations on WindowVisuals {
     bool borderOnTop = false,
   }) {
     final border = borderSide ?? BorderSide(color: dividerColor);
+    if (!isGlass) {
+      return BoxDecoration(
+        color: chromeTopColor,
+        border: borderOnTop ? Border(top: border) : Border(bottom: border),
+      );
+    }
     return BoxDecoration(
       gradient: LinearGradient(
         begin: Alignment.topCenter,
@@ -36,6 +42,20 @@ extension GlassDecorations on WindowVisuals {
   BoxDecoration panelDecoration({
     BorderRadius borderRadius = const BorderRadius.all(Radius.circular(28)),
   }) {
+    if (!isGlass) {
+      return BoxDecoration(
+        borderRadius: borderRadius,
+        color: panelTopColor,
+        border: Border.all(color: panelBorderColor),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor,
+            blurRadius: 20,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      );
+    }
     return BoxDecoration(
       borderRadius: borderRadius,
       gradient: LinearGradient(
@@ -47,22 +67,27 @@ extension GlassDecorations on WindowVisuals {
       boxShadow: [
         BoxShadow(
           color: shadowColor,
-          blurRadius: blurEnabled ? 32 : 20,
-          offset: Offset(0, blurEnabled ? 20 : 12),
+          blurRadius: 32,
+          offset: const Offset(0, 20),
         ),
-        if (blurEnabled)
-          BoxShadow(
-            color: rimHighlightColor.withValues(alpha: 0.35),
-            blurRadius: 1,
-            spreadRadius: 0,
-            offset: const Offset(0, 1),
-          ),
+        BoxShadow(
+          color: rimHighlightColor.withValues(alpha: 0.35),
+          blurRadius: 1,
+          spreadRadius: 0,
+          offset: const Offset(0, 1),
+        ),
       ],
     );
   }
 
   /// Settings / list scroll surface.
   BoxDecoration overlayDecoration() {
+    if (!isGlass) {
+      return BoxDecoration(
+        color: overlayTopColor,
+        border: Border(top: BorderSide(color: dividerColor)),
+      );
+    }
     return BoxDecoration(
       gradient: LinearGradient(
         begin: Alignment.topCenter,
@@ -143,7 +168,7 @@ class GlassChrome extends StatelessWidget {
   }
 }
 
-/// Shell gradient behind main content.
+/// Shell background — gradient in glass mode, solid color otherwise.
 class GlassShellBackground extends StatelessWidget {
   const GlassShellBackground({super.key, required this.child});
 
@@ -152,6 +177,12 @@ class GlassShellBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visuals = context.windowVisuals;
+    if (!visuals.isGlass) {
+      return DecoratedBox(
+        decoration: BoxDecoration(color: visuals.windowBottomColor),
+        child: child,
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(gradient: visuals.shellGradient),
       child: child,
@@ -168,6 +199,12 @@ class GlassOverlayBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visuals = context.windowVisuals;
+    if (!visuals.isGlass) {
+      return DecoratedBox(
+        decoration: BoxDecoration(color: visuals.overlayTopColor),
+        child: child,
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -182,7 +219,7 @@ class GlassOverlayBackground extends StatelessWidget {
 }
 
 /// Frosted drawer body — used for side-panel drawers (e.g. play queue).
-/// Applies backdrop blur in glass mode and a horizontal gradient fill.
+/// Applies backdrop blur in glass mode, solid fill otherwise.
 class GlassDrawerBody extends StatelessWidget {
   const GlassDrawerBody({
     super.key,
@@ -198,16 +235,25 @@ class GlassDrawerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visuals = context.windowVisuals;
+    final borderSide = BorderSide(color: visuals.panelBorderColor);
+
     final body = Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: borderOnLeft ? Alignment.centerLeft : Alignment.centerRight,
-          end: borderOnLeft ? Alignment.centerRight : Alignment.centerLeft,
-          colors: [visuals.panelTopColor, visuals.panelBottomColor],
-        ),
+        color: visuals.isGlass ? null : visuals.panelTopColor,
+        gradient: visuals.isGlass
+            ? LinearGradient(
+                begin: borderOnLeft
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
+                end: borderOnLeft
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                colors: [visuals.panelTopColor, visuals.panelBottomColor],
+              )
+            : null,
         border: borderOnLeft
-            ? Border(left: BorderSide(color: visuals.panelBorderColor))
-            : Border(right: BorderSide(color: visuals.panelBorderColor)),
+            ? Border(left: borderSide)
+            : Border(right: borderSide),
       ),
       child: child,
     );
