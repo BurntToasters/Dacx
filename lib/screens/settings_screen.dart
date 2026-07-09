@@ -513,11 +513,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowOpacityTile() {
     final l10n = AppLocalizations.of(context);
-    final opacity = _s.windowOpacity.clamp(0.65, 1.0);
+    final opacity = _s.windowOpacity.clamp(
+      SettingsService.windowOpacityMin,
+      1.0,
+    );
     final percent = (opacity * 100).round();
     final windowsBlurMode =
-        (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
-        _s.windowBlurEnabled;
+      (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+      _s.windowBlurEnabled;
+    const minOpacity = SettingsService.windowOpacityMin;
+    final divisions = ((1.0 - minOpacity) / 0.05).round();
 
     return ListTile(
       leading: _experimentalWarningIcon(),
@@ -529,9 +534,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (windowsBlurMode) Text(l10n.settingsWindowOpacityBlurNote),
           Slider(
             value: opacity,
-            min: 0.65,
+            min: minOpacity,
             max: 1.0,
-            divisions: 14,
+            divisions: divisions,
             label: '$percent%',
             onChanged: (v) => setState(() {
               _s.windowOpacity = v;

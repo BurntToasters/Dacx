@@ -248,7 +248,7 @@ void main() {
       final service = SettingsService(prefs);
 
       service.windowOpacity = 0.1;
-      expect(service.windowOpacity, 0.65);
+      expect(service.windowOpacity, SettingsService.windowOpacityMin);
       service.windowOpacity = 2.0;
       expect(service.windowOpacity, 1.0);
 

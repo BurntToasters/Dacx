@@ -620,7 +620,9 @@ class _DacxAppState extends State<DacxApp>
         final experimentalEnabled = s.experimentalFeaturesEnabled;
         final blurEnabled = _isEffectiveBlurEnabled(s);
         final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
-        final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
+        const opacityMin = SettingsService.windowOpacityMin;
+        final opacitySliderT =
+            ((uiOpacityValue - opacityMin) / (1.0 - opacityMin)).clamp(0.0, 1.0);
         // Opacity slider → Flutter shell tint strength (native window opacity
         // stays at 1.0 so acrylic/vibrancy can composite). Floor at ~0.22 so
         // chrome stays readable over the blur.
