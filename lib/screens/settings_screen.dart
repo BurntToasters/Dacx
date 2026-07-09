@@ -803,11 +803,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           category: DebugLogCategory.update,
           severity: DebugSeverity.warn,
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context).snackUpdateCheckFailed),
-          ),
-        );
+        final l10n = AppLocalizations.of(context);
+        String message;
+        if (_updateService.lastCheckRateLimited) {
+          message = l10n.snackUpdateRateLimited;
+        } else if (_updateService.lastCheckNetworkError) {
+          message = l10n.snackUpdateNetworkError;
+        } else {
+          message = l10n.snackUpdateCheckFailed;
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
         return;
       }
       if (update != null) {
@@ -835,9 +842,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } else {
         _log('manual_update_not_available', category: DebugLogCategory.update);
+        final l10n = AppLocalizations.of(context);
+        final isBeta =
+            _updateService.lastEffectiveChannel == UpdateChannel.beta;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context).snackUpdateLatest),
+            content: Text(
+              isBeta ? l10n.snackUpdateLatestBeta : l10n.snackUpdateLatest,
+            ),
           ),
         );
       }

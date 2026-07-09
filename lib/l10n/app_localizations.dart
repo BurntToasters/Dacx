@@ -472,11 +472,29 @@ abstract class AppLocalizations {
   /// **'Failed to check for updates.'**
   String get snackUpdateCheckFailed;
 
+  /// No description provided for @snackUpdateRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Update check rate-limited. Please try again in a few minutes.'**
+  String get snackUpdateRateLimited;
+
   /// No description provided for @snackUpdateLatest.
   ///
   /// In en, this message translates to:
   /// **'You are on the latest version.'**
   String get snackUpdateLatest;
+
+  /// No description provided for @snackUpdateLatestBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'You are on the latest beta.'**
+  String get snackUpdateLatestBeta;
+
+  /// No description provided for @snackUpdateNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the update server. Check your connection.'**
+  String get snackUpdateNetworkError;
 
   /// No description provided for @settingsKeyboardShortcuts.
   ///
