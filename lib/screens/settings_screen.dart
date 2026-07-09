@@ -157,13 +157,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onChanged: (v) =>
                                 setState(() => _s.mediaSessionEnabled = v),
                           ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsAudioWaveform),
-                            subtitle: Text(l10n.settingsAudioWaveformSubtitle),
-                            value: _s.audioWaveformEnabled,
-                            onChanged: (v) =>
-                                setState(() => _s.audioWaveformEnabled = v),
-                          ),
                           _hwDecTile(),
                           const Divider(),
                           _sectionHeader(l10n.settingsSectionAppearance),
@@ -175,6 +168,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _experimentalTile(_linuxCompositorBlurTile()),
                             _experimentalTile(_windowBlurTile()),
                             _experimentalTile(_windowBlurStrengthTile()),
+                            _experimentalTile(_audioWaveformTile()),
                           ],
                           SwitchListTile(
                             title: Text(l10n.settingsAlwaysOnTop),
@@ -644,6 +638,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _s.linuxCompositorBlurExperimental = v;
         _log(
           'linux_compositor_blur_changed',
+          detailsBuilder: () => {'value': v},
+        );
+      }),
+    );
+  }
+
+  Widget _audioWaveformTile() {
+    final l10n = AppLocalizations.of(context);
+    return SwitchListTile(
+      secondary: _experimentalWarningIcon(),
+      title: Text(l10n.settingsAudioWaveform),
+      subtitle: Text(l10n.settingsAudioWaveformSubtitle),
+      value: _s.audioWaveformEnabled,
+      onChanged: (v) => setState(() {
+        _s.audioWaveformEnabled = v;
+        _log(
+          'audio_waveform_changed',
           detailsBuilder: () => {'value': v},
         );
       }),

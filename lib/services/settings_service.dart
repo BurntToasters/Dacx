@@ -692,10 +692,15 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get audioWaveformEnabled =>
-      _prefs.getBool(_kAudioWaveformEnabled) ?? false;
+  /// Audio spectrum visualizer. Experimental — preference is preserved but
+  /// reported as `false` when Experimental Features is off (same pattern as
+  /// [multiAudioMix]).
+  bool get audioWaveformEnabled {
+    if (!experimentalFeaturesEnabled) return false;
+    return _prefs.getBool(_kAudioWaveformEnabled) ?? false;
+  }
+
   set audioWaveformEnabled(bool v) {
-    if (audioWaveformEnabled == v) return;
     _prefs.setBool(_kAudioWaveformEnabled, v);
     notifyListeners();
   }

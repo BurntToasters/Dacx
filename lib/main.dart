@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:macos_window_utils/macos_window_utils.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -330,6 +331,54 @@ class _DacxAppState extends State<DacxApp>
     }
   }
 
+  /// macOS vibrancy: await material set (flutter_acrylic's setEffect does not),
+  /// force alpha=1, active blur state, and appearance so NSVisualEffectView
+  /// actually composites the desktop behind the window.
+  Future<void> _applyMacOSBlur({required double strength}) async {
+    final dark = _isDarkMode();
+    // Prefer materials that blur desktop content (research: windowBackground
+    // is mostly opaque wallpaper-tint and reads as "no blur").
+    final material = switch (strength) {
+      < 0.25 => NSVisualEffectViewMaterial.underWindowBackground,
+      < 0.50 => NSVisualEffectViewMaterial.hudWindow,
+      < 0.75 => NSVisualEffectViewMaterial.sidebar,
+      _ => NSVisualEffectViewMaterial.fullScreenUI,
+    };
+    try {
+      // Ensure window alpha is fully opaque — alpha < 1 fades the whole
+      // window including the vibrancy layer into sharp transparency.
+      await WindowManipulator.setWindowAlphaValue(1.0);
+      await WindowManipulator.setWindowBackgroundColorToClear();
+      await WindowManipulator.makeTitlebarTransparent();
+      await WindowManipulator.enableFullSizeContentView();
+      await WindowManipulator.hideTitle();
+      await WindowManipulator.setMaterial(material);
+      await WindowManipulator.setNSVisualEffectViewState(
+        NSVisualEffectViewState.active,
+      );
+      await WindowManipulator.overrideMacOSBrightness(dark: dark);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: macOS blur apply failed: $e');
+      }
+      // Fallback through flutter_acrylic in case direct manipulator failed.
+      try {
+        final effect = switch (strength) {
+          < 0.25 => WindowEffect.underWindowBackground,
+          < 0.50 => WindowEffect.hudWindow,
+          < 0.75 => WindowEffect.sidebar,
+          _ => WindowEffect.fullScreenUI,
+        };
+        await Window.setEffect(effect: effect, dark: dark);
+        await Window.setBlurViewState(MacOSBlurViewState.active);
+      } catch (e2) {
+        if (kDebugMode) {
+          debugPrint('Dacx: macOS blur fallback failed: $e2');
+        }
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -488,20 +537,7 @@ class _DacxAppState extends State<DacxApp>
               await windowManager.setSize(size);
             } catch (_) {}
           } else if (Platform.isMacOS) {
-            final effect = switch (strength) {
-              < 0.25 => WindowEffect.sidebar,
-              < 0.50 => WindowEffect.hudWindow,
-              < 0.75 => WindowEffect.popover,
-              _ => WindowEffect.fullScreenUI,
-            };
-            await Window.setEffect(effect: effect, dark: _isDarkMode());
-            try {
-              await Window.setBlurViewState(MacOSBlurViewState.active);
-            } catch (e) {
-              if (kDebugMode) {
-                debugPrint('Dacx: macOS blur view state apply failed: $e');
-              }
-            }
+            await _applyMacOSBlur(strength: strength);
           } else if (Platform.isLinux) {
             // Linux has no GTK blur API — only transparency. Compositor
             // (KWin forceblur, etc.) blurs the transparent regions.
@@ -585,14 +621,17 @@ class _DacxAppState extends State<DacxApp>
         final blurEnabled = _isEffectiveBlurEnabled(s);
         final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
         final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
+        // Opacity slider → Flutter shell tint strength (native window opacity
+        // stays at 1.0 so acrylic/vibrancy can composite). Floor at ~0.22 so
+        // chrome stays readable over the blur.
         final blurUiOpacity =
             (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
                 blurEnabled
-            ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
+            ? lerpDouble(0.22, 0.82, Curves.easeOut.transform(opacitySliderT))!
             : 1.0;
         final popupAlpha = blurEnabled
             ? ((Platform.isWindows || Platform.isMacOS || Platform.isLinux)
-                  ? blurUiOpacity
+                  ? (blurUiOpacity + 0.12).clamp(0.0, 1.0)
                   : 0.96)
             : 1.0;
         final inputs = _ThemeInputs(
@@ -616,10 +655,27 @@ class _DacxAppState extends State<DacxApp>
           themeMode: s.themeMode,
           theme: themes.light,
           darkTheme: themes.dark,
-          builder: (context, child) => _MacInstallLocationWarning(
-            debugLog: widget.debugLog,
-            child: child ?? const SizedBox.shrink(),
-          ),
+          // Critical for macOS/Windows/Linux blur: Flutter's Metal/OpenGL
+          // surface starts opaque. Without BlendMode.clear, semi-transparent
+          // widgets composite onto that opaque buffer (looks solid dark) and
+          // never reveal the NSVisualEffectView / acrylic behind.
+          // Pattern from macos_window_utils official example.
+          builder: (context, child) {
+            Widget content = _MacInstallLocationWarning(
+              debugLog: widget.debugLog,
+              child: child ?? const SizedBox.shrink(),
+            );
+            if (blurEnabled) {
+              content = DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF000000),
+                  backgroundBlendMode: BlendMode.clear,
+                ),
+                child: content,
+              );
+            }
+            return content;
+          },
           home: PlayerScreen(
             settings: s,
             debugLog: widget.debugLog,

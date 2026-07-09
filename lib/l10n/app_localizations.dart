@@ -229,13 +229,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAudioWaveform.
   ///
   /// In en, this message translates to:
-  /// **'Audio waveform visualizer'**
+  /// **'Audio spectrum visualizer'**
   String get settingsAudioWaveform;
 
   /// No description provided for @settingsAudioWaveformSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show an animated waveform above the playhead for audio tracks'**
+  /// **'Show a bass→treble spectrum above the playhead (simulated; not real FFT yet)'**
   String get settingsAudioWaveformSubtitle;
 
   /// No description provided for @settingsAllowMultipleWindowsSubtitle.
