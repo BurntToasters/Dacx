@@ -622,7 +622,10 @@ class _DacxAppState extends State<DacxApp>
         final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
         const opacityMin = SettingsService.windowOpacityMin;
         final opacitySliderT =
-            ((uiOpacityValue - opacityMin) / (1.0 - opacityMin)).clamp(0.0, 1.0);
+            ((uiOpacityValue - opacityMin) / (1.0 - opacityMin)).clamp(
+              0.0,
+              1.0,
+            );
         // Opacity slider → Flutter shell tint strength (native window opacity
         // stays at 1.0 so acrylic/vibrancy can composite). Floor at ~0.22 so
         // chrome stays readable over the blur.
@@ -720,7 +723,9 @@ class _DacxAppState extends State<DacxApp>
         canvasColor: lightVisuals.contentColor,
         dividerColor: lightVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: lightVisuals.panelTopColor.withValues(alpha: inputs.popupAlpha),
+          color: lightVisuals.panelTopColor.withValues(
+            alpha: inputs.popupAlpha,
+          ),
           surfaceTintColor: Colors.transparent,
           elevation: inputs.blurEnabled
               ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)

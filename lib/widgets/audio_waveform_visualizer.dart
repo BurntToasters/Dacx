@@ -121,14 +121,21 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
     }
   }
 
-  void _impulse(double fromT, double toT, double strength, {double spread = 0.5}) {
+  void _impulse(
+    double fromT,
+    double toT,
+    double strength, {
+    double spread = 0.5,
+  }) {
     for (var i = 0; i < _barCount; i++) {
       final t = i / (_barCount - 1);
       if (t < fromT || t > toT) continue;
       final mid = (fromT + toT) / 2;
       final half = math.max(0.001, (toT - fromT) / 2);
       final falloff = 1.0 - ((t - mid).abs() / half) * (1.0 - spread);
-      final bump = strength * falloff.clamp(0.0, 1.0) *
+      final bump =
+          strength *
+          falloff.clamp(0.0, 1.0) *
           (0.7 + 0.3 * _random.nextDouble());
       _bandEnergy[i] = (_bandEnergy[i] + bump).clamp(0.0, 1.0);
     }
@@ -266,7 +273,8 @@ class WaveformPainter extends CustomPainter {
       final shimmer =
           math.sin(phase * (1.6 + 4.0 * t) + i * 0.4) * 0.04 * playPauseScale;
       final rawHeight = (heights[i] + shimmer).clamp(0.06, 1.0);
-      final barHeight = rawHeight * totalHeight * 0.88 * (0.25 + 0.75 * playPauseScale);
+      final barHeight =
+          rawHeight * totalHeight * 0.88 * (0.25 + 0.75 * playPauseScale);
       final x = i * step + (step - barWidth) / 2;
       final y = (totalHeight - barHeight) / 2;
 

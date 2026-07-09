@@ -28,9 +28,7 @@ extension GlassDecorations on WindowVisuals {
         end: Alignment.bottomCenter,
         colors: [chromeTopColor, chromeBottomColor],
       ),
-      border: borderOnTop
-          ? Border(top: border)
-          : Border(bottom: border),
+      border: borderOnTop ? Border(top: border) : Border(bottom: border),
     );
   }
 

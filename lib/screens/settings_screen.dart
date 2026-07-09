@@ -506,8 +506,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     final percent = (opacity * 100).round();
     final windowsBlurMode =
-      (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
-      _s.windowBlurEnabled;
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+        _s.windowBlurEnabled;
     const minOpacity = SettingsService.windowOpacityMin;
     final divisions = ((1.0 - minOpacity) / 0.05).round();
 
@@ -645,10 +645,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       value: _s.audioWaveformEnabled,
       onChanged: (v) => setState(() {
         _s.audioWaveformEnabled = v;
-        _log(
-          'audio_waveform_changed',
-          detailsBuilder: () => {'value': v},
-        );
+        _log('audio_waveform_changed', detailsBuilder: () => {'value': v});
       }),
     );
   }

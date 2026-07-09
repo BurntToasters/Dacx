@@ -66,25 +66,27 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
   }) {
     final strength = blurStrength.clamp(0.0, 1.0).toDouble();
     final opacity = uiOpacity.clamp(0.05, 1.0).toDouble();
-    final curvedStrength = Curves.easeOut.transform(strength);
+    // Linear mapping — every 10% of slider produces a visible change.
     double withUiOpacity(double alpha) =>
         blurEnabled ? (alpha * opacity).clamp(0.0, 1.0).toDouble() : alpha;
 
-    // Frosted shell — open enough for native blur, tinted for readability.
+    // Shell alpha range: 0.82 (low strength = barely frosted) → 0.35 (max
+    // strength = very transparent, native blur shows through strongly).
+    // Wide range ensures the slider feels responsive end to end.
     final shellAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.38, 0.22, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.82, 0.35, strength)!)
         : 1.0;
     final barAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.44, 0.28, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.85, 0.42, strength)!)
         : 0.98;
     final panelDeepAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.36, 0.20, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.78, 0.32, strength)!)
         : 0.96;
     final overlayAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.42, 0.26, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.84, 0.40, strength)!)
         : 0.99;
     final panelAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.48, 0.30, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.88, 0.45, strength)!)
         : 0.98;
 
     final borderAlpha = blurEnabled ? lerpDouble(0.22, 0.34, strength)! : 0.14;
