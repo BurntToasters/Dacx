@@ -226,6 +226,18 @@ abstract class AppLocalizations {
   /// **'Publish playback to MPRIS / SMTC / Now Playing'**
   String get settingsMediaSessionSubtitle;
 
+  /// No description provided for @settingsAudioWaveform.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio waveform visualizer'**
+  String get settingsAudioWaveform;
+
+  /// No description provided for @settingsAudioWaveformSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show an animated waveform above the playhead for audio tracks'**
+  String get settingsAudioWaveformSubtitle;
+
   /// No description provided for @settingsAllowMultipleWindowsSubtitle.
   ///
   /// In en, this message translates to:

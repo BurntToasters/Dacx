@@ -157,6 +157,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onChanged: (v) =>
                                 setState(() => _s.mediaSessionEnabled = v),
                           ),
+                          SwitchListTile(
+                            title: Text(l10n.settingsAudioWaveform),
+                            subtitle: Text(l10n.settingsAudioWaveformSubtitle),
+                            value: _s.audioWaveformEnabled,
+                            onChanged: (v) =>
+                                setState(() => _s.audioWaveformEnabled = v),
+                          ),
                           _hwDecTile(),
                           const Divider(),
                           _sectionHeader(l10n.settingsSectionAppearance),

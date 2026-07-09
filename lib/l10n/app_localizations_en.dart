@@ -79,6 +79,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Publish playback to MPRIS / SMTC / Now Playing';
 
   @override
+  String get settingsAudioWaveform => 'Audio waveform visualizer';
+
+  @override
+  String get settingsAudioWaveformSubtitle =>
+      'Show an animated waveform above the playhead for audio tracks';
+
+  @override
   String get settingsAllowMultipleWindowsSubtitle =>
       'When off (default), opening a file from your OS reuses the running Dacx window. Press Ctrl/Cmd+N to open an extra window on demand.';
 

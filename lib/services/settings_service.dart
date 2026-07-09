@@ -172,6 +172,7 @@ class SettingsService extends ChangeNotifier {
   static const _kScreenshotFormat = 'screenshot_format';
   static const _kOsdEnabled = 'osd_enabled';
   static const _kSeekPreviewEnabled = 'seek_preview_enabled';
+  static const _kAudioWaveformEnabled = 'audio_waveform_enabled';
   static const _kMultiAudioMix = 'multi_audio_mix';
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
@@ -216,6 +217,7 @@ class SettingsService extends ChangeNotifier {
     _kScreenshotFormat,
     _kOsdEnabled,
     _kSeekPreviewEnabled,
+    _kAudioWaveformEnabled,
     _kMultiAudioMix,
     _kMediaSession,
     _kKeybinds,
@@ -687,6 +689,14 @@ class SettingsService extends ChangeNotifier {
   set seekPreviewEnabled(bool v) {
     if (seekPreviewEnabled == v) return;
     _prefs.setBool(_kSeekPreviewEnabled, v);
+    notifyListeners();
+  }
+
+  bool get audioWaveformEnabled =>
+      _prefs.getBool(_kAudioWaveformEnabled) ?? false;
+  set audioWaveformEnabled(bool v) {
+    if (audioWaveformEnabled == v) return;
+    _prefs.setBool(_kAudioWaveformEnabled, v);
     notifyListeners();
   }
 
