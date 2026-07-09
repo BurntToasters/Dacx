@@ -106,7 +106,7 @@ class AppDelegate: FlutterAppDelegate {
   private func configureOpenFileChannelsIfNeeded() {
     if !registrations.isEmpty { return }
     guard let window = mainFlutterWindow as? MainFlutterWindow,
-          let controller = window.contentViewController as? FlutterViewController else {
+          let controller = window.flutterViewController else {
       DispatchQueue.main.async { [weak self] in
         self?.configureOpenFileChannelsIfNeeded()
       }
@@ -163,6 +163,9 @@ class AppDelegate: FlutterAppDelegate {
       switch call.method {
       case "openNewWindow":
         result(self.openNewWindow())
+      case "clearLayeredStyle":
+        // Windows-only helper; no-op on macOS so Dart can call unconditionally.
+        result(true)
       default:
         result(FlutterMethodNotImplemented)
       }

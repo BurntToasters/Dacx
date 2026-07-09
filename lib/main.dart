@@ -310,6 +310,26 @@ class _DacxAppState extends State<DacxApp>
     return false;
   }
 
+  bool _shouldBypassNativeOpacity(bool blurEnabled) {
+    if (!blurEnabled) return false;
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
+
+  static const MethodChannel _windowVisualsChannel = MethodChannel(
+    'run.rosie.dacx/window/methods',
+  );
+
+  Future<void> _clearWindowsLayeredStyle() async {
+    if (!Platform.isWindows) return;
+    try {
+      await _windowVisualsChannel.invokeMethod<bool>('clearLayeredStyle');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: clearLayeredStyle failed: $e');
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -397,14 +417,20 @@ class _DacxAppState extends State<DacxApp>
       final s = widget.settings;
       final experimentalEnabled = s.experimentalFeaturesEnabled;
       final blurEnabled = _isEffectiveBlurEnabled(s);
-      final bypassNativeOpacity =
-          (Platform.isWindows || Platform.isMacOS) && blurEnabled;
+      final bypassNativeOpacity = _shouldBypassNativeOpacity(blurEnabled);
       final effectiveOpacity = experimentalEnabled ? s.windowOpacity : 1.0;
 
       try {
         if (bypassNativeOpacity) {
           // window_manager.setOpacity enables WS_EX_LAYERED on Windows and alters
-          // alphaValue on macOS, both of which can flatten/disable native blur/vibrancy.
+          // alphaValue on macOS / gtk opacity on Linux — all of which flatten or
+          // fight native blur/vibrancy/compositor blur.
+          if (Platform.isWindows) {
+            await _clearWindowsLayeredStyle();
+          } else {
+            // Reset any prior opacity fade so the transparent/blur path is clean.
+            await windowManager.setOpacity(1.0);
+          }
           await windowManager.setIgnoreMouseEvents(false);
         } else {
           await windowManager.setOpacity(effectiveOpacity);
@@ -433,6 +459,8 @@ class _DacxAppState extends State<DacxApp>
           final strength = s.windowBlurStrength;
           if (Platform.isWindows) {
             final dark = _isDarkMode();
+            // Ensure layered style is gone immediately before DWM effect apply.
+            await _clearWindowsLayeredStyle();
             if (strength < 0.12) {
               await Window.setEffect(
                 effect: WindowEffect.disabled,
@@ -440,7 +468,11 @@ class _DacxAppState extends State<DacxApp>
                 dark: dark,
               );
             } else {
-              final alpha = (220 - (strength * 120)).round().clamp(90, 220);
+              // Tint alpha: stronger glass → more see-through acrylic tint.
+              final alpha = (200 - (strength * 110)).round().clamp(70, 200);
+              // Prefer acrylic (true blur-behind). On Win11 22523+ the plugin
+              // maps this to DWMSBT_TRANSIENTWINDOW; older builds use
+              // ACCENT_ENABLE_ACRYLICBLURBEHIND.
               await Window.setEffect(
                 effect: WindowEffect.acrylic,
                 color: dark
@@ -449,15 +481,30 @@ class _DacxAppState extends State<DacxApp>
                 dark: dark,
               );
             }
+            // Size nudge forces DWM to recomposite after style/effect change.
+            try {
+              final size = await windowManager.getSize();
+              await windowManager.setSize(Size(size.width + 1, size.height));
+              await windowManager.setSize(size);
+            } catch (_) {}
           } else if (Platform.isMacOS) {
             final effect = switch (strength) {
-              < 0.20 => WindowEffect.windowBackground,
-              < 0.40 => WindowEffect.sidebar,
-              < 0.60 => WindowEffect.hudWindow,
+              < 0.25 => WindowEffect.sidebar,
+              < 0.50 => WindowEffect.hudWindow,
+              < 0.75 => WindowEffect.popover,
               _ => WindowEffect.fullScreenUI,
             };
             await Window.setEffect(effect: effect, dark: _isDarkMode());
+            try {
+              await Window.setBlurViewState(MacOSBlurViewState.active);
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('Dacx: macOS blur view state apply failed: $e');
+              }
+            }
           } else if (Platform.isLinux) {
+            // Linux has no GTK blur API — only transparency. Compositor
+            // (KWin forceblur, etc.) blurs the transparent regions.
             await Window.setEffect(
               effect: WindowEffect.transparent,
               color: Colors.transparent,
@@ -539,11 +586,14 @@ class _DacxAppState extends State<DacxApp>
         final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
         final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
         final blurUiOpacity =
-            (Platform.isWindows || Platform.isMacOS) && blurEnabled
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+                blurEnabled
             ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
             : 1.0;
         final popupAlpha = blurEnabled
-            ? ((Platform.isWindows || Platform.isMacOS) ? blurUiOpacity : 0.96)
+            ? ((Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+                  ? blurUiOpacity
+                  : 0.96)
             : 1.0;
         final inputs = _ThemeInputs(
           seed: s.accentColor.color,

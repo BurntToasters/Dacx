@@ -42,16 +42,16 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     double withUiOpacity(double alpha) =>
         blurEnabled ? (alpha * opacity).clamp(0.0, 1.0).toDouble() : alpha;
     final shellAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.78, 0.70, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.62, 0.48, curvedStrength)!)
         : 1.0;
     final barAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.72, 0.64, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.58, 0.44, curvedStrength)!)
         : 0.98;
     final contentAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.66, 0.54, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.52, 0.38, curvedStrength)!)
         : 0.98;
     final overlayAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.74, 0.62, curvedStrength)!)
+        ? withUiOpacity(lerpDouble(0.60, 0.46, curvedStrength)!)
         : 0.99;
     final borderAlpha = blurEnabled ? lerpDouble(0.18, 0.28, strength)! : 0.14;
     final dividerAlpha = blurEnabled ? lerpDouble(0.14, 0.22, strength)! : 0.12;
