@@ -619,6 +619,7 @@ class _DacxAppState extends State<DacxApp>
             side: BorderSide(color: lightVisuals.borderColor),
           ),
         ),
+        snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
         extensions: [lightVisuals],
       ),
       dark: ThemeData(
@@ -638,6 +639,7 @@ class _DacxAppState extends State<DacxApp>
             side: BorderSide(color: darkVisuals.borderColor),
           ),
         ),
+        snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
         extensions: [darkVisuals],
       ),
     );
