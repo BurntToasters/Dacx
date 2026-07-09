@@ -521,7 +521,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final opacity = _s.windowOpacity.clamp(0.65, 1.0);
     final percent = (opacity * 100).round();
-    final windowsBlurMode = Platform.isWindows && _s.windowBlurEnabled;
+    final windowsBlurMode =
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+        _s.windowBlurEnabled;
 
     return ListTile(
       leading: _experimentalWarningIcon(),

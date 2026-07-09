@@ -140,7 +140,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWindowOpacityBlurNote =>
-      'With blur on (Windows), this adjusts UI translucency.';
+      'With blur on, this adjusts UI translucency (native window opacity stays off so blur can work).';
 
   @override
   String settingsPercent(int percent) {

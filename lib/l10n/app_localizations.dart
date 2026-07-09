@@ -337,7 +337,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWindowOpacityBlurNote.
   ///
   /// In en, this message translates to:
-  /// **'With blur on (Windows), this adjusts UI translucency.'**
+  /// **'With blur on, this adjusts UI translucency (native window opacity stays off so blur can work).'**
   String get settingsWindowOpacityBlurNote;
 
   /// No description provided for @settingsPercent.
