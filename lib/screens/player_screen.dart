@@ -26,6 +26,7 @@ import '../services/seek_preview_service.dart';
 import '../services/self_update_service.dart';
 import '../models/playable_source.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/glass_decorations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../playback/chapter_list_loader.dart';
@@ -1734,8 +1735,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visuals = context.windowVisuals;
-
     return Focus(
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
@@ -1743,14 +1742,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         key: _scaffoldKey,
         backgroundColor: Colors.transparent,
         endDrawer: _buildPlayQueueDrawer(),
-        body: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [visuals.windowTopColor, visuals.windowBottomColor],
-            ),
-          ),
+        body: GlassShellBackground(
           child: Column(
             children: [
               const CustomTitleBar(),
@@ -1870,7 +1862,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       sigmaY: 8.0,
                                     ),
                                     child: ColoredBox(
-                                      color: visuals.dragOverlayColor
+                                      color: context
+                                          .windowVisuals
+                                          .dragOverlayColor
                                           .withValues(alpha: 0.28),
                                       child: Center(
                                         child: Column(
@@ -1920,13 +1914,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Widget _buildBottomDock() {
-    final visuals = context.windowVisuals;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: visuals.barColor,
-        border: Border(top: BorderSide(color: visuals.dividerColor)),
-      ),
+    return GlassChrome(
+      borderOnTop: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2072,140 +2061,128 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Widget _buildPlayQueueDrawer() {
-    final visuals = context.windowVisuals;
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
 
     return Drawer(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: visuals.contentColor.withValues(alpha: 0.88),
-              border: Border(left: BorderSide(color: visuals.borderColor)),
-            ),
-            child: SafeArea(
-              child: ListenableBuilder(
-                listenable: _playlist,
-                builder: (context, _) {
-                  final items = _playlist.items;
-                  return Column(
-                    children: [
-                      // Header
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-                        child: Row(
-                          children: [
-                            Icon(Icons.queue_music, color: colorScheme.primary),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                l10n.dialogPlayQueueTitle,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.info_outline),
-                              tooltip: l10n.tooltipMediaInfo,
-                              onPressed: _currentFile == null
-                                  ? null
-                                  : () => unawaited(_showMediaInfoDialog()),
-                            ),
-                            if (items.isNotEmpty)
-                              IconButton(
-                                icon: const Icon(Icons.clear_all),
-                                tooltip: l10n.actionClear,
-                                onPressed: () {
-                                  _playlist.clear();
-                                },
-                              ),
-                          ],
+      child: GlassDrawerBody(
+        child: SafeArea(
+          child: ListenableBuilder(
+            listenable: _playlist,
+            builder: (context, _) {
+              final items = _playlist.items;
+              return Column(
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.queue_music, color: colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            l10n.dialogPlayQueueTitle,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ),
-                      const Divider(height: 1),
-                      // List
-                      Expanded(
-                        child: items.isEmpty
-                            ? Center(
-                                child: Text(
-                                  l10n.dialogPlayQueueEmpty,
-                                  style: TextStyle(
-                                    color: colorScheme.onSurface.withValues(
-                                      alpha: 0.54,
-                                    ),
-                                  ),
+                        IconButton(
+                          icon: const Icon(Icons.info_outline),
+                          tooltip: l10n.tooltipMediaInfo,
+                          onPressed: _currentFile == null
+                              ? null
+                              : () => unawaited(_showMediaInfoDialog()),
+                        ),
+                        if (items.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear_all),
+                            tooltip: l10n.actionClear,
+                            onPressed: () {
+                              _playlist.clear();
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // List
+                  Expanded(
+                    child: items.isEmpty
+                        ? Center(
+                            child: Text(
+                              l10n.dialogPlayQueueEmpty,
+                              style: TextStyle(
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.54,
                                 ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                itemCount: items.length,
-                                itemBuilder: (context, index) {
-                                  final isCurrent = index == _playlist.index;
-                                  final source = items[index];
-                                  final name = source.displayName;
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              final isCurrent = index == _playlist.index;
+                              final source = items[index];
+                              final name = source.displayName;
 
-                                  return QueueItemTile(
-                                    name: name,
-                                    isCurrent: isCurrent,
-                                    isUrl: source.isUrl,
-                                    playLabel: l10n.actionPlay,
-                                    removeLabel: l10n.actionRemove,
-                                    colorScheme: colorScheme,
-                                    onActivate: () {
-                                      _playlist.jumpTo(index);
-                                      unawaited(_loadSource(source));
-                                    },
-                                    onRemove: () {
-                                      _playlist.removeAt(index);
-                                    },
-                                  );
+                              return QueueItemTile(
+                                name: name,
+                                isCurrent: isCurrent,
+                                isUrl: source.isUrl,
+                                playLabel: l10n.actionPlay,
+                                removeLabel: l10n.actionRemove,
+                                colorScheme: colorScheme,
+                                onActivate: () {
+                                  _playlist.jumpTo(index);
+                                  unawaited(_loadSource(source));
                                 },
-                              ),
-                      ),
-                      const Divider(height: 1),
-                      // Actions at bottom
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            FilledButton.tonalIcon(
-                              onPressed: _pickFilesToEnqueue,
-                              icon: const Icon(Icons.add),
-                              label: Text(l10n.dialogPlayQueueAddFiles),
-                            ),
-                            FilledButton.tonalIcon(
-                              key: const Key('queue-add-folder-button'),
-                              onPressed: () => unawaited(
-                                _openFolder(playNow: _playlist.isEmpty),
-                              ),
-                              icon: const Icon(Icons.create_new_folder),
-                              label: Text(l10n.buttonOpenFolder),
-                            ),
-                            if (items.isNotEmpty)
-                              FilledButton.tonalIcon(
-                                key: const Key('queue-remove-missing-button'),
-                                onPressed: () =>
-                                    unawaited(_removeMissingQueueItems()),
-                                icon: const Icon(Icons.cleaning_services),
-                                label: Text(l10n.actionRemoveMissing),
-                              ),
-                          ],
+                                onRemove: () {
+                                  _playlist.removeAt(index);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                  const Divider(height: 1),
+                  // Actions at bottom
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: _pickFilesToEnqueue,
+                          icon: const Icon(Icons.add),
+                          label: Text(l10n.dialogPlayQueueAddFiles),
                         ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
+                        FilledButton.tonalIcon(
+                          key: const Key('queue-add-folder-button'),
+                          onPressed: () => unawaited(
+                            _openFolder(playNow: _playlist.isEmpty),
+                          ),
+                          icon: const Icon(Icons.create_new_folder),
+                          label: Text(l10n.buttonOpenFolder),
+                        ),
+                        if (items.isNotEmpty)
+                          FilledButton.tonalIcon(
+                            key: const Key('queue-remove-missing-button'),
+                            onPressed: () =>
+                                unawaited(_removeMissingQueueItems()),
+                            icon: const Icon(Icons.cleaning_services),
+                            label: Text(l10n.actionRemoveMissing),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -2274,33 +2251,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     required List<Widget> children,
     double maxWidth = 560,
   }) {
-    final visuals = context.windowVisuals;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Container(
-          width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          padding: const EdgeInsets.fromLTRB(32, 34, 32, 38),
-          decoration: BoxDecoration(
-            color: visuals.contentColor,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: visuals.borderColor),
-            boxShadow: [
-              BoxShadow(
-                color: visuals.shadowColor,
-                blurRadius: 28,
-                offset: const Offset(0, 18),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: children,
-          ),
+      child: GlassPanel(
+        maxWidth: maxWidth,
+        padding: const EdgeInsets.fromLTRB(32, 34, 32, 38),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: children,
         ),
       ),
     );
@@ -2312,13 +2271,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     required Color color,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final visuals = context.windowVisuals;
+    final glass = visuals.isGlass;
 
     return Container(
       width: 132,
       height: 132,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: colorScheme.primary.withValues(alpha: 0.14),
+        gradient: glass
+            ? RadialGradient(
+                colors: [
+                  colorScheme.primary.withValues(alpha: 0.20),
+                  colorScheme.primary.withValues(alpha: 0.06),
+                ],
+              )
+            : null,
+        color: glass ? null : colorScheme.primary.withValues(alpha: 0.14),
+        boxShadow: glass
+            ? [
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  blurRadius: 24,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
       ),
       alignment: Alignment.center,
       child: Container(
@@ -2326,9 +2304,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
         height: 86,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: colorScheme.surface.withValues(alpha: 0.52),
+          gradient: glass
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    visuals.panelTopColor.withValues(alpha: 0.92),
+                    visuals.panelBottomColor.withValues(alpha: 0.88),
+                  ],
+                )
+              : null,
+          color: glass ? null : colorScheme.surface.withValues(alpha: 0.52),
           border: Border.all(
-            color: colorScheme.primary.withValues(alpha: 0.22),
+            color: glass
+                ? visuals.panelBorderColor
+                : colorScheme.primary.withValues(alpha: 0.22),
           ),
         ),
         alignment: Alignment.center,
@@ -2430,12 +2420,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: visuals.borderColor),
+        border: Border.all(color: visuals.panelBorderColor),
         boxShadow: [
           BoxShadow(
             color: visuals.shadowColor,
-            blurRadius: 24,
-            offset: const Offset(0, 14),
+            blurRadius: visuals.isGlass ? 28 : 24,
+            offset: Offset(0, visuals.isGlass ? 16 : 14),
           ),
         ],
       ),

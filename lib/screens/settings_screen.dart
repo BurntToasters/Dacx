@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/settings_service.dart';
+import '../theme/glass_decorations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
@@ -88,25 +89,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: isDesktopCustomChrome
           ? null
           : AppBar(title: Text(l10n.settingsTitle)),
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [visuals.overlayColor, visuals.windowBottomColor],
-          ),
-        ),
+      body: GlassOverlayBackground(
         child: Column(
           children: [
             if (isDesktopCustomChrome) const CustomTitleBar(),
             if (isDesktopCustomChrome) _desktopHeader(context),
             Expanded(
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: visuals.dividerColor)),
-                ),
+                decoration: visuals.overlayDecoration(),
                 child: Material(
-                  color: visuals.overlayColor,
+                  color: Colors.transparent,
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 210),
                     curve: Curves.easeOutCubic,
@@ -251,14 +243,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _desktopHeader(BuildContext context) {
-    final visuals = context.windowVisuals;
     final l10n = AppLocalizations.of(context);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: visuals.barColor,
-        border: Border(bottom: BorderSide(color: visuals.dividerColor)),
-      ),
+    return GlassChrome(
       child: SizedBox(
         height: 48,
         child: Padding(
@@ -519,8 +506,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     final percent = (opacity * 100).round();
     final windowsBlurMode =
-      (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
-      _s.windowBlurEnabled;
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+        _s.windowBlurEnabled;
     const minOpacity = SettingsService.windowOpacityMin;
     final divisions = ((1.0 - minOpacity) / 0.05).round();
 
@@ -658,10 +645,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       value: _s.audioWaveformEnabled,
       onChanged: (v) => setState(() {
         _s.audioWaveformEnabled = v;
-        _log(
-          'audio_waveform_changed',
-          detailsBuilder: () => {'value': v},
-        );
+        _log('audio_waveform_changed', detailsBuilder: () => {'value': v});
       }),
     );
   }
