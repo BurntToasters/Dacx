@@ -65,34 +65,62 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     double uiOpacity = 1.0,
   }) {
     final strength = blurStrength.clamp(0.0, 1.0).toDouble();
+
+    // ── Non-blur path: flat opaque colors, no gradients ──────────────
+    if (!blurEnabled) {
+      final surface = Color.lerp(
+        scheme.surface,
+        scheme.surfaceContainer,
+        0.35,
+      )!;
+      final lifted = Color.lerp(surface, scheme.surfaceContainerHighest, 0.62)!;
+      final bar = Color.lerp(surface, lifted, 0.20)!;
+      final content = Color.lerp(surface, lifted, 0.48)!;
+      final overlay = Color.lerp(lifted, scheme.surface, 0.18)!;
+      final border = scheme.outlineVariant.withValues(alpha: 0.14);
+      final divider = scheme.outlineVariant.withValues(alpha: 0.12);
+      final shadow = scheme.shadow.withValues(alpha: 0.10);
+
+      return WindowVisuals(
+        blurEnabled: false,
+        blurStrength: strength,
+        windowTopColor: Color.lerp(surface, lifted, 0.28)!,
+        windowBottomColor: Color.lerp(surface, scheme.surface, 0.08)!,
+        chromeTopColor: bar,
+        chromeBottomColor: bar,
+        panelTopColor: content,
+        panelBottomColor: content,
+        panelBorderColor: border,
+        rimHighlightColor: Colors.transparent,
+        overlayTopColor: overlay,
+        overlayBottomColor: overlay,
+        barColor: bar,
+        contentColor: content,
+        overlayColor: overlay,
+        borderColor: border,
+        dividerColor: divider,
+        shadowColor: shadow,
+        dragOverlayColor: scheme.primary.withValues(alpha: 0.18),
+      );
+    }
+
+    // ── Glass / blur path: gradients, accent wash, transparency ──────
     final opacity = uiOpacity.clamp(0.05, 1.0).toDouble();
-    // Linear mapping — every 10% of slider produces a visible change.
     double withUiOpacity(double alpha) =>
-        blurEnabled ? (alpha * opacity).clamp(0.0, 1.0).toDouble() : alpha;
+        (alpha * opacity).clamp(0.0, 1.0).toDouble();
 
     // Shell alpha range: 0.82 (low strength = barely frosted) → 0.35 (max
     // strength = very transparent, native blur shows through strongly).
-    // Wide range ensures the slider feels responsive end to end.
-    final shellAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.82, 0.35, strength)!)
-        : 1.0;
-    final barAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.85, 0.42, strength)!)
-        : 0.98;
-    final panelDeepAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.78, 0.32, strength)!)
-        : 0.96;
-    final overlayAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.84, 0.40, strength)!)
-        : 0.99;
-    final panelAlpha = blurEnabled
-        ? withUiOpacity(lerpDouble(0.88, 0.45, strength)!)
-        : 0.98;
+    final shellAlpha = withUiOpacity(lerpDouble(0.82, 0.35, strength)!);
+    final barAlpha = withUiOpacity(lerpDouble(0.85, 0.42, strength)!);
+    final panelDeepAlpha = withUiOpacity(lerpDouble(0.78, 0.32, strength)!);
+    final overlayAlpha = withUiOpacity(lerpDouble(0.84, 0.40, strength)!);
+    final panelAlpha = withUiOpacity(lerpDouble(0.88, 0.45, strength)!);
 
-    final borderAlpha = blurEnabled ? lerpDouble(0.22, 0.34, strength)! : 0.14;
-    final dividerAlpha = blurEnabled ? lerpDouble(0.16, 0.24, strength)! : 0.12;
-    final shadowAlpha = blurEnabled ? lerpDouble(0.20, 0.32, strength)! : 0.10;
-    final rimAlpha = blurEnabled ? lerpDouble(0.10, 0.18, strength)! : 0.08;
+    final borderAlpha = lerpDouble(0.22, 0.34, strength)!;
+    final dividerAlpha = lerpDouble(0.16, 0.24, strength)!;
+    final shadowAlpha = lerpDouble(0.20, 0.32, strength)!;
+    final rimAlpha = lerpDouble(0.10, 0.18, strength)!;
 
     final isDark = scheme.brightness == Brightness.dark;
     final surface = Color.lerp(scheme.surface, scheme.surfaceContainer, 0.35)!;
@@ -103,23 +131,18 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
       scheme.primary,
       isDark ? 0.10 : 0.07,
     )!;
-    final glassBase = Color.lerp(
-      surface,
-      accentWash,
-      blurEnabled ? 0.55 : 0.0,
-    )!;
+    final glassBase = Color.lerp(surface, accentWash, 0.55)!;
 
     final windowTop = Color.lerp(
       glassBase,
       lifted,
       0.22,
     )!.withValues(alpha: shellAlpha);
-    final windowBottom = Color.lerp(glassBase, scheme.surface, 0.12)!
-        .withValues(
-          alpha: blurEnabled
-              ? ((shellAlpha + 0.03).clamp(0.0, 1.0)).toDouble()
-              : 1.0,
-        );
+    final windowBottom = Color.lerp(
+      glassBase,
+      scheme.surface,
+      0.12,
+    )!.withValues(alpha: ((shellAlpha + 0.03).clamp(0.0, 1.0)).toDouble());
 
     final chromeTop = Color.lerp(
       glassBase,
@@ -145,7 +168,7 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     final panelBorder = Color.lerp(
       scheme.outlineVariant,
       scheme.primary,
-      blurEnabled ? 0.35 : 0.0,
+      0.35,
     )!.withValues(alpha: borderAlpha);
 
     final rimHighlight = (isDark ? Colors.white : scheme.primary).withValues(
@@ -170,7 +193,7 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     final divider = scheme.outlineVariant.withValues(alpha: dividerAlpha);
 
     return WindowVisuals(
-      blurEnabled: blurEnabled,
+      blurEnabled: true,
       blurStrength: strength,
       windowTopColor: windowTop,
       windowBottomColor: windowBottom,
@@ -189,7 +212,7 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
       dividerColor: divider,
       shadowColor: scheme.shadow.withValues(alpha: shadowAlpha),
       dragOverlayColor: scheme.primary.withValues(
-        alpha: blurEnabled ? lerpDouble(0.14, 0.24, strength)! : 0.18,
+        alpha: lerpDouble(0.14, 0.24, strength)!,
       ),
     );
   }

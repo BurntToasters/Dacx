@@ -30,7 +30,7 @@ void main() {
       expect(v.blurEnabled, isFalse);
       expect(v.windowTopColor.a, 1.0);
       expect(v.windowBottomColor.a, 1.0);
-      expect(v.barColor.a, closeTo(0.98, 0.001));
+      expect(v.barColor.a, 1.0);
     });
 
     test('blurStrength is clamped to [0,1]', () {
