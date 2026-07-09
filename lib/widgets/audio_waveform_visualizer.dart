@@ -27,6 +27,10 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
   double _phase = 0.0;
   late AnimationController _playPauseController;
 
+  // Beat simulation fields
+  final math.Random _random = math.Random();
+  double _beatActivity = 0.5;
+
   List<double>? _cachedHeights;
   int? _cachedSeed;
 
@@ -47,6 +51,18 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
           // Increment phase smoothly based on elapsed time to drive the bar bounce
           _phase +=
               0.05 * (widget.isPlaying ? 1.0 : _playPauseController.value);
+
+          if (widget.isPlaying) {
+            // Decays beat activity down to a baseline
+            _beatActivity = (_beatActivity * 0.92).clamp(0.1, 1.0);
+            // Randomly trigger sharp impulses resembling music beats/peaks
+            if (_random.nextDouble() < 0.12) {
+              _beatActivity = (_beatActivity + _random.nextDouble() * 0.65)
+                  .clamp(0.1, 1.0);
+            }
+          } else {
+            _beatActivity = (_beatActivity * 0.90).clamp(0.0, 1.0);
+          }
         });
       }
     })..start();
@@ -128,6 +144,7 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
           progress: progress,
           phase: _phase,
           playPauseScale: _playPauseController.value,
+          beatActivity: _beatActivity,
           activeColor: activeColor,
           inactiveColor: inactiveColor,
         ),
@@ -141,6 +158,7 @@ class WaveformPainter extends CustomPainter {
   final double progress;
   final double phase;
   final double playPauseScale;
+  final double beatActivity;
   final Color activeColor;
   final Color inactiveColor;
 
@@ -149,6 +167,7 @@ class WaveformPainter extends CustomPainter {
     required this.progress,
     required this.phase,
     required this.playPauseScale,
+    required this.beatActivity,
     required this.activeColor,
     required this.inactiveColor,
   });
@@ -168,8 +187,19 @@ class WaveformPainter extends CustomPainter {
     final inactivePaint = Paint()..color = inactiveColor;
 
     for (int i = 0; i < barCount; i++) {
-      // Oscillate height when playing/pausing
-      final bounce = math.sin(phase * 4.0 + i * 0.25) * 0.15 * playPauseScale;
+      final barProgress = i / barCount;
+
+      // Map frequencies dynamically: slower wave on left (bass), faster shimmer on right (treble)
+      final freq = 2.0 + (14.0 * barProgress);
+      final baseAmp = 0.25 - (0.17 * barProgress); // higher amplitude on bass
+
+      // Beat activity affects bass more pronouncedly (left side)
+      final beatInfluence = 1.0 - (0.7 * barProgress);
+      final currentAmp = baseAmp * (0.6 + (beatActivity * 1.2 * beatInfluence));
+
+      // Calculate animated bounce
+      final bounce =
+          math.sin(phase * freq + i * 0.3) * currentAmp * playPauseScale;
       final rawHeight = (heights[i] + bounce).clamp(0.06, 1.0);
 
       final barHeight =
@@ -200,6 +230,7 @@ class WaveformPainter extends CustomPainter {
     return oldDelegate.progress != progress ||
         oldDelegate.phase != phase ||
         oldDelegate.playPauseScale != playPauseScale ||
+        oldDelegate.beatActivity != beatActivity ||
         oldDelegate.activeColor != activeColor ||
         oldDelegate.inactiveColor != inactiveColor ||
         oldDelegate.heights != heights;

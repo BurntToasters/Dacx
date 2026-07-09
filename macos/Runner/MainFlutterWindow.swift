@@ -18,6 +18,7 @@ class MainFlutterWindow: NSWindow {
     backgroundColor = .clear
 
     let flutterViewController = FlutterViewController()
+    flutterViewController.backgroundColor = .clear
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
