@@ -6,12 +6,20 @@ import 'package:dacx/services/instance_mode_service.dart';
 
 void main() {
   group('InstanceModeService', () {
+    late Directory tempDir;
+
     setUp(() async {
+      tempDir = Directory.systemTemp.createTempSync('dacx_instance_test_');
+      InstanceModeService.setFlagDirForTesting(tempDir.path);
       await InstanceModeService.setAllowMultipleInstances(false);
     });
 
     tearDown(() async {
       await InstanceModeService.setAllowMultipleInstances(false);
+      InstanceModeService.setFlagDirForTesting(null);
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
     });
 
     test('flag file is absent by default', () {

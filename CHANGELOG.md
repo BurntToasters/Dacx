@@ -22,6 +22,8 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 * **Window Transparency/Blurring:** More work has been done on this experimental feature! 
   - Window Transperency/Blur is closer to being moved out of the experimental features options and becomming stable!
 * **Backend:** Updated base flutter version to `v3.44.5`.
+* **Testing:** 774 VM tests in `npm run test:all`; headless `PlayerScreen` widget harness exercises transport, queue, settings, keyboard shortcuts (play/pause, seek, mute, volume, fullscreen, chapters, playlist, equalizer, audio/subtitle tracks), load-failure feedback, and playback UI without libmpv; post-open load orchestration and playback policies extracted for unit coverage.
+* **Stability:** `IPlayerService` injection and load-generation guards reduce stale UI after rapid queue changes; self-update redirect allowlist and Windows manifest validation covered by direct tests.
 
 <details>
 <summary>Full changelog</summary>
@@ -75,7 +77,7 @@ The UI has been revamped to provide a way better user experience and UI moving f
 ## Changes in `v0.7.0:`
 *`v0.7.0` is a quality and stability-focused release branch of DACX.*
 * **Window Behavior:** Changed default opening behavior of another file is DACX is already open.
-    * On all platforms, if a user opens a audio/video file with DACX via the `Open With` menu on their OS or sets DACX as a default player and double-clicks the file, DACX will now stop the current playing file and start playing the new one. This can be changed in settings.
+    * On all platforms, if a user opens a audio/video file with DACX via the `Open With` menu on their OS or sets DACX as a default player and double-clicks the file, DACX will now stop the current playing file and start playing the new one.
 * **NEW - Window shortcut:** Added the `CTRL`/`CMD`+N which spawns a new DACX window.
 * **Settings:** Migrated settings to a new schema.
 * **NEW - Localization:** Dacx has moved *most* of its hard-coded English languages to `l10n`, making it easier for contributors in the future to add localization support for other languages.

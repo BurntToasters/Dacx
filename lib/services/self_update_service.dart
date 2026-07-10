@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import 'allowed_get_redirect.dart';
 import 'debug_log_service.dart';
 import 'trusted_http.dart';
 import 'update_trust_config.dart';
@@ -24,6 +25,30 @@ typedef WindowsSpawnFn =
     Future<WindowsSpawnResult> Function(
       String commandLine, {
       String? applicationName,
+    });
+typedef SelfUpdateDownloadFn =
+    Future<void> Function(
+      String url,
+      File outFile, {
+      void Function(SelfUpdateProgress)? onProgress,
+    });
+typedef SelfUpdateFetchTextFn = Future<String> Function(String url);
+typedef SelfUpdateFetchBytesFn = Future<List<int>> Function(String url);
+typedef ValidateWindowsManifestFn =
+    Future<SelfUpdateResult> Function({
+      required List<int> manifestBytes,
+      required List<int> signatureBytes,
+      required String version,
+      required String assetName,
+    });
+typedef MacUpdateInstallFn =
+    Future<Map<String, dynamic>?> Function({
+      required String zipUrl,
+      required String checksumHex,
+      required String installedAppPath,
+      required String expectedTeamId,
+      required String expectedVersion,
+      required bool relaunch,
     });
 
 enum SelfUpdateOutcome {
@@ -91,16 +116,41 @@ class SelfUpdateService {
   final HttpStreamFn _httpStream;
   final ProcessRunFn _processRun;
   final WindowsSpawnFn _windowsSpawn;
+  final SelfUpdateDownloadFn? _downloadToOverride;
+  final SelfUpdateFetchTextFn? _fetchTextOverride;
+  final SelfUpdateFetchBytesFn? _fetchBytesOverride;
+  final ValidateWindowsManifestFn? _validateWindowsManifestOverride;
+  final MacUpdateInstallFn? _macUpdateInstallOverride;
+  final String? _expectedTeamIdOverride;
+  final String? _windowsManifestPublicKeyOverride;
+  final String? _expectedWindowsSignerThumbprintOverride;
 
   SelfUpdateService({
     DebugLogService? debugLog,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
     WindowsSpawnFn? windowsSpawn,
+    @visibleForTesting SelfUpdateDownloadFn? downloadTo,
+    @visibleForTesting SelfUpdateFetchTextFn? fetchText,
+    @visibleForTesting SelfUpdateFetchBytesFn? fetchBytes,
+    @visibleForTesting ValidateWindowsManifestFn? validateWindowsManifest,
+    @visibleForTesting MacUpdateInstallFn? macUpdateInstall,
+    @visibleForTesting String? expectedTeamIdOverride,
+    @visibleForTesting String? windowsManifestPublicKeyOverride,
+    @visibleForTesting String? expectedWindowsSignerThumbprintOverride,
   }) : _debugLog = debugLog,
        _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
-       _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn;
+       _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn,
+       _downloadToOverride = downloadTo,
+       _fetchTextOverride = fetchText,
+       _fetchBytesOverride = fetchBytes,
+       _validateWindowsManifestOverride = validateWindowsManifest,
+       _macUpdateInstallOverride = macUpdateInstall,
+       _expectedTeamIdOverride = expectedTeamIdOverride,
+       _windowsManifestPublicKeyOverride = windowsManifestPublicKeyOverride,
+       _expectedWindowsSignerThumbprintOverride =
+           expectedWindowsSignerThumbprintOverride;
 
   static Future<WindowsSpawnResult> _defaultWindowsSpawn(
     String commandLine, {
@@ -202,13 +252,6 @@ class SelfUpdateService {
     return h == 'githubusercontent.com' || h.endsWith('.githubusercontent.com');
   }
 
-  static bool _isRedirectStatus(int statusCode) =>
-      statusCode == 301 ||
-      statusCode == 302 ||
-      statusCode == 303 ||
-      statusCode == 307 ||
-      statusCode == 308;
-
   static String normalizeCertificateThumbprint(String value) {
     return value.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
   }
@@ -276,9 +319,90 @@ class SelfUpdateService {
     return Directory(p.join(Directory.systemTemp.path, 'dacx-updates'));
   }
 
+  /// Test hook for the Windows self-update pipeline without relying on
+  /// [Platform.isWindows] in unit tests.
+  @visibleForTesting
+  Future<SelfUpdateResult> applyWindowsUpdate(
+    UpdateInfo info, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) {
+    return _applyWindows(info, onProgress: onProgress);
+  }
+
+  /// Test hook for the macOS self-update pipeline without relying on
+  /// [Platform.isMacOS] or the native XPC helper.
+  @visibleForTesting
+  Future<SelfUpdateResult> applyMacosUpdate(
+    UpdateInfo info, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) {
+    return _applyMacos(info, onProgress: onProgress);
+  }
+
+  /// Maps an XPC helper rejection message to a [SelfUpdateOutcome].
+  @visibleForTesting
+  static SelfUpdateResult mapMacInstallRejection(String message) {
+    if (message.contains('codesign:') || message.contains('gatekeeper:')) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: message,
+      );
+    }
+    if (message.contains('SHA256 mismatch') ||
+        message.contains('checksumHex')) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.checksumMismatch,
+        message: message,
+      );
+    }
+    if (message.contains('ditto')) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.extractionFailed,
+        message: message,
+      );
+    }
+    return SelfUpdateResult(SelfUpdateOutcome.spawnFailed, message: message);
+  }
+
+  /// Test hook for [_validateWindowsManifestImpl] without download orchestration.
+  @visibleForTesting
+  Future<SelfUpdateResult> validateWindowsManifestForTesting({
+    required List<int> manifestBytes,
+    required List<int> signatureBytes,
+    required String version,
+    required String assetName,
+  }) {
+    return _validateWindowsManifestImpl(
+      manifestBytes: manifestBytes,
+      signatureBytes: signatureBytes,
+      version: version,
+      assetName: assetName,
+    );
+  }
+
+  /// Test hook for [_validateWindowsInstallerSignature] without MSI download.
+  @visibleForTesting
+  Future<SelfUpdateResult> validateWindowsInstallerSignatureForTesting(
+    File file,
+  ) {
+    return _validateWindowsInstallerSignature(file);
+  }
+
   /// Downloads [url] to [outFile] streaming, calling [onProgress] periodically.
   /// Throws on HTTP error.
   Future<void> _downloadTo(
+    String url,
+    File outFile, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) {
+    final override = _downloadToOverride;
+    if (override != null) {
+      return override(url, outFile, onProgress: onProgress);
+    }
+    return _downloadToImpl(url, outFile, onProgress: onProgress);
+  }
+
+  Future<void> _downloadToImpl(
     String url,
     File outFile, {
     void Function(SelfUpdateProgress)? onProgress,
@@ -313,7 +437,13 @@ class SelfUpdateService {
   }
 
   /// Fetches [url] as text. Throws on HTTP error.
-  Future<String> _fetchText(String url) async {
+  Future<String> _fetchText(String url) {
+    final override = _fetchTextOverride;
+    if (override != null) return override(url);
+    return _fetchTextImpl(url);
+  }
+
+  Future<String> _fetchTextImpl(String url) async {
     final resp = await _sendAllowedGet(
       url,
       timeout: const Duration(seconds: 30),
@@ -324,7 +454,13 @@ class SelfUpdateService {
     return utf8.decode(await resp.stream.toBytes());
   }
 
-  Future<List<int>> _fetchBytes(String url) async {
+  Future<List<int>> _fetchBytes(String url) {
+    final override = _fetchBytesOverride;
+    if (override != null) return override(url);
+    return _fetchBytesImpl(url);
+  }
+
+  Future<List<int>> _fetchBytesImpl(String url) async {
     final resp = await _sendAllowedGet(
       url,
       timeout: const Duration(seconds: 30),
@@ -338,36 +474,14 @@ class SelfUpdateService {
   Future<http.StreamedResponse> _sendAllowedGet(
     String url, {
     required Duration timeout,
-  }) async {
-    var uri = Uri.parse(url);
-    for (
-      var redirectCount = 0;
-      redirectCount <= _maxDownloadRedirects;
-      redirectCount++
-    ) {
-      if (!isAllowedDownloadUrl(uri.toString())) {
-        throw StateError('Refusing to fetch from non-allowlisted host: $uri');
-      }
-      final request = http.Request('GET', uri)..followRedirects = false;
-      final response = await _httpStream(request).timeout(timeout);
-      if (!_isRedirectStatus(response.statusCode)) {
-        return response;
-      }
-
-      final location = response.headers['location'];
-      await response.stream.drain<void>();
-      if (location == null || location.trim().isEmpty) {
-        throw StateError(
-          'HTTP ${response.statusCode} redirect missing Location',
-        );
-      }
-      final next = uri.resolve(location);
-      if (!isAllowedDownloadUrl(next.toString())) {
-        throw StateError('Refusing redirect to non-allowlisted host: $next');
-      }
-      uri = next;
-    }
-    throw StateError('Too many redirects from $url');
+  }) {
+    return fetchAllowedGetFollowingRedirects(
+      url: url,
+      timeout: timeout,
+      httpStream: _httpStream,
+      isAllowedUrl: isAllowedDownloadUrl,
+      maxRedirects: _maxDownloadRedirects,
+    );
   }
 
   /// Top-level orchestrator. On success returns [SelfUpdateOutcome.spawned]
@@ -476,7 +590,7 @@ class SelfUpdateService {
     }
 
     final cacheDir = updateCacheDir();
-    final msiPath = File(p.join(cacheDir.path, asset.name));
+    final msiPath = File(p.join(cacheDir.path, p.basename(asset.name)));
 
     String checksumsBody;
     List<int> manifestBytes;
@@ -599,8 +713,34 @@ class SelfUpdateService {
     required List<int> signatureBytes,
     required String version,
     required String assetName,
+  }) {
+    final override = _validateWindowsManifestOverride;
+    if (override != null) {
+      return override(
+        manifestBytes: manifestBytes,
+        signatureBytes: signatureBytes,
+        version: version,
+        assetName: assetName,
+      );
+    }
+    return _validateWindowsManifestImpl(
+      manifestBytes: manifestBytes,
+      signatureBytes: signatureBytes,
+      version: version,
+      assetName: assetName,
+    );
+  }
+
+  Future<SelfUpdateResult> _validateWindowsManifestImpl({
+    required List<int> manifestBytes,
+    required List<int> signatureBytes,
+    required String version,
+    required String assetName,
   }) async {
-    final publicKey = UpdateTrustConfig.windowsManifestPublicKeyBase64.trim();
+    final publicKey =
+        (_windowsManifestPublicKeyOverride ??
+                UpdateTrustConfig.windowsManifestPublicKeyBase64)
+            .trim();
     if (publicKey.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
@@ -696,7 +836,8 @@ class SelfUpdateService {
 
   Future<SelfUpdateResult> _validateWindowsInstallerSignature(File file) async {
     final expected = normalizeCertificateThumbprint(
-      expectedWindowsSignerThumbprint,
+      _expectedWindowsSignerThumbprintOverride ??
+          expectedWindowsSignerThumbprint,
     );
     if (expected.isEmpty) {
       return const SelfUpdateResult(
@@ -876,7 +1017,8 @@ exit 0
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
-    if (expectedTeamId.isEmpty) {
+    final teamId = _expectedTeamIdOverride ?? expectedTeamId;
+    if (teamId.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.gatekeeperRejected,
         message:
@@ -921,44 +1063,22 @@ exit 0
     }
 
     try {
-      final reply = await _macUpdateChannel
-          .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
-            'zipUrl': asset.downloadUrl,
-            'checksumHex': expectedHash,
-            'installedAppPath': _macInstallPath,
-            'expectedTeamId': expectedTeamId,
-            'expectedVersion': info.version,
-            'relaunch': true,
-          });
+      final install = _macUpdateInstallOverride ?? _defaultMacUpdateInstall;
+      final reply = await install(
+        zipUrl: asset.downloadUrl,
+        checksumHex: expectedHash,
+        installedAppPath: _macInstallPath,
+        expectedTeamId: teamId,
+        expectedVersion: info.version,
+        relaunch: true,
+      );
       final accepted = reply?['accepted'] == true;
       if (!accepted) {
         final err = reply?['error']?.toString();
         final message = (err != null && err.trim().isNotEmpty)
             ? err
             : 'XPC update helper rejected install';
-        if (message.contains('codesign:') || message.contains('gatekeeper:')) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.signatureInvalid,
-            message: message,
-          );
-        }
-        if (message.contains('SHA256 mismatch') ||
-            message.contains('checksumHex')) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.checksumMismatch,
-            message: message,
-          );
-        }
-        if (message.contains('ditto')) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.extractionFailed,
-            message: message,
-          );
-        }
-        return SelfUpdateResult(
-          SelfUpdateOutcome.spawnFailed,
-          message: message,
-        );
+        return mapMacInstallRejection(message);
       }
     } on PlatformException catch (e) {
       return SelfUpdateResult(
@@ -980,6 +1100,25 @@ exit 0
       },
     );
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
+  }
+
+  Future<Map<String, dynamic>?> _defaultMacUpdateInstall({
+    required String zipUrl,
+    required String checksumHex,
+    required String installedAppPath,
+    required String expectedTeamId,
+    required String expectedVersion,
+    required bool relaunch,
+  }) {
+    return _macUpdateChannel
+        .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
+          'zipUrl': zipUrl,
+          'checksumHex': checksumHex,
+          'installedAppPath': installedAppPath,
+          'expectedTeamId': expectedTeamId,
+          'expectedVersion': expectedVersion,
+          'relaunch': relaunch,
+        });
   }
 
   static const MethodChannel _macUpdateChannel = MethodChannel(

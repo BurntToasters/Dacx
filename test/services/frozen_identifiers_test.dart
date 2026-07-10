@@ -9,6 +9,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/services/instance_mode_service.dart';
+import 'package:dacx/services/open_file_bridge.dart';
 import 'package:dacx/services/settings_service.dart';
 
 void main() {
@@ -21,6 +23,31 @@ void main() {
       const expected = 'run.rosie.dacx/media_session';
       const channel = MethodChannel(expected);
       expect(channel.name, expected);
+    });
+
+    test('open file bridge channel names are unchanged', () {
+      // Touching these requires updating native runners:
+      //   - macos/Runner/AppDelegate.swift
+      //   - windows/runner/instance_bridge.cpp
+      //   - linux/runner/my_application.cc
+      expect(
+        OpenFileBridge.methodChannelName,
+        'run.rosie.dacx/open_file/methods',
+      );
+      expect(
+        OpenFileBridge.eventChannelName,
+        'run.rosie.dacx/open_file/events',
+      );
+    });
+
+    test('window method channel name is unchanged', () {
+      // Touching this requires updating:
+      //   - macos/Runner/MainFlutterWindow.swift
+      //   - lib/services/instance_mode_service.dart
+      expect(
+        InstanceModeService.windowMethodChannelName,
+        'run.rosie.dacx/window/methods',
+      );
     });
   });
 

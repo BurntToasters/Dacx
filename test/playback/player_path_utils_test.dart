@@ -200,10 +200,10 @@ void main() {
       });
 
       test('detects FileSystemException with error code 13 (EACCES)', () {
-        final error = FileSystemException(
+        const error = FileSystemException(
           'Cannot open',
           '/tmp/x',
-          const OSError('Permission denied', 13),
+          OSError('Permission denied', 13),
         );
         expect(PlayerPathUtils.isPermissionDeniedError(error), isTrue);
       });
@@ -211,10 +211,10 @@ void main() {
       test(
         'detects FileSystemException with error code 5 (Windows ACCESS_DENIED)',
         () {
-          final error = FileSystemException(
+          const error = FileSystemException(
             'Cannot open',
             'C:\\x',
-            const OSError('Access denied', 5),
+            OSError('Access denied', 5),
           );
           expect(PlayerPathUtils.isPermissionDeniedError(error), isTrue);
         },

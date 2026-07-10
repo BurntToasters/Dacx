@@ -185,6 +185,24 @@ class PlayerShortcutsService {
       return PlayerShortcutAction.screenshot;
     }
     if (event is KeyDownEvent &&
+        isShiftPressed &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyN) {
+      return PlayerShortcutAction.playlistNext;
+    }
+    if (event is KeyDownEvent &&
+        isShiftPressed &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyP) {
+      return PlayerShortcutAction.playlistPrev;
+    }
+    if (event is KeyDownEvent &&
+        primaryModifierPressed &&
+        isShiftPressed &&
+        key == LogicalKeyboardKey.keyM) {
+      return PlayerShortcutAction.toggleCompactMode;
+    }
+    if (event is KeyDownEvent &&
         !primaryModifierPressed &&
         key == LogicalKeyboardKey.keyF) {
       return PlayerShortcutAction.toggleFullscreen;

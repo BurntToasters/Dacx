@@ -134,5 +134,18 @@ void main() {
         expect(results, everyElement(isNull));
       },
     );
+
+    test(
+      'requestPreview returns null when enabled but no source loaded',
+      () async {
+        final svc = SeekPreviewService();
+        await svc.setEnabled(true);
+        addTearDown(svc.dispose);
+        final bytes = await svc.requestPreview(
+          const Duration(milliseconds: 2500),
+        );
+        expect(bytes, isNull);
+      },
+    );
   });
 }
