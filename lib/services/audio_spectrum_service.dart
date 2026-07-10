@@ -17,7 +17,7 @@ class AudioSpectrumService {
   AudioSpectrumService({
     required PlayerService playerService,
     this.bandCount = 32,
-    this.pollInterval = const Duration(milliseconds: 33),
+    this.pollInterval = const Duration(milliseconds: 50),
   }) : _playerService = playerService;
 
   final PlayerService _playerService;
@@ -49,7 +49,7 @@ class AudioSpectrumService {
 
   /// The af filter segment this service needs appended to the chain.
   static const String _afLabel = 'dacxstats';
-  static const int _graphBandCount = 32;
+  static const int _graphBandCount = 10;
   static const double _dbFloor = -80.0;
   static const int _firstBandChannel = 3;
   static final String afSegment = _buildAfSegment();
@@ -145,13 +145,21 @@ class AudioSpectrumService {
   }
 
   void _updateSpectrumFromBands() {
-    final targetBands = math.min(bandCount, _graphBandCount);
-    for (var i = 0; i < targetBands; i++) {
-      final t = targetBands <= 1 ? 0.0 : i / (targetBands - 1);
-      final target = _dbToLinear(_lastBandDb[i]);
+    for (var i = 0; i < bandCount; i++) {
+      final position = bandCount <= 1 ? 0.0 : i / (bandCount - 1);
+      final rawIndex = position * (_graphBandCount - 1);
+      final lowerIndex = rawIndex.floor();
+      final upperIndex = math.min(_graphBandCount - 1, rawIndex.ceil());
+      final fraction = rawIndex - lowerIndex;
 
-      final attackRate = 0.58 + 0.30 * t;
-      final releaseRate = 0.78 + 0.17 * (1.0 - t);
+      final dbLower = _lastBandDb[lowerIndex];
+      final dbUpper = _lastBandDb[upperIndex];
+      final interpolatedDb = dbLower + (dbUpper - dbLower) * fraction;
+
+      final target = _dbToLinear(interpolatedDb);
+
+      final attackRate = 0.58 + 0.30 * position;
+      final releaseRate = 0.78 + 0.17 * (1.0 - position);
 
       if (target > _bandEnergy[i]) {
         _bandEnergy[i] =
@@ -161,10 +169,6 @@ class AudioSpectrumService {
             _bandEnergy[i] * releaseRate + target * (1.0 - releaseRate);
       }
       _bandEnergy[i] = _bandEnergy[i].clamp(0.0, 1.0);
-    }
-
-    for (var i = targetBands; i < bandCount; i++) {
-      _bandEnergy[i] = _bandEnergy[i] * 0.85;
     }
 
     if (!_spectrumController.isClosed) {
