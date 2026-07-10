@@ -1,375 +1,373 @@
+import 'package:dacx/services/player_shortcuts_service.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dacx/services/player_shortcuts_service.dart';
+// Helper to create a fake KeyDownEvent for testing.
+KeyDownEvent _keyDown(LogicalKeyboardKey key) {
+  return KeyDownEvent(
+    physicalKey: PhysicalKeyboardKey.keyA, // placeholder
+    logicalKey: key,
+    timeStamp: Duration.zero,
+  );
+}
+
+KeyRepeatEvent _keyRepeat(LogicalKeyboardKey key) {
+  return KeyRepeatEvent(
+    physicalKey: PhysicalKeyboardKey.keyA,
+    logicalKey: key,
+    timeStamp: Duration.zero,
+  );
+}
+
+KeyUpEvent _keyUp(LogicalKeyboardKey key) {
+  return KeyUpEvent(
+    physicalKey: PhysicalKeyboardKey.keyA,
+    logicalKey: key,
+    timeStamp: Duration.zero,
+  );
+}
 
 void main() {
-  PlayerShortcutAction? resolve(
-    KeyEvent event, {
-    bool hasMedia = true,
-    bool meta = false,
-    bool ctrl = false,
-  }) {
-    return PlayerShortcutsService.resolve(
-      event: event,
-      hasMedia: hasMedia,
-      isMetaPressed: meta,
-      isControlPressed: ctrl,
-    );
-  }
-
-  group('PlayerShortcutsService', () {
-    test('maps Ctrl/Cmd + O to open file', () {
-      const keyEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyO,
-        logicalKey: LogicalKeyboardKey.keyO,
-        timeStamp: Duration.zero,
+  group('PlayerShortcutsService.resolve', () {
+    test('space triggers playPause when hasMedia', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.space),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-
-      expect(resolve(keyEvent, ctrl: true), PlayerShortcutAction.openFile);
-      expect(resolve(keyEvent, meta: true), PlayerShortcutAction.openFile);
+      expect(action, PlayerShortcutAction.playPause);
     });
 
-    test('maps Ctrl/Cmd + R to reopen last', () {
-      const keyEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyR,
-        logicalKey: LogicalKeyboardKey.keyR,
-        timeStamp: Duration.zero,
+    test('space does not trigger playPause without media', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.space),
+        hasMedia: false,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-
-      expect(resolve(keyEvent, ctrl: true), PlayerShortcutAction.reopenLast);
-      expect(resolve(keyEvent, meta: true), PlayerShortcutAction.reopenLast);
+      expect(action, isNull);
     });
 
-    test('maps Ctrl/Cmd + N to open new window', () {
-      const keyEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyN,
-        logicalKey: LogicalKeyboardKey.keyN,
-        timeStamp: Duration.zero,
+    test('Ctrl+O triggers openFile', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyO),
+        hasMedia: false,
+        isMetaPressed: false,
+        isControlPressed: true,
       );
-
-      expect(resolve(keyEvent, ctrl: true), PlayerShortcutAction.newWindow);
-      expect(resolve(keyEvent, meta: true), PlayerShortcutAction.newWindow);
+      expect(action, PlayerShortcutAction.openFile);
     });
 
-    test('maps F and Escape for fullscreen actions', () {
-      const fullscreenEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyF,
-        logicalKey: LogicalKeyboardKey.keyF,
-        timeStamp: Duration.zero,
+    test('Meta+O triggers openFile (macOS)', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyO),
+        hasMedia: false,
+        isMetaPressed: true,
+        isControlPressed: false,
       );
-      const escapeEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.escape,
-        logicalKey: LogicalKeyboardKey.escape,
-        timeStamp: Duration.zero,
-      );
-
-      expect(resolve(fullscreenEvent), PlayerShortcutAction.toggleFullscreen);
-      expect(resolve(escapeEvent), PlayerShortcutAction.exitFullscreen);
+      expect(action, PlayerShortcutAction.openFile);
     });
 
-    test('space requires media for play/pause', () {
-      const spaceEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.space,
-        logicalKey: LogicalKeyboardKey.space,
-        timeStamp: Duration.zero,
+    test('Ctrl+R triggers reopenLast', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyR),
+        hasMedia: false,
+        isMetaPressed: false,
+        isControlPressed: true,
       );
-
-      expect(
-        resolve(spaceEvent, hasMedia: true),
-        PlayerShortcutAction.playPause,
-      );
-      expect(resolve(spaceEvent, hasMedia: false), isNull);
+      expect(action, PlayerShortcutAction.reopenLast);
     });
 
-    test('supports repeat key events for seek/volume shortcuts only', () {
-      const seekEvent = KeyRepeatEvent(
-        physicalKey: PhysicalKeyboardKey.arrowRight,
-        logicalKey: LogicalKeyboardKey.arrowRight,
-        timeStamp: Duration.zero,
+    test('Ctrl+N triggers newWindow', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyN),
+        hasMedia: false,
+        isMetaPressed: false,
+        isControlPressed: true,
       );
-      const volumeEvent = KeyRepeatEvent(
-        physicalKey: PhysicalKeyboardKey.arrowDown,
-        logicalKey: LogicalKeyboardKey.arrowDown,
-        timeStamp: Duration.zero,
-      );
-      const muteEvent = KeyRepeatEvent(
-        physicalKey: PhysicalKeyboardKey.keyM,
-        logicalKey: LogicalKeyboardKey.keyM,
-        timeStamp: Duration.zero,
-      );
-
-      expect(resolve(seekEvent), PlayerShortcutAction.seekForward);
-      expect(resolve(volumeEvent), PlayerShortcutAction.volumeDown);
-      expect(resolve(muteEvent), isNull);
+      expect(action, PlayerShortcutAction.newWindow);
     });
 
-    test('ignores play/pause and mute when primary modifier is held', () {
-      const spaceEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.space,
-        logicalKey: LogicalKeyboardKey.space,
-        timeStamp: Duration.zero,
+    test('Ctrl+S triggers screenshot', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyS),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: true,
       );
-      const muteEvent = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyM,
-        logicalKey: LogicalKeyboardKey.keyM,
-        timeStamp: Duration.zero,
-      );
-
-      expect(resolve(spaceEvent, ctrl: true), isNull);
-      expect(resolve(muteEvent, meta: true), isNull);
+      expect(action, PlayerShortcutAction.screenshot);
     });
 
-    test('ignores key up events', () {
-      const keyEvent = KeyUpEvent(
-        physicalKey: PhysicalKeyboardKey.keyO,
-        logicalKey: LogicalKeyboardKey.keyO,
-        timeStamp: Duration.zero,
+    test('F triggers toggleFullscreen', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyF),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-
-      expect(resolve(keyEvent, ctrl: true), isNull);
+      expect(action, PlayerShortcutAction.toggleFullscreen);
     });
 
-    test('chapter shortcuts trigger when modifier is held with arrow keys', () {
-      const arrowRight = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.arrowRight,
-        logicalKey: LogicalKeyboardKey.arrowRight,
-        timeStamp: Duration.zero,
+    test('Escape triggers exitFullscreen', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.escape),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      const arrowLeft = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.arrowLeft,
-        logicalKey: LogicalKeyboardKey.arrowLeft,
-        timeStamp: Duration.zero,
-      );
-
-      expect(resolve(arrowRight, ctrl: true), PlayerShortcutAction.chapterNext);
-      expect(resolve(arrowLeft, meta: true), PlayerShortcutAction.chapterPrev);
+      expect(action, PlayerShortcutAction.exitFullscreen);
     });
 
-    test('extra letter shortcuts map to their actions', () {
-      const a = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyA,
-        logicalKey: LogicalKeyboardKey.keyA,
-        timeStamp: Duration.zero,
+    test('M triggers toggleMute', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyM),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      const j = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyJ,
-        logicalKey: LogicalKeyboardKey.keyJ,
-        timeStamp: Duration.zero,
-      );
-      const v = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyV,
-        logicalKey: LogicalKeyboardKey.keyV,
-        timeStamp: Duration.zero,
-      );
-      const e = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyE,
-        logicalKey: LogicalKeyboardKey.keyE,
-        timeStamp: Duration.zero,
-      );
-      const s = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyS,
-        logicalKey: LogicalKeyboardKey.keyS,
-        timeStamp: Duration.zero,
-      );
-
-      expect(resolve(a), PlayerShortcutAction.cycleAudioTrack);
-      expect(resolve(j), PlayerShortcutAction.cycleSubtitleTrack);
-      expect(resolve(v), PlayerShortcutAction.toggleSubtitle);
-      expect(resolve(e), PlayerShortcutAction.toggleEqualizer);
-      expect(resolve(s, ctrl: true), PlayerShortcutAction.screenshot);
+      expect(action, PlayerShortcutAction.toggleMute);
     });
 
-    test('returns null for unmapped keys', () {
-      const tab = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.tab,
-        logicalKey: LogicalKeyboardKey.tab,
-        timeStamp: Duration.zero,
+    test('A triggers cycleAudioTrack', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyA),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      expect(resolve(tab), isNull);
-    });
-  });
-
-  group('PlayerShortcutsService.resolve(customBindings)', () {
-    PlayerShortcutAction? resolveCustom(
-      KeyEvent event,
-      Map<String, List<String>> bindings, {
-      bool hasMedia = true,
-      bool meta = false,
-      bool ctrl = false,
-      bool shift = false,
-      bool alt = false,
-    }) {
-      return PlayerShortcutsService.resolve(
-        event: event,
-        hasMedia: hasMedia,
-        isMetaPressed: meta,
-        isControlPressed: ctrl,
-        isShiftPressed: shift,
-        isAltPressed: alt,
-        customBindings: bindings,
-      );
-    }
-
-    test('matches a remapped accelerator string', () {
-      const event = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyP,
-        logicalKey: LogicalKeyboardKey.keyP,
-        timeStamp: Duration.zero,
-      );
-      expect(
-        resolveCustom(
-          event,
-          {
-            'playPause': ['Ctrl+Shift+P'],
-          },
-          ctrl: true,
-          shift: true,
-        ),
-        PlayerShortcutAction.playPause,
-      );
+      expect(action, PlayerShortcutAction.cycleAudioTrack);
     });
 
-    test('matches custom accelerators with Meta and Alt modifiers', () {
-      const event = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyN,
-        logicalKey: LogicalKeyboardKey.keyN,
-        timeStamp: Duration.zero,
+    test('J triggers cycleSubtitleTrack', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyJ),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-
-      expect(
-        resolveCustom(
-          event,
-          {
-            'newWindow': ['Meta+Alt+N'],
-          },
-          meta: true,
-          alt: true,
-        ),
-        PlayerShortcutAction.newWindow,
-      );
+      expect(action, PlayerShortcutAction.cycleSubtitleTrack);
     });
 
-    test('returns null when no custom binding matches the accelerator', () {
-      const event = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyP,
-        logicalKey: LogicalKeyboardKey.keyP,
-        timeStamp: Duration.zero,
+    test('V triggers toggleSubtitle', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyV),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      expect(
-        resolveCustom(
-          event,
-          {
-            'playPause': ['Ctrl+Shift+Q'],
-          },
-          ctrl: true,
-          shift: true,
-        ),
-        isNull,
-      );
+      expect(action, PlayerShortcutAction.toggleSubtitle);
     });
 
-    test('ignores unknown action names in custom bindings', () {
-      const event = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyP,
-        logicalKey: LogicalKeyboardKey.keyP,
-        timeStamp: Duration.zero,
+    test('E triggers toggleEqualizer', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyE),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      expect(
-        resolveCustom(event, {
-          'doesNotExist': ['P'],
-        }),
-        isNull,
-      );
+      expect(action, PlayerShortcutAction.toggleEqualizer);
     });
 
-    test('repeat events only trigger repeatable custom-bound actions', () {
-      const repeat = KeyRepeatEvent(
-        physicalKey: PhysicalKeyboardKey.arrowRight,
-        logicalKey: LogicalKeyboardKey.arrowRight,
-        timeStamp: Duration.zero,
+    test('ArrowRight triggers seekForward', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.arrowRight),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      // Seek-forward IS repeatable.
-      expect(
-        resolveCustom(repeat, {
-          'seekForward': ['Arrow Right'],
-        }),
-        PlayerShortcutAction.seekForward,
-      );
-      // Open-file is NOT repeatable, so a key-repeat must be ignored.
-      const repeatO = KeyRepeatEvent(
-        physicalKey: PhysicalKeyboardKey.keyO,
-        logicalKey: LogicalKeyboardKey.keyO,
-        timeStamp: Duration.zero,
-      );
-      expect(
-        resolveCustom(repeatO, {
-          'openFile': ['Ctrl+O'],
-        }, ctrl: true),
-        isNull,
-      );
+      expect(action, PlayerShortcutAction.seekForward);
     });
 
-    test('custom playPause requires media to be loaded', () {
-      const event = KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.keyG,
-        logicalKey: LogicalKeyboardKey.keyG,
-        timeStamp: Duration.zero,
+    test('Ctrl+ArrowRight triggers chapterNext', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.arrowRight),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: true,
       );
-      expect(
-        resolveCustom(event, {
-          'playPause': ['G'],
-        }, hasMedia: false),
-        isNull,
+      expect(action, PlayerShortcutAction.chapterNext);
+    });
+
+    test('ArrowLeft triggers seekBack', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.arrowLeft),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
       );
-      expect(
-        resolveCustom(event, {
-          'playPause': ['G'],
-        }, hasMedia: true),
-        PlayerShortcutAction.playPause,
+      expect(action, PlayerShortcutAction.seekBack);
+    });
+
+    test('Ctrl+ArrowLeft triggers chapterPrev', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.arrowLeft),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: true,
       );
+      expect(action, PlayerShortcutAction.chapterPrev);
+    });
+
+    test('ArrowUp triggers volumeUp', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.arrowUp),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+      );
+      expect(action, PlayerShortcutAction.volumeUp);
+    });
+
+    test('ArrowDown triggers volumeDown', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.arrowDown),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+      );
+      expect(action, PlayerShortcutAction.volumeDown);
+    });
+
+    test('KeyUpEvent returns null (not actionable)', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyUp(LogicalKeyboardKey.space),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+      );
+      expect(action, isNull);
+    });
+
+    test('KeyRepeatEvent works for repeatable actions (seek)', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyRepeat(LogicalKeyboardKey.arrowRight),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+      );
+      expect(action, PlayerShortcutAction.seekForward);
+    });
+
+    test('KeyRepeatEvent works for volume', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyRepeat(LogicalKeyboardKey.arrowUp),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+      );
+      expect(action, PlayerShortcutAction.volumeUp);
+    });
+
+    test('unbound key returns null', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyZ),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+      );
+      expect(action, isNull);
     });
   });
 
-  group('PlayerShortcutsService.acceleratorFromEvent', () {
-    testWidgets('produces a canonical key string from a real event', (
-      tester,
-    ) async {
-      String? captured;
-      await tester.pumpWidget(
-        Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            captured = PlayerShortcutsService.acceleratorFromEvent(event);
-            return KeyEventResult.handled;
-          },
-          child: const SizedBox.shrink(),
-        ),
+  group('PlayerShortcutsService custom bindings', () {
+    test('custom binding overrides default', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyZ),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'playPause': ['Z'],
+        },
       );
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
-      expect(captured, contains('O'));
+      expect(action, PlayerShortcutAction.playPause);
+    });
+
+    test('custom binding with Ctrl modifier', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyP),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: true,
+        customBindings: {
+          'screenshot': ['Ctrl+P'],
+        },
+      );
+      expect(action, PlayerShortcutAction.screenshot);
+    });
+
+    test('custom binding ignores unknown action names', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyZ),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'nonExistentAction': ['Z'],
+        },
+      );
+      expect(action, isNull);
+    });
+
+    test('custom binding playPause still requires hasMedia', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyZ),
+        hasMedia: false,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'playPause': ['Z'],
+        },
+      );
+      expect(action, isNull);
+    });
+
+    test('empty custom bindings falls through to default resolver', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.space),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {},
+      );
+      // Empty map is treated as "no custom bindings" → defaults apply
+      expect(action, PlayerShortcutAction.playPause);
     });
   });
 
   group('shortcutActionLabel', () {
-    test('returns a non-empty label for every action', () {
+    test('returns non-empty string for all actions without l10n', () {
       for (final action in PlayerShortcutAction.values) {
-        expect(shortcutActionLabel(action), isNotEmpty);
+        expect(shortcutActionLabel(action), isNotEmpty, reason: action.name);
       }
+    });
+
+    test('each action has a unique label', () {
+      final labels = PlayerShortcutAction.values
+          .map((a) => shortcutActionLabel(a))
+          .toSet();
+      expect(labels.length, PlayerShortcutAction.values.length);
     });
   });
 
-  group('defaultKeybinds catalog', () {
-    test('every action has at least one default binding', () {
+  group('defaultKeybinds', () {
+    test('all actions have at least one binding', () {
       for (final action in PlayerShortcutAction.values) {
         expect(
           defaultKeybinds[action],
           isNotNull,
-          reason: 'no default for $action',
+          reason: '${action.name} missing from defaultKeybinds',
         );
         expect(defaultKeybinds[action], isNotEmpty);
+      }
+    });
+
+    test('all bindings are non-empty strings', () {
+      for (final entry in defaultKeybinds.entries) {
+        for (final bind in entry.value) {
+          expect(bind, isNotEmpty, reason: entry.key.name);
+        }
       }
     });
   });

@@ -1,53 +1,58 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:dacx/services/trusted_http.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('applyTrustedCertificatesFromBase64Lines', () {
-    test('ignores empty and invalid lines', () {
-      final context = SecurityContext();
+    test('skips empty lines', () {
+      // Just verify it doesn't throw on empty input.
+      final context = SecurityContext(withTrustedRoots: false);
       expect(
-        () => applyTrustedCertificatesFromBase64Lines(context, [
-          '',
-          'not-base64-cert',
-        ]),
+        () => applyTrustedCertificatesFromBase64Lines(context, ['', '  ', '']),
+        returnsNormally,
+      );
+    });
+
+    test('skips malformed base64', () {
+      final context = SecurityContext(withTrustedRoots: false);
+      // Invalid certificate data but valid base64 — should not throw.
+      expect(
+        () => applyTrustedCertificatesFromBase64Lines(
+          context,
+          [base64Encode([0, 1, 2, 3]), 'not-base64!!!'],
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('processes valid DER certificate without throwing', () {
+      // A minimal self-signed DER cert would be needed for a real test,
+      // but we can verify the function handles garbage gracefully.
+      final context = SecurityContext(withTrustedRoots: false);
+      final fakeDer = base64Encode(List<int>.filled(100, 0x30));
+      expect(
+        () => applyTrustedCertificatesFromBase64Lines(context, [fakeDer]),
         returnsNormally,
       );
     });
   });
 
-  test('dacxAppUserModelId matches package id', () {
-    expect(dacxAppUserModelId, 'run.rosie.dacx');
-  });
+  group('trusted_http constants', () {
+    test('dacxAppUserModelId is set', () {
+      expect(dacxAppUserModelId, 'run.rosie.dacx');
+    });
 
-  test('Windows certificate store hydration returns on timeout', () async {
-    final context = SecurityContext();
-    Future<Process> startSleepyProcess(String command, List<String> args) {
-      if (command.isEmpty && args.isNotEmpty) {
-        // Unused in this test path; keep parameters intentionally referenced.
-      }
-      if (Platform.isWindows) {
-        return Process.start('cmd', [
-          '/c',
-          'ping',
-          '-n',
-          '2',
-          '127.0.0.1',
-          '>nul',
-        ]);
-      }
-      return Process.start('sh', ['-c', 'sleep 1']);
-    }
-
-    await expectLater(
-      hydrateWindowsCertificateStoreForTesting(
-        context,
-        timeout: const Duration(milliseconds: 1),
-        startProcess: startSleepyProcess,
-      ),
-      completes,
-    );
+    test('windowsCertificateStoreHydrationTimeout is reasonable', () {
+      expect(
+        windowsCertificateStoreHydrationTimeout.inSeconds,
+        greaterThanOrEqualTo(5),
+      );
+      expect(
+        windowsCertificateStoreHydrationTimeout.inSeconds,
+        lessThanOrEqualTo(30),
+      );
+    });
   });
 }

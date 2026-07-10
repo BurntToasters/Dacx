@@ -1,116 +1,135 @@
+import 'package:dacx/services/equalizer_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dacx/services/equalizer_service.dart';
-import 'package:dacx/services/settings_service.dart';
-
 void main() {
-  group('EqualizerService.buildAfChain', () {
-    test('returns empty string when all gains are zero', () {
-      final chain = EqualizerService.buildAfChain(
-        List<double>.filled(SettingsService.eqBandCount, 0),
-      );
-      expect(chain, isEmpty);
+  group('EqualizerService', () {
+    group('buildAfChain', () {
+      test('flat gains produce empty chain', () {
+        final chain = EqualizerService.buildAfChain([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(chain, isEmpty);
+      });
+
+      test('single non-zero gain produces one filter', () {
+        final chain = EqualizerService.buildAfChain([6, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(chain, contains('equalizer=f=31'));
+        expect(chain, contains('g=6.00'));
+        expect(chain.split(',').length, 1);
+      });
+
+      test('multiple non-zero gains produce comma-separated filters', () {
+        final chain = EqualizerService.buildAfChain([3, 0, 0, 0, 0, 0, 0, 0, 0, -4]);
+        final parts = chain.split(',');
+        expect(parts.length, 2);
+        expect(parts[0], contains('f=31'));
+        expect(parts[0], contains('g=3.00'));
+        expect(parts[1], contains('f=16000'));
+        expect(parts[1], contains('g=-4.00'));
+      });
+
+      test('gains are clamped to -12..12', () {
+        final chain = EqualizerService.buildAfChain([20, -20, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(chain, contains('g=12.00'));
+        expect(chain, contains('g=-12.00'));
+      });
+
+      test('very small gains below 0.05 are treated as zero', () {
+        final chain = EqualizerService.buildAfChain([0.04, -0.03, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(chain, isEmpty);
+      });
+
+      test('each filter uses lavfi format with width_type=o', () {
+        final chain = EqualizerService.buildAfChain([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(chain, contains('lavfi=[equalizer='));
+        expect(chain, contains('width_type=o'));
+        expect(chain, contains('width=2'));
+      });
+
+      test('empty gains list produces empty chain', () {
+        final chain = EqualizerService.buildAfChain([]);
+        expect(chain, isEmpty);
+      });
+
+      test('extra gains beyond 10 bands are ignored', () {
+        final chain = EqualizerService.buildAfChain([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        // Should only produce filters for the 10 defined frequency bands
+        final parts = chain.split(',');
+        expect(parts.length, 10);
+      });
     });
 
-    test('skips gains below the noise epsilon (|g| < 0.05)', () {
-      final gains = List<double>.filled(SettingsService.eqBandCount, 0.0);
-      gains[0] = 0.04;
-      gains[1] = -0.04;
-      gains[2] = 0.05;
-      final chain = EqualizerService.buildAfChain(gains);
-      expect(chain, isNot(contains('f=31')));
-      expect(chain, isNot(contains('f=62')));
-      expect(chain, contains('f=125'));
+    group('presetById', () {
+      test('returns matching preset', () {
+        final preset = EqualizerService.presetById('bass_boost');
+        expect(preset, isNotNull);
+        expect(preset!.id, 'bass_boost');
+        expect(preset.gains.length, 10);
+        expect(preset.gains[0], 6);
+      });
+
+      test('returns null for unknown id', () {
+        expect(EqualizerService.presetById('nonexistent'), isNull);
+      });
+
+      test('flat preset has all zeros', () {
+        final flat = EqualizerService.presetById('flat');
+        expect(flat, isNotNull);
+        expect(flat!.gains, everyElement(0));
+      });
     });
 
-    test('clamps gains to the [-12, 12] dB range', () {
-      final gains = List<double>.filled(SettingsService.eqBandCount, 0.0);
-      gains[0] = 99;
-      gains[1] = -99;
-      final chain = EqualizerService.buildAfChain(gains);
-      expect(chain, contains('g=12.00'));
-      expect(chain, contains('g=-12.00'));
+    group('isFlat', () {
+      test('all zeros is flat', () {
+        expect(EqualizerService.isFlat([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), isTrue);
+      });
+
+      test('values within epsilon of zero are flat', () {
+        expect(EqualizerService.isFlat([0.04, -0.04, 0.01, 0, 0, 0, 0, 0, 0, 0]), isTrue);
+      });
+
+      test('any value above epsilon is not flat', () {
+        expect(EqualizerService.isFlat([0, 0, 0, 0, 0.1, 0, 0, 0, 0, 0]), isFalse);
+      });
+
+      test('negative values above epsilon are not flat', () {
+        expect(EqualizerService.isFlat([0, 0, 0, -1, 0, 0, 0, 0, 0, 0]), isFalse);
+      });
+
+      test('empty list is flat', () {
+        expect(EqualizerService.isFlat([]), isTrue);
+      });
     });
 
-    test('emits one lavfi equalizer filter per active band', () {
-      final gains = List<double>.filled(SettingsService.eqBandCount, 3.0);
-      final chain = EqualizerService.buildAfChain(gains);
-      final filters = chain.split(',');
-      expect(filters, hasLength(SettingsService.eqBandCount));
-      for (final freq in SettingsService.eqBandFrequencies) {
-        expect(chain, contains('f=$freq'));
-      }
+    group('kEqPresets', () {
+      test('all presets have 10 bands', () {
+        for (final preset in kEqPresets) {
+          expect(preset.gains.length, 10, reason: '${preset.id} should have 10 bands');
+        }
+      });
+
+      test('all presets have non-empty id and label', () {
+        for (final preset in kEqPresets) {
+          expect(preset.id, isNotEmpty);
+          expect(preset.label, isNotEmpty);
+        }
+      });
+
+      test('preset ids are unique', () {
+        final ids = kEqPresets.map((p) => p.id).toSet();
+        expect(ids.length, kEqPresets.length);
+      });
     });
 
-    test('truncates extra gain entries to band count', () {
-      final gains = List<double>.filled(SettingsService.eqBandCount + 5, 1.0);
-      final chain = EqualizerService.buildAfChain(gains);
-      expect(chain.split(',').length, SettingsService.eqBandCount);
-    });
-  });
-
-  group('EqualizerService.presetById', () {
-    test('returns matching preset', () {
-      final preset = EqualizerService.presetById('rock');
-      expect(preset, isNotNull);
-      expect(preset!.label, 'Rock');
-      expect(preset.gains, hasLength(SettingsService.eqBandCount));
-    });
-
-    test('returns null for unknown id', () {
-      expect(EqualizerService.presetById('does-not-exist'), isNull);
-    });
-  });
-
-  group('EqualizerService.isFlat', () {
-    test('true when all gains are within epsilon of zero', () {
-      expect(
-        EqualizerService.isFlat(
-          List<double>.filled(SettingsService.eqBandCount, 0),
-        ),
-        isTrue,
-      );
-      expect(
-        EqualizerService.isFlat([0.04, -0.04, 0, 0, 0, 0, 0, 0, 0, 0]),
-        isTrue,
-      );
-    });
-
-    test('false when any gain is above epsilon', () {
-      expect(
-        EqualizerService.isFlat([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.06]),
-        isFalse,
-      );
-    });
-  });
-
-  group('kEqPresets catalog', () {
-    test('every preset has the expected band count', () {
-      for (final p in kEqPresets) {
-        expect(
-          p.gains,
-          hasLength(SettingsService.eqBandCount),
-          reason: '${p.id} has wrong band count',
+    group('EqState', () {
+      test('stores fields correctly', () {
+        final state = EqState(
+          enabled: true,
+          preset: 'rock',
+          gains: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         );
-      }
-    });
-
-    test('flat preset is, in fact, flat', () {
-      final flat = EqualizerService.presetById('flat')!;
-      expect(EqualizerService.isFlat(flat.gains), isTrue);
-    });
-  });
-
-  group('EqState', () {
-    test('stores fields verbatim', () {
-      const state = EqState(
-        enabled: true,
-        preset: 'rock',
-        gains: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-      );
-      expect(state.enabled, isTrue);
-      expect(state.preset, 'rock');
-      expect(state.gains, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        expect(state.enabled, isTrue);
+        expect(state.preset, 'rock');
+        expect(state.gains.length, 10);
+      });
     });
   });
 }
