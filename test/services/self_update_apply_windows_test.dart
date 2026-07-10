@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -253,6 +254,50 @@ void main() {
         expect(result.outcome, SelfUpdateOutcome.spawned);
       },
     );
+
+    test('rejects an unsigned MSI when signer pinning is configured', () async {
+      final msiBytes = utf8.encode('verified-msi');
+      final hash = _sha256Hex(msiBytes);
+      final manifestBytes = utf8.encode(
+        jsonEncode({
+          'version': '0.10.0',
+          'app': 'dacx',
+          'platform': 'windows-x64',
+          'released_at': DateTime.now().toUtc().toIso8601String(),
+          'assets': {'Dacx-Windows-x64.msi': hash},
+        }),
+      );
+      final svc = SelfUpdateService(
+        expectedWindowsSignerThumbprintOverride: 'A1B2C3',
+        downloadTo: (url, outFile, {onProgress}) async {
+          await outFile.writeAsBytes(msiBytes);
+        },
+        fetchText: (url) async {
+          if (url.contains('SHA256SUMS')) {
+            return '$hash  Dacx-Windows-x64.msi\n';
+          }
+          if (url.contains('.sig')) return base64Encode([1, 2, 3]);
+          return '';
+        },
+        fetchBytes: (url) async => manifestBytes,
+        validateWindowsManifest:
+            ({
+              required manifestBytes,
+              required signatureBytes,
+              required version,
+              required assetName,
+            }) async => const SelfUpdateResult(SelfUpdateOutcome.spawned),
+        processRun: (_, _) async =>
+            ProcessResult(0, 0, 'NotSigned|A1B2C3|unsigned', ''),
+      );
+
+      final result = await svc.applyWindowsUpdate(
+        _windowsUpdateInfo(assets: _fullWindowsAssets(msiHash: hash)),
+      );
+
+      expect(result.outcome, SelfUpdateOutcome.signatureInvalid);
+      expect(result.message, contains('unsigned'));
+    });
 
     test('returns spawnFailed when watchdog spawn fails', () async {
       final msiBytes = utf8.encode('verified-msi');

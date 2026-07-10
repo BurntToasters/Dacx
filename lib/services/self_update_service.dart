@@ -649,7 +649,11 @@ class SelfUpdateService {
       );
     }
 
-    if (expectedWindowsSignerThumbprint.isNotEmpty) {
+    final signerThumbprint = normalizeCertificateThumbprint(
+      _expectedWindowsSignerThumbprintOverride ??
+          expectedWindowsSignerThumbprint,
+    );
+    if (signerThumbprint.isNotEmpty) {
       final signature = await _validateWindowsInstallerSignature(msiPath);
       if (signature.outcome != SelfUpdateOutcome.spawned) {
         return signature;
@@ -659,16 +663,13 @@ class SelfUpdateService {
     final scriptPath = File(p.join(cacheDir.path, 'apply-update.ps1'));
     await scriptPath.writeAsString(buildWindowsWatchdogPowerShellScript());
 
-    final thumb = normalizeCertificateThumbprint(
-      expectedWindowsSignerThumbprint,
-    );
     final bootstrapPath = File(p.join(cacheDir.path, 'spawn-watchdog.ps1'));
     await bootstrapPath.writeAsString(
       buildWindowsBootstrapPowerShellScript(
         scriptPath: scriptPath.path,
         dacxPid: pid,
         msiPath: msiPath.path,
-        thumbprint: thumb,
+        thumbprint: signerThumbprint,
         sha256: actualHash,
       ),
     );

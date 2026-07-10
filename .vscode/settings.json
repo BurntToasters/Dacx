@@ -1,6 +1,5 @@
 {
   "cmake.ignoreCMakeListsMissing": true,
-  "dart.flutterSdkPath": ".fvm/versions/3.44.0",
   "cSpell.words": [
     "codesigning",
     "dylibs",

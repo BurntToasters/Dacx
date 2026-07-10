@@ -82,4 +82,57 @@ void main() {
       expect(plan.shouldRefreshUi, isFalse);
     });
   });
+
+  group('SourceLoadPostOpenPolicy.followUpFor', () {
+    test('returns noop follow-up for stale loads', () {
+      final plan = SourceLoadPostOpenPolicy.plan(
+        isLoadCurrent: false,
+        isDisposed: false,
+        mounted: true,
+        normalizedSource: PlayableSource.file('/media/movie.mp4'),
+        isAudioFile: false,
+      );
+
+      final followUp = SourceLoadPostOpenPolicy.followUpFor(plan);
+      expect(followUp, SourceLoadPostOpenFollowUp.noop);
+      expect(followUp.shouldCacheTracks, isFalse);
+      expect(followUp.shouldUpdateMediaSessionMetadata, isFalse);
+    });
+
+    test('schedules full follow-up for video files', () {
+      final plan = SourceLoadPostOpenPolicy.plan(
+        isLoadCurrent: true,
+        isDisposed: false,
+        mounted: true,
+        normalizedSource: PlayableSource.file('/media/movie.mp4'),
+        isAudioFile: false,
+      );
+
+      final followUp = SourceLoadPostOpenPolicy.followUpFor(plan);
+      expect(followUp.shouldCacheTracks, isTrue);
+      expect(followUp.shouldSyncSpectrum, isTrue);
+      expect(followUp.shouldRefreshChapters, isTrue);
+      expect(followUp.shouldApplyMultiAudioMix, isTrue);
+      expect(followUp.shouldUpdateMediaSessionMetadata, isTrue);
+      expect(followUp.seekPreviewPath, '/media/movie.mp4');
+      expect(followUp.shouldClearSeekPreview, isFalse);
+      expect(followUp.shouldApplyResume, isTrue);
+      expect(followUp.recentPersistLogEvent, 'recent_file_added');
+    });
+
+    test('clears seek preview for audio-only loads', () {
+      final plan = SourceLoadPostOpenPolicy.plan(
+        isLoadCurrent: true,
+        isDisposed: false,
+        mounted: true,
+        normalizedSource: PlayableSource.file('/media/song.mp3'),
+        isAudioFile: true,
+      );
+
+      final followUp = SourceLoadPostOpenPolicy.followUpFor(plan);
+      expect(followUp.seekPreviewPath, isNull);
+      expect(followUp.shouldClearSeekPreview, isTrue);
+      expect(followUp.shouldApplyResume, isTrue);
+    });
+  });
 }

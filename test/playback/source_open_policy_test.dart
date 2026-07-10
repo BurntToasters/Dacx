@@ -35,6 +35,18 @@ void main() {
     });
   });
 
+  group('SourceOpenPolicy.paramsFor', () {
+    test('bundles path and autoplay decision', () {
+      final params = SourceOpenPolicy.paramsFor(
+        normalizedPath: '/media/song.mp3',
+        forcePlay: false,
+        autoPlaySetting: false,
+      );
+      expect(params.path, '/media/song.mp3');
+      expect(params.play, isFalse);
+    });
+  });
+
   group('SourceOpenPolicy.shouldForcePlaySameFile', () {
     test('forces play only when requested and currently paused', () {
       expect(

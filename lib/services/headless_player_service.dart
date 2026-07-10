@@ -39,11 +39,17 @@ class HeadlessPlayerService implements IPlayerService {
   int playPauseInvocations = 0;
   final List<AudioTrack> _audioTrackCalls = [];
   final List<SubtitleTrack> _subtitleTrackCalls = [];
+  final List<({String name, String value})> _propertyCalls = [];
+  final List<PlaylistMode> _playlistModeCalls = [];
   Object? _openError;
+  Uint8List? screenshotBytes;
   Duration _openDelay = Duration.zero;
 
   @visibleForTesting
   set openError(Object? value) => _openError = value;
+
+  @visibleForTesting
+  set screenshotResult(Uint8List? value) => screenshotBytes = value;
 
   @visibleForTesting
   set openDelay(Duration value) => _openDelay = value;
@@ -149,7 +155,14 @@ class HeadlessPlayerService implements IPlayerService {
   Future<void> setRate(double rate) async {}
 
   @override
-  Future<void> setPlaylistMode(PlaylistMode mode) async {}
+  Future<void> setPlaylistMode(PlaylistMode mode) async {
+    if (_disposed) return;
+    _playlistModeCalls.add(mode);
+  }
+
+  @visibleForTesting
+  List<PlaylistMode> get playlistModeCalls =>
+      List.unmodifiable(_playlistModeCalls);
 
   @override
   Future<void> setAudioTrack(AudioTrack track) async {
@@ -188,12 +201,18 @@ class HeadlessPlayerService implements IPlayerService {
       List.unmodifiable(_subtitleTrackCalls);
 
   @override
-  Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;
+  Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async =>
+      screenshotBytes;
+
+  @visibleForTesting
+  List<({String name, String value})> get propertyCalls =>
+      List.unmodifiable(_propertyCalls);
 
   @override
   Future<bool> setProperty(String name, String value) async {
     if (_disposed) return false;
     _properties[name] = value;
+    _propertyCalls.add((name: name, value: value));
     return true;
   }
 
@@ -263,6 +282,12 @@ class HeadlessPlayerService implements IPlayerService {
   void emitVideoWidth(int? width) {
     if (_disposed) return;
     _videoWidthCtrl.add(width);
+  }
+
+  @visibleForTesting
+  void emitCompleted(bool completed) {
+    if (_disposed) return;
+    _completedCtrl.add(completed);
   }
 
   @override

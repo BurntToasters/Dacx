@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:dacx/screens/player_screen.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/open_file_bridge.dart';
 import 'package:dacx/services/headless_player_service.dart';
+import 'package:dacx/services/media_session_service.dart';
 import 'package:dacx/services/player_service.dart';
 import 'package:dacx/services/settings_service.dart';
 import 'package:dacx/services/update_service.dart';
@@ -20,6 +23,10 @@ abstract final class PlayerScreenHarness {
   static const windowManagerChannel = MethodChannel('window_manager');
   static bool _fullscreen = false;
   static final List<bool> fullscreenCalls = <bool>[];
+  static Size _windowSize = const Size(1200, 800);
+  static Offset _windowPosition = Offset.zero;
+  static final List<MethodCall> windowManagerCalls = <MethodCall>[];
+  static final List<MethodCall> windowMethodsCalls = <MethodCall>[];
 
   static const mediaSessionChannel = MethodChannel(
     'run.rosie.dacx/media_session',
@@ -30,6 +37,13 @@ abstract final class PlayerScreenHarness {
   static const openFileMethodsChannel = MethodChannel(
     OpenFileBridge.methodChannelName,
   );
+  static const filePickerChannel = MethodChannel(
+    'miguelruivo.flutter.plugins.filepicker',
+  );
+  static const bookmarkChannel = MethodChannel('run.rosie.dacx/bookmarks');
+
+  /// When non-null, [FilePicker.pickFile] returns the first path. Empty list = cancel.
+  static List<String>? filePickerPaths;
 
   static Future<
     ({
@@ -54,10 +68,16 @@ abstract final class PlayerScreenHarness {
   static void installChannelMocks() {
     _fullscreen = false;
     fullscreenCalls.clear();
+    _windowSize = const Size(1200, 800);
+    _windowPosition = Offset.zero;
+    windowManagerCalls.clear();
+    windowMethodsCalls.clear();
+    filePickerPaths = null;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
     messenger.setMockMethodCallHandler(windowManagerChannel, (call) async {
+      windowManagerCalls.add(call);
       switch (call.method) {
         case 'isMaximized':
           return false;
@@ -72,6 +92,28 @@ abstract final class PlayerScreenHarness {
           _fullscreen = enabled;
           fullscreenCalls.add(enabled);
           return null;
+        case 'getBounds':
+          return {
+            'x': _windowPosition.dx,
+            'y': _windowPosition.dy,
+            'width': _windowSize.width,
+            'height': _windowSize.height,
+          };
+        case 'setBounds':
+          final args = call.arguments as Map<Object?, Object?>;
+          final width = args['width'];
+          final height = args['height'];
+          final x = args['x'];
+          final y = args['y'];
+          if (width is num && height is num) {
+            _windowSize = Size(width.toDouble(), height.toDouble());
+          }
+          if (x is num && y is num) {
+            _windowPosition = Offset(x.toDouble(), y.toDouble());
+          }
+          return null;
+        case 'setAlwaysOnTop':
+          return null;
         case 'getTitleBarHeight':
           return 0;
         case 'waitUntilReadyToShow':
@@ -79,7 +121,6 @@ abstract final class PlayerScreenHarness {
         case 'setPreventClose':
         case 'setAsFrameless':
         case 'setBackgroundColor':
-        case 'setAlwaysOnTop':
         case 'show':
         case 'focus':
         case 'startDragging':
@@ -97,14 +138,46 @@ abstract final class PlayerScreenHarness {
       mediaSessionChannel,
       (call) async => null,
     );
-    messenger.setMockMethodCallHandler(
-      windowMethodsChannel,
-      (call) async => true,
-    );
+    messenger.setMockMethodCallHandler(windowMethodsChannel, (call) async {
+      windowMethodsCalls.add(call);
+      return true;
+    });
     messenger.setMockMethodCallHandler(openFileMethodsChannel, (call) async {
       if (call.method == 'getPendingFiles') return <dynamic>[];
       return null;
     });
+    messenger.setMockMethodCallHandler(filePickerChannel, (call) async {
+      switch (call.method) {
+        case 'any':
+        case 'audio':
+        case 'image':
+        case 'video':
+        case 'media':
+        case 'custom':
+          final paths = filePickerPaths;
+          if (paths == null || paths.isEmpty) return null;
+          return paths
+              .map(
+                (path) => {
+                  'path': path,
+                  'name': path.split('/').last,
+                  'size': 0,
+                  'bytes': null,
+                },
+              )
+              .toList(growable: false);
+        case 'dir':
+        case 'save':
+          return null;
+        case 'pickFiles':
+          final paths = filePickerPaths;
+          if (paths == null || paths.isEmpty) return null;
+          return paths;
+        default:
+          return null;
+      }
+    });
+    messenger.setMockMethodCallHandler(bookmarkChannel, (call) async => null);
   }
 
   static void uninstallChannelMocks() {
@@ -114,6 +187,8 @@ abstract final class PlayerScreenHarness {
     messenger.setMockMethodCallHandler(mediaSessionChannel, null);
     messenger.setMockMethodCallHandler(windowMethodsChannel, null);
     messenger.setMockMethodCallHandler(openFileMethodsChannel, null);
+    messenger.setMockMethodCallHandler(filePickerChannel, null);
+    messenger.setMockMethodCallHandler(bookmarkChannel, null);
   }
 
   static Widget wrap({
@@ -125,6 +200,11 @@ abstract final class PlayerScreenHarness {
     PlayableSource? initialLoadedSource,
     List<PlayableSource>? initialPlaylistSources,
     List<ChapterInfo>? initialChapters,
+    List<String>? initialDropPaths,
+    PlayableSource? initialPendingLoad,
+    ValueNotifier<String?>? osdMessageProbe,
+    Completer<void>? screenshotOperationForTesting,
+    StreamController<MediaSessionCommand>? mediaSessionCommandsForTesting,
   }) {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey);
     return MaterialApp(
@@ -146,6 +226,11 @@ abstract final class PlayerScreenHarness {
         initialLoadedSource: initialLoadedSource,
         initialPlaylistSources: initialPlaylistSources,
         initialChapters: initialChapters,
+        initialDropPaths: initialDropPaths,
+        initialPendingLoad: initialPendingLoad,
+        osdMessageProbe: osdMessageProbe,
+        screenshotOperationForTesting: screenshotOperationForTesting,
+        mediaSessionCommandsForTesting: mediaSessionCommandsForTesting,
       ),
     );
   }
