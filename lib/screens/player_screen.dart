@@ -23,6 +23,7 @@ import '../services/media_session_service.dart';
 import '../services/playlist_service.dart';
 import '../services/bookmark_service.dart';
 import '../services/seek_preview_service.dart';
+import '../services/audio_spectrum_service.dart';
 import '../services/self_update_service.dart';
 import '../models/playable_source.dart';
 import '../l10n/app_localizations.dart';
@@ -94,6 +95,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final PlayerService _playerService;
   late final VideoController _videoController;
   late final SeekPreviewService _seekPreviewService;
+  late final AudioSpectrumService _audioSpectrum;
   late final PlaybackController _playback;
   final _subscriptions = SubscriptionBag();
   UpdateService get _updateService => widget.updateService;
@@ -108,6 +110,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasAlbumArtTrack = false;
   String? _albumArtTrackId;
   bool _mixActive = false;
+  String? _lastAppliedAfChain;
   final _mixLoadState = PlaybackMixLoadState();
   bool _fileOpenInProgress = false;
   bool _mixReloadInFlight = false;
@@ -171,6 +174,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _playback = PlaybackController();
     _playerService = PlayerService();
     _seekPreviewService = SeekPreviewService();
+    _audioSpectrum = AudioSpectrumService(playerService: _playerService);
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isDisposed) return;
@@ -273,6 +277,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playerService.playingStream.listen((playing) {
         if (!mounted || _isDisposed) return;
         setState(() => _isPlaying = playing);
+        _syncSpectrumService(playing);
         if (_settings.mediaSessionEnabled) {
           _maybeUpdateMediaSessionPosition(_position);
         }
@@ -380,9 +385,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (source != null && source.isFile) {
           _settings.saveResumePosition(source.value, null);
         }
-        // Try to advance the playlist (loop-mode `none` only).
-        if (_settings.loopMode == LoopMode.none) {
-          unawaited(_advancePlaylist(1, fromCompletion: true));
+        // Try to advance the playlist for queue-driven loop modes.
+        if (_settings.loopMode != LoopMode.single) {
+          unawaited(_advancePlaylist(1));
         }
       }),
       _playerService.trackStream.listen((track) {
@@ -436,6 +441,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     unawaited(_mediaSession.dispose());
     _playlist.dispose();
     unawaited(_seekPreviewService.dispose());
+    _audioSpectrum.dispose();
     unawaited(_playerService.dispose());
     super.dispose();
   }
@@ -488,7 +494,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _applySpeed(_settings.speed);
     _applyLoopMode(_settings.loopMode);
-    unawaited(_applyEqualizer());
+    _syncSpectrumService(_isPlaying);
     unawaited(_applyMultiAudioMix());
     unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
     unawaited(
@@ -733,7 +739,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final plMode = switch (mode) {
       LoopMode.none => PlaylistMode.none,
       LoopMode.single => PlaylistMode.single,
-      LoopMode.loop => PlaylistMode.loop,
+      // Queue looping is handled in _advancePlaylist via wrapped indexing.
+      LoopMode.loop => PlaylistMode.none,
     };
     unawaited(
       _playerService.setPlaylistMode(plMode).catchError((Object e) {
@@ -1136,23 +1143,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (normalizedSource.isFile && !PlayerPathUtils.isSupportedExtension(ext)) {
       _log(
-        'file_load_unsupported_extension',
+        'file_load_unrecognized_extension',
         detailsBuilder: () => {'extension': ext, 'path': normalizedValue},
         severity: DebugSeverity.warn,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUnsupportedFileType,
-            ),
-          ),
-        );
-      }
-      return;
     }
     final gen = _playback.beginLoad();
     if (!mounted || _isDisposed) return;
+    _lastAppliedAfChain = null;
     // Persist resume position for the previous file before switching.
     _persistResumePosition();
     _resumePathInProgress = null;
@@ -1169,6 +1167,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _position = Duration.zero;
       _duration = Duration.zero;
     });
+    _audioSpectrum.resetDynamics();
     _log(
       'media_type_initial_state',
       detailsBuilder: () => {
@@ -1270,7 +1269,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Apply post-load settings: equalizer, multi-audio mix, refresh chapters,
     // and publish to media session.
     _resumePathInProgress = normalizedSource.isFile ? normalizedValue : null;
-    unawaited(_applyEqualizer());
+    _syncSpectrumService(_isPlaying);
     unawaited(_refreshChapters());
     unawaited(_applyMultiAudioMix());
     if (normalizedSource.isFile) {
@@ -1289,6 +1288,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     bool refreshChapters = false,
   }) {
     _currentTracks = tracks;
+    final inferredAudioOnly = _inferAudioOnlyFromTracks(tracks);
+    if (inferredAudioOnly != null && inferredAudioOnly != _isAudioFile) {
+      setState(() {
+        _isAudioFile = inferredAudioOnly;
+      });
+    }
     if (refreshChapters) {
       unawaited(_refreshChaptersIfNeeded());
     }
@@ -1302,6 +1307,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
         !_fileOpenInProgress) {
       unawaited(_applyMultiAudioMix());
     }
+  }
+
+  bool? _inferAudioOnlyFromTracks(Tracks tracks) {
+    final audioTrackCount = tracks.audio
+        .where((track) => track.id != 'auto' && track.id != 'no')
+        .length;
+    if (audioTrackCount == 0) return null;
+    final videoTracks = tracks.video.where(
+      (track) => track.id != 'auto' && track.id != 'no',
+    );
+    final hasNonArtVideo = videoTracks.any(
+      (track) => track.albumart != true && track.image != true,
+    );
+    return !hasNonArtVideo;
   }
 
   void _onDragDone(DropDoneDetails details) {
@@ -1612,6 +1631,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       }),
     );
+    _audioSpectrum.resetDynamics();
     _log(
       'seek_relative',
       detailsBuilder: () => {'target_ms': target.inMilliseconds},
@@ -1833,7 +1853,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             isPlaying: _isPlaying,
                                             position: _position,
                                             duration: _duration,
-                                            sourceKey: _currentFile,
+                                            spectrumStream:
+                                                _audioSpectrum.spectrumStream,
                                           ),
                                         ),
                                       if (_compactMode)
@@ -2141,7 +2162,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   unawaited(_loadSource(source));
                                 },
                                 onRemove: () {
-                                  _playlist.removeAt(index);
+                                  unawaited(_removeQueueItem(index));
                                 },
                               );
                             },
@@ -2657,12 +2678,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Equalizer ─────────────────────────────────────────────
 
   Future<void> _applyEqualizer() async {
-    if (!_settings.eqEnabled) {
-      await _playerService.setAudioFilter('');
-      return;
+    await _applyMergedAudioFilters();
+  }
+
+  /// Builds and applies the combined af chain: EQ + spectrum analysis.
+  Future<void> _applyMergedAudioFilters() async {
+    final segments = <String>[];
+
+    // EQ segment
+    if (_settings.eqEnabled) {
+      final eqChain = EqualizerService.buildAfChain(_settings.eqBands);
+      if (eqChain.isNotEmpty) segments.add(eqChain);
     }
-    final chain = EqualizerService.buildAfChain(_settings.eqBands);
-    await _playerService.setAudioFilter(chain);
+
+    // Spectrum analysis segment (only when visualizer is active)
+    if (_settings.audioWaveformEnabled &&
+        _isAudioFile &&
+        _audioSpectrum.isActive) {
+      segments.add(AudioSpectrumService.afSegment);
+    }
+
+    final merged = segments.join(',');
+    if (_lastAppliedAfChain == merged) return;
+    final ok = await _playerService.setAudioFilter(
+      merged.isEmpty ? '' : merged,
+    );
+    if (ok) {
+      _lastAppliedAfChain = merged;
+    } else {
+      _log(
+        'audio_filter_apply_failed',
+        detailsBuilder: () => {'chain': merged},
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
+  /// Start or stop spectrum polling based on playing state + settings.
+  /// Always applies the merged af chain once at the end.
+  void _syncSpectrumService(bool playing) {
+    final shouldRun = playing && _isAudioFile && _settings.audioWaveformEnabled;
+    if (shouldRun && !_audioSpectrum.isActive) {
+      unawaited(_audioSpectrum.start().then((_) => _applyMergedAudioFilters()));
+    } else if (!shouldRun && _audioSpectrum.isActive) {
+      unawaited(_audioSpectrum.stop().then((_) => _applyMergedAudioFilters()));
+    } else {
+      // No spectrum state change but still apply (covers EQ + source changes).
+      unawaited(_applyMergedAudioFilters());
+    }
   }
 
   void _toggleEqualizer() {
@@ -2798,12 +2861,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onMediaSessionCommand(MediaSessionCommand cmd) {
     switch (cmd.action) {
       case 'play':
+        unawaited(_playerService.play());
+        break;
       case 'pause':
+        unawaited(_playerService.pause());
+        break;
       case 'toggle':
         unawaited(_playerService.playPause());
         break;
       case 'stop':
-        unawaited(_playerService.stop());
+        unawaited(_stopPlaybackAndResetUi());
         break;
       case 'next':
         unawaited(_advancePlaylist(1));
@@ -2813,6 +2880,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         break;
       case 'seek':
         if (cmd.positionMs != null) {
+          _audioSpectrum.resetDynamics();
           unawaited(
             _playerService.seek(Duration(milliseconds: cmd.positionMs!)),
           );
@@ -2821,6 +2889,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'seek_relative':
         if (cmd.positionMs != null) {
           final target = _position + Duration(milliseconds: cmd.positionMs!);
+          _audioSpectrum.resetDynamics();
           unawaited(
             _playerService.seek(
               Duration(
@@ -2851,6 +2920,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() {
           _volume = pct;
         });
+        _settings.volume = pct;
         unawaited(_playerService.setVolume(pct).catchError((_) {}));
         break;
       case 'rate':
@@ -2858,6 +2928,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _settings.speed = r;
         break;
     }
+  }
+
+  Future<void> _stopPlaybackAndResetUi() async {
+    await _playerService.stop();
+    if (!mounted || _isDisposed) return;
+    setState(() {
+      _position = Duration.zero;
+      _duration = Duration.zero;
+      _isPlaying = false;
+    });
+    _audioSpectrum.resetDynamics();
+    _syncSpectrumService(false);
   }
 
   // ── Resume position ─────────────────────────────────
@@ -2919,12 +3001,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Playlist ────────────────────────────────────────
 
-  Future<void> _advancePlaylist(
-    int delta, {
-    bool fromCompletion = false,
-  }) async {
+  Future<void> _advancePlaylist(int delta) async {
     if (_playlist.isEmpty) return;
-    final next = _playlist.advance(delta);
+    final wrap = _settings.loopMode == LoopMode.loop;
+    final next = _playlist.advance(delta, wrap: wrap);
     if (next == null) return;
     final l10n = AppLocalizations.of(context);
     _showOsdMessage(delta > 0 ? l10n.osdNextInQueue : l10n.osdPreviousInQueue);
@@ -2979,8 +3059,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _removeMissingQueueItems() async {
+    final before = _playlist.current;
     final removed = await _playlist.removeMissingFiles();
     if (!mounted) return;
+    if (_playlist.isEmpty) {
+      unawaited(_stopPlaybackAndResetUi());
+    } else if (before != null && _playlist.current != before) {
+      final next = _playlist.current;
+      if (next != null) {
+        unawaited(_loadSource(next));
+      }
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -2988,6 +3077,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _removeQueueItem(int index) async {
+    final wasCurrent = index == _playlist.index;
+    _playlist.removeAt(index);
+    if (!wasCurrent) return;
+    final next = _playlist.current;
+    if (next == null) {
+      await _stopPlaybackAndResetUi();
+      return;
+    }
+    await _loadSource(next);
   }
 
   // ── Compact / mini-player mode ────────────────────────────

@@ -314,6 +314,9 @@ class UpdateService {
     ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
+      if (response.statusCode == 403 || response.statusCode == 429) {
+        _lastCheckRateLimited = true;
+      }
       _log(
         'check_http_non_200',
         severity: DebugSeverity.warn,

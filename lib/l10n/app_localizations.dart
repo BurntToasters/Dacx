@@ -235,7 +235,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAudioWaveformSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show a bass→treble spectrum above the playhead (simulated; not real FFT yet)'**
+  /// **'Show audio-reactive bars above the playhead'**
   String get settingsAudioWaveformSubtitle;
 
   /// No description provided for @settingsAllowMultipleWindowsSubtitle.

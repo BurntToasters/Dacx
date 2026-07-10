@@ -63,6 +63,7 @@ class SeekPreviewService {
     }
     if (_loadedPath == normalized && _player != null) return;
     _sourceGeneration++;
+    final generation = _sourceGeneration;
     final pendingCompleter = _pendingCompleter;
     if (pendingCompleter != null && !pendingCompleter.isCompleted) {
       pendingCompleter.complete(null);
@@ -79,6 +80,7 @@ class SeekPreviewService {
     if (p == null) return;
     try {
       await p.open(Media(normalized), play: false);
+      if (_disposed || generation != _sourceGeneration) return;
       try {
         await p.setVolume(0);
       } catch (e) {
@@ -88,6 +90,7 @@ class SeekPreviewService {
       }
       _loadedPath = normalized;
     } catch (e) {
+      if (_disposed || generation != _sourceGeneration) return;
       if (kDebugMode) {
         debugPrint('Dacx: seek-preview open failed: $e');
       }

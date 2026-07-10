@@ -37,8 +37,8 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 - **Misc:** General fixes.
 
 ## Changes in `v0.10.0-beta.1:`
-* **Audio Visualizer:** Added a new audio visualizer that shows the waveforms of audio files! (GPU Accelerated)
-* **Window Transparency/Blurring:** Started more work on the neglated experiemental window customization settings for blurring and transperency.
+* **Audio Visualizer:** Added a new audio-reactive bar visualizer for audio playback.
+* **Window Transparency/Blurring:** Started more work on the neglected experimental window customization settings for blurring and transparency.
 * **Backend:** Updated base flutter version to `v3.44.5`.
 
 <details>
