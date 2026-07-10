@@ -35,18 +35,32 @@ class _OsdOverlayState extends State<OsdOverlay> {
   bool _showTransient = false;
 
   @override
+  void initState() {
+    super.initState();
+    _armTransient(widget.transientMessage, scheduleState: false);
+  }
+
+  @override
   void didUpdateWidget(covariant OsdOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.transientMessage != _lastTransient &&
-        widget.transientMessage != null &&
-        widget.transientMessage!.isNotEmpty) {
-      _lastTransient = widget.transientMessage;
-      setState(() => _showTransient = true);
-      _hideTimer?.cancel();
-      _hideTimer = Timer(widget.autoHide, () {
-        if (mounted) setState(() => _showTransient = false);
-      });
+    _armTransient(widget.transientMessage);
+  }
+
+  void _armTransient(String? message, {bool scheduleState = true}) {
+    if (message == null || message.isEmpty || message == _lastTransient) {
+      return;
     }
+    _lastTransient = message;
+    void apply() => _showTransient = true;
+    if (scheduleState) {
+      setState(apply);
+    } else {
+      apply();
+    }
+    _hideTimer?.cancel();
+    _hideTimer = Timer(widget.autoHide, () {
+      if (mounted) setState(() => _showTransient = false);
+    });
   }
 
   @override

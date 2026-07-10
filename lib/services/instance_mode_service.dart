@@ -7,13 +7,23 @@ import 'package:path/path.dart' as p;
 class InstanceModeService {
   static const String _flagFileName = 'allow_multi_instance';
   static const String newInstanceFlag = '--new-instance';
+  static const windowMethodChannelName = 'run.rosie.dacx/window/methods';
   static const MethodChannel _windowMethodChannel = MethodChannel(
-    'run.rosie.dacx/window/methods',
+    windowMethodChannelName,
   );
 
   static String? _cachedFlagDir;
+  static String? _flagDirOverride;
+
+  @visibleForTesting
+  static void setFlagDirForTesting(String? dir) {
+    _flagDirOverride = dir;
+    _cachedFlagDir = null;
+  }
 
   static String _flagDir() {
+    final override = _flagDirOverride;
+    if (override != null) return override;
     final cached = _cachedFlagDir;
     if (cached != null) return cached;
     final env = Platform.environment;

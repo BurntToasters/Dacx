@@ -17,4 +17,13 @@ void main() {
     expect(controller.beginLoad(), 2);
     controller.dispose();
   });
+
+  test('new beginLoad invalidates prior generation', () {
+    final controller = PlaybackController();
+    final first = controller.beginLoad();
+    expect(controller.isLoadCurrent(first), isTrue);
+    controller.beginLoad();
+    expect(controller.isLoadCurrent(first), isFalse);
+    controller.dispose();
+  });
 }

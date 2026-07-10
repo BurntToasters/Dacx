@@ -213,7 +213,7 @@ void main() {
 
     group('EqState', () {
       test('stores fields correctly', () {
-        final state = EqState(
+        const state = EqState(
           enabled: true,
           preset: 'rock',
           gains: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],

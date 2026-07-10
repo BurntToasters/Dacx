@@ -9,13 +9,16 @@ Thanks for helping improve Dacx.
 3. `fvm flutter pub get`
 4. Run locally: `npm run dev` (or `dev:win` / `dev:mac` / `dev:linux`)
 
+Run every project Flutter or Dart command through FVM: `fvm flutter ...` or
+`fvm dart ...`. Never call the system `flutter` or `dart` directly.
+
 ## Quality gates (run before opening a PR)
 
 ```bash
 npm run test:all
 ```
 
-This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage (55% floor), and a build smoke. CI on `main`, `beta`, and `next-*` runs a subset plus multi-OS build smoke.
+This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage (55% floor), and a build smoke. CI runs a subset plus multi-OS build smoke on `main` and `beta` only.
 
 Before packaging a release, `release:prepare` runs `npm run licenses` to refresh
 `build/THIRD_PARTY_NOTICES.txt` (copied into installers by `package-release.js`).

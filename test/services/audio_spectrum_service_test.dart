@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:dacx/services/audio_spectrum_service.dart';
 import 'package:dacx/services/player_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Minimal fake that satisfies the AudioSpectrumService contract without
 /// requiring native libmpv. Only [getProperty] and [isDisposed] are used
 /// during polling.
-class _FakePlayerService implements PlayerService {
+class _FakePlayerService implements IPlayerService {
   final Map<String, String?> properties = {};
   bool _disposed = false;
 

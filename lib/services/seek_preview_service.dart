@@ -5,13 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../playback/seek_preview_utils.dart';
+
 /// Generates thumbnail previews for the seek bar by running a hidden,
 /// muted secondary [Player] that we seek to the requested timestamp and
 /// screenshot on demand.
 class SeekPreviewService {
   SeekPreviewService();
 
-  static const int _quantumMs = 1000;
+  static const int _quantumMs = SeekPreviewUtils.defaultQuantumMs;
   static const int _cacheLimit = 192;
   static const Duration _debounce = Duration(milliseconds: 25);
   static const Duration _frameSettleDelay = Duration(milliseconds: 25);
@@ -27,7 +29,9 @@ class SeekPreviewService {
   bool _tuned = false;
   int _sourceGeneration = 0;
 
-  final _LruCache<int, Uint8List> _cache = _LruCache(_cacheLimit);
+  final SeekPreviewLruCache<int, Uint8List> _cache = SeekPreviewLruCache(
+    _cacheLimit,
+  );
 
   Timer? _debounceTimer;
   Completer<Uint8List?>? _pendingCompleter;
@@ -170,7 +174,8 @@ class SeekPreviewService {
     return completer.future;
   }
 
-  int _quantize(int ms) => (ms ~/ _quantumMs) * _quantumMs;
+  int _quantize(int ms) =>
+      SeekPreviewUtils.quantizeMs(ms, quantumMs: _quantumMs);
 
   Future<void> _runPending() async {
     if (_busy || _disposed) return;
@@ -309,26 +314,4 @@ class SeekPreviewService {
     _disposed = true;
     await _teardown();
   }
-}
-
-class _LruCache<K, V> {
-  _LruCache(this.capacity);
-  final int capacity;
-  final LinkedHashMap<K, V> _map = LinkedHashMap<K, V>();
-
-  V? get(K key) {
-    final v = _map.remove(key);
-    if (v != null) _map[key] = v;
-    return v;
-  }
-
-  void put(K key, V value) {
-    _map.remove(key);
-    _map[key] = value;
-    while (_map.length > capacity) {
-      _map.remove(_map.keys.first);
-    }
-  }
-
-  void clear() => _map.clear();
 }

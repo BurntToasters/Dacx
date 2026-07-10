@@ -162,7 +162,7 @@ void main() {
         category: DebugLogCategory.playback,
         severity: DebugSeverity.info,
         event: 'open',
-        details: {'file_path': '/home/user/secret/music.mp3'},
+        details: const {'file_path': '/home/user/secret/music.mp3'},
       );
       final text = DebugLogService.formatEntry(entry);
       expect(text, contains('<path:music.mp3>'));
@@ -175,7 +175,7 @@ void main() {
         category: DebugLogCategory.system,
         severity: DebugSeverity.info,
         event: 'auth',
-        details: {'auth_token': 'abc123secret'},
+        details: const {'auth_token': 'abc123secret'},
       );
       final text = DebugLogService.formatEntry(entry);
       expect(text, contains('<redacted>'));
@@ -188,7 +188,7 @@ void main() {
         category: DebugLogCategory.system,
         severity: DebugSeverity.info,
         event: 'test',
-        details: {'file_path': '/home/user/music.mp3'},
+        details: const {'file_path': '/home/user/music.mp3'},
       );
       final text = DebugLogService.formatEntry(entry, redactSensitive: false);
       expect(text, contains('/home/user/music.mp3'));

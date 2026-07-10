@@ -7,21 +7,23 @@
 
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
-| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-x86_64.AppImage) |
-| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-arm64.deb)--> |
-| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-aarch64.rpm)--> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-aarch64.flatpak)--> |
+| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.AppImage) |
+| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-arm64.deb)--> |
+| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-aarch64.rpm)--> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.flatpak) |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-aarch64.flatpak)--> |
 
 > [!IMPORTANT]
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 
-## Changes in `v0.10.0:`
+## Changes in `v0.10.1-beta.1:`
 * **Audio Visualizer:** Added a new audio-reactive bar visualizer for audio playback.
 * **Window Transparency/Blurring:** More work has been done on this experimental feature! 
-  - Window Transperency/Blur is closer to being moved out of the experimental features options and becomming stable!
+  - Window Transparency/Blur is closer to being moved out of the experimental features options and becoming stable!
 * **Backend:** Updated base flutter version to `v3.44.5`.
+* **Testing:** 839 VM tests in `npm run test:all`; headless `PlayerScreen` widget harness exercises transport, queue, settings, drag-drop load paths (including mixed valid/invalid batches), load-validation feedback, keyboard shortcuts (play/pause, seek, mute, volume, fullscreen, chapter prev/next with bounds, playlist wrap/end-stop, loop-single completion and manual advance bounds, media session loop/shuffle/volume/rate/next in single mode, equalizer, audio/subtitle tracks, screenshot save/fail with OSD probe and overlay, compact mode, escape, open file, reopen last/url, new window, shortcuts dialog), load-failure feedback, and playback UI without libmpv; `OsdOverlay` shows transient messages on first mount; pre/post-open load orchestration, screenshot path, drop-path batching, playlist advance, and playback policies extracted for unit coverage.
+* **Stability:** `IPlayerService` injection and load-generation guards reduce stale UI after rapid queue changes; self-update redirect allowlist and Windows manifest validation covered by direct tests.
 
 <details>
 <summary>Full changelog</summary>
@@ -35,8 +37,8 @@ The UI has been revamped to provide a way better user experience and UI moving f
   * **Misc:** Color scheme improvements, animation updates, general cleanup.
 
 * **NEW - Linux AppImage and Flatpak:** Added AppImage and Flatpak support!
-  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
-  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
+  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
+  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
 - **NEW - Localization completeness:** Nearly all user-facing strings are now localized via `flutter gen-l10n`. Covered: transport control tooltips; folder + URL button and dialog labels; media info metadata labels; folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI; accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button); keyboard shortcut action names; equalizer preset labels; chapter and track fallback labels. Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
 - **Testing:** 352+ tests passing. Code verified clean with zero lint issues.
 - **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.
@@ -75,7 +77,7 @@ The UI has been revamped to provide a way better user experience and UI moving f
 ## Changes in `v0.7.0:`
 *`v0.7.0` is a quality and stability-focused release branch of DACX.*
 * **Window Behavior:** Changed default opening behavior of another file is DACX is already open.
-    * On all platforms, if a user opens a audio/video file with DACX via the `Open With` menu on their OS or sets DACX as a default player and double-clicks the file, DACX will now stop the current playing file and start playing the new one. This can be changed in settings.
+    * On all platforms, if a user opens a audio/video file with DACX via the `Open With` menu on their OS or sets DACX as a default player and double-clicks the file, DACX will now stop the current playing file and start playing the new one.
 * **NEW - Window shortcut:** Added the `CTRL`/`CMD`+N which spawns a new DACX window.
 * **Settings:** Migrated settings to a new schema.
 * **NEW - Localization:** Dacx has moved *most* of its hard-coded English languages to `l10n`, making it easier for contributors in the future to add localization support for other languages.

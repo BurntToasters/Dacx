@@ -14,12 +14,12 @@ import 'player_service.dart';
 /// into a pseudo-spectrum using frequency weighting and smoothing.
 class AudioSpectrumService {
   AudioSpectrumService({
-    required PlayerService playerService,
+    required IPlayerService playerService,
     this.bandCount = 32,
     this.pollInterval = const Duration(milliseconds: 50),
   }) : _playerService = playerService;
 
-  final PlayerService _playerService;
+  final IPlayerService _playerService;
   final int bandCount;
   final Duration pollInterval;
 

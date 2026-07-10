@@ -105,7 +105,7 @@ console.error(
   '  npm run check:mac:toolchain\n' +
   '  xcrun --find xcodebuild\n' +
   '  xcodebuild -version\n' +
-  '  flutter doctor -v\n'
+  '  fvm flutter doctor -v\n'
 );
 
 process.exit(1);

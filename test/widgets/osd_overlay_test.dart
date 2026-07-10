@@ -71,6 +71,33 @@ void main() {
       expect(opacity.opacity, 0.0);
     });
 
+    testWidgets('shows transient message on initial mount', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          const OsdOverlay(
+            title: 'Track',
+            position: Duration.zero,
+            duration: const Duration(minutes: 1),
+            visible: true,
+            transientMessage: 'Screenshot saved',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final visibleOpacity = tester
+          .widget<AnimatedOpacity>(
+            find
+                .ancestor(
+                  of: find.text('Screenshot saved'),
+                  matching: find.byType(AnimatedOpacity),
+                )
+                .first,
+          )
+          .opacity;
+      expect(visibleOpacity, 1.0);
+    });
+
     testWidgets('shows transient message and auto-hides it', (tester) async {
       const autoHide = Duration(milliseconds: 200);
 

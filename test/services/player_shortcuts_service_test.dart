@@ -89,6 +89,39 @@ void main() {
       expect(action, PlayerShortcutAction.newWindow);
     });
 
+    test('Shift+N triggers playlistNext', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyN),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        isShiftPressed: true,
+      );
+      expect(action, PlayerShortcutAction.playlistNext);
+    });
+
+    test('Shift+P triggers playlistPrev', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyP),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        isShiftPressed: true,
+      );
+      expect(action, PlayerShortcutAction.playlistPrev);
+    });
+
+    test('Ctrl+Shift+M triggers toggleCompactMode', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyM),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: true,
+        isShiftPressed: true,
+      );
+      expect(action, PlayerShortcutAction.toggleCompactMode);
+    });
+
     test('Ctrl+S triggers screenshot', () {
       final action = PlayerShortcutsService.resolve(
         event: _keyDown(LogicalKeyboardKey.keyS),
@@ -345,7 +378,7 @@ void main() {
 
     test('each action has a unique label', () {
       final labels = PlayerShortcutAction.values
-          .map((a) => shortcutActionLabel(a))
+          .map(shortcutActionLabel)
           .toSet();
       expect(labels.length, PlayerShortcutAction.values.length);
     });
