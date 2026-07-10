@@ -107,6 +107,7 @@ class PlayerService {
     switch (name) {
       case 'chapter':
       case 'hwdec':
+      case 'af':
         return true;
       default:
         return false;

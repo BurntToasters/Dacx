@@ -103,6 +103,19 @@ void main() {
       expect(service.exportText(), 'No debug log entries.');
     });
 
+    test('captures error level events when disabled', () {
+      final service = DebugLogService(isEnabled: () => false);
+
+      service.log(
+        category: DebugLogCategory.error,
+        event: 'crash',
+        severity: DebugSeverity.error,
+      );
+
+      expect(service.entryCount, 1);
+      expect(service.entries.first.event, 'crash');
+    });
+
     test('logLazy does not evaluate builders when disabled', () {
       final service = DebugLogService(isEnabled: () => false);
       var messageBuilt = false;
@@ -179,5 +192,30 @@ void main() {
       expect(output, isNot(contains('token=secret')));
       expect(output, isNot(contains('#frag')));
     });
+
+    test(
+      'exportText redacts sensitive keys while ignoring non-sensitive camelCase keys',
+      () {
+        final service = DebugLogService(isEnabled: () => true);
+
+        service.log(
+          category: DebugLogCategory.playback,
+          event: 'test_keys',
+          details: {
+            'userToken': 'secret123',
+            'authorName': 'John Doe',
+            'auth_type': 'OAuth',
+            'user_preference': 'dark',
+          },
+        );
+
+        final output = service.exportText();
+
+        expect(output, contains('userToken=<redacted>'));
+        expect(output, contains('authorName=John Doe'));
+        expect(output, contains('auth_type=<redacted>'));
+        expect(output, contains('user_preference=<redacted>'));
+      },
+    );
   });
 }

@@ -48,7 +48,11 @@ class DebugLogService extends ChangeNotifier {
     Map<String, Object?> details = const {},
     DebugSeverity severity = DebugSeverity.info,
   }) {
-    if (!isEnabled) return;
+    if (!isEnabled &&
+        severity != DebugSeverity.error &&
+        category != DebugLogCategory.error) {
+      return;
+    }
     _appendEntry(
       category: category,
       event: event,
@@ -65,7 +69,11 @@ class DebugLogService extends ChangeNotifier {
     Map<String, Object?> Function()? detailsBuilder,
     DebugSeverity severity = DebugSeverity.info,
   }) {
-    if (!isEnabled) return;
+    if (!isEnabled &&
+        severity != DebugSeverity.error &&
+        category != DebugLogCategory.error) {
+      return;
+    }
     _appendEntry(
       category: category,
       event: event,
@@ -196,18 +204,30 @@ class DebugLogService extends ChangeNotifier {
   }
 
   static bool _isSensitiveKey(String key) {
-    final normalized = key.toLowerCase();
-    return normalized.contains('token') ||
-        normalized.contains('secret') ||
-        normalized.contains('password') ||
-        normalized.contains('passwd') ||
-        normalized.contains('apikey') ||
-        normalized.contains('api_key') ||
-        normalized.contains('auth') ||
-        normalized.contains('email') ||
-        normalized.contains('user') ||
-        normalized.contains('cookie') ||
-        normalized.contains('session');
+    final words = key
+        .split(RegExp(r'(?=[A-Z])|_|-|\s+'))
+        .map((w) => w.toLowerCase())
+        .toSet();
+    const sensitiveWords = {
+      'token',
+      'secret',
+      'password',
+      'passwd',
+      'apikey',
+      'api_key',
+      'auth',
+      'email',
+      'user',
+      'cookie',
+      'session',
+      'username',
+      'credential',
+      'credentials',
+      'key',
+      'pass',
+      'pw',
+    };
+    return words.any((w) => sensitiveWords.contains(w));
   }
 
   static bool _looksLikePath(String value) {

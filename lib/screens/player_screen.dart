@@ -5,6 +5,7 @@ import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -45,7 +46,7 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
-import '../widgets/audio_waveform_visualizer.dart';
+import '../widgets/audio_spectrum_visualizer.dart';
 import '../widgets/transport_controls.dart';
 import 'chapter_info.dart';
 import 'settings_screen.dart';
@@ -134,6 +135,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final MediaSessionService _mediaSession;
   late final PlaylistService _playlist;
 
+  // Caching settings for deduplication of updates.
+  double? _lastAppliedSpeed;
+  LoopMode? _lastAppliedLoopMode;
+  bool? _lastAppliedAlwaysOnTop;
+  bool? _lastAppliedMediaSessionEnabled;
+  bool? _lastAppliedPlaylistShuffle;
+  bool? _lastAppliedMultiAudioMix;
+  bool? _lastAppliedAudioWaveformEnabled;
+  bool? _lastAppliedEqEnabled;
+  List<double>? _lastAppliedEqBands;
+
   // Compact mini-player mode (PiP-style on desktop).
   bool _compactMode = false;
   Size? _preCompactSize;
@@ -214,6 +226,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
     _volume = _settings.volume;
+    _lastAppliedSpeed = _settings.speed;
+    _lastAppliedLoopMode = _settings.loopMode;
+    _lastAppliedAlwaysOnTop = _settings.alwaysOnTop;
+    _lastAppliedMediaSessionEnabled = _settings.mediaSessionEnabled;
+    _lastAppliedPlaylistShuffle = _settings.playlistShuffle;
+    _lastAppliedMultiAudioMix = _settings.multiAudioMix;
+    _lastAppliedAudioWaveformEnabled = _settings.audioWaveformEnabled;
+    _lastAppliedEqEnabled = _settings.eqEnabled;
+    _lastAppliedEqBands = List<double>.from(_settings.eqBands);
     _log(
       'player_init',
       detailsBuilder: () => {
@@ -492,32 +513,76 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'hwdec': _settings.hwDec,
       },
     );
-    _applySpeed(_settings.speed);
-    _applyLoopMode(_settings.loopMode);
-    _syncSpectrumService(_isPlaying);
-    unawaited(_applyMultiAudioMix());
-    unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
-    unawaited(
-      _mediaSession.updateLoop(switch (_settings.loopMode) {
-        LoopMode.none => 'none',
-        LoopMode.single => 'single',
-        LoopMode.loop => 'loop',
-      }),
-    );
-    unawaited(_mediaSession.updateShuffle(_settings.playlistShuffle));
-    unawaited(_mediaSession.updateRate(_settings.speed));
-    unawaited(
-      windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
-        Object e,
-      ) {
-        _log(
-          'always_on_top_apply_failed',
-          category: DebugLogCategory.system,
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
-      }),
-    );
+
+    final speedChanged = _lastAppliedSpeed != _settings.speed;
+    if (speedChanged) {
+      _lastAppliedSpeed = _settings.speed;
+      _applySpeed(_settings.speed);
+      unawaited(_mediaSession.updateRate(_settings.speed));
+    }
+
+    final loopModeChanged = _lastAppliedLoopMode != _settings.loopMode;
+    if (loopModeChanged) {
+      _lastAppliedLoopMode = _settings.loopMode;
+      _applyLoopMode(_settings.loopMode);
+      unawaited(
+        _mediaSession.updateLoop(switch (_settings.loopMode) {
+          LoopMode.none => 'none',
+          LoopMode.single => 'single',
+          LoopMode.loop => 'loop',
+        }),
+      );
+    }
+
+    final audioWaveformChanged =
+        _lastAppliedAudioWaveformEnabled != _settings.audioWaveformEnabled ||
+        _lastAppliedEqEnabled != _settings.eqEnabled ||
+        !listEquals(_lastAppliedEqBands, _settings.eqBands);
+    if (audioWaveformChanged) {
+      _lastAppliedAudioWaveformEnabled = _settings.audioWaveformEnabled;
+      _lastAppliedEqEnabled = _settings.eqEnabled;
+      _lastAppliedEqBands = List<double>.from(_settings.eqBands);
+      _syncSpectrumService(_isPlaying);
+    }
+
+    final multiAudioMixChanged =
+        _lastAppliedMultiAudioMix != _settings.multiAudioMix;
+    if (multiAudioMixChanged) {
+      _lastAppliedMultiAudioMix = _settings.multiAudioMix;
+      unawaited(_applyMultiAudioMix());
+    }
+
+    final mediaSessionChanged =
+        _lastAppliedMediaSessionEnabled != _settings.mediaSessionEnabled;
+    if (mediaSessionChanged) {
+      _lastAppliedMediaSessionEnabled = _settings.mediaSessionEnabled;
+      unawaited(_mediaSession.setEnabled(_settings.mediaSessionEnabled));
+    }
+
+    final shuffleChanged =
+        _lastAppliedPlaylistShuffle != _settings.playlistShuffle;
+    if (shuffleChanged) {
+      _lastAppliedPlaylistShuffle = _settings.playlistShuffle;
+      unawaited(_mediaSession.updateShuffle(_settings.playlistShuffle));
+    }
+
+    final alwaysOnTopChanged = _lastAppliedAlwaysOnTop != _settings.alwaysOnTop;
+    if (alwaysOnTopChanged) {
+      _lastAppliedAlwaysOnTop = _settings.alwaysOnTop;
+      unawaited(
+        windowManager.setAlwaysOnTop(_settings.alwaysOnTop).catchError((
+          Object e,
+        ) {
+          _log(
+            'always_on_top_apply_failed',
+            category: DebugLogCategory.system,
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }),
+      );
+    }
+
     if (mounted) {
       setState(() {});
     }
@@ -1849,7 +1914,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           right: 0,
                                           bottom: 0,
                                           height: 40,
-                                          child: AudioWaveformVisualizer(
+                                          child: AudioSpectrumVisualizer(
                                             isPlaying: _isPlaying,
                                             position: _position,
                                             duration: _duration,

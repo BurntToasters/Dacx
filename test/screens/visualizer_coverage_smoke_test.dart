@@ -5,7 +5,7 @@ import 'package:dacx/services/audio_spectrum_service.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/settings_service.dart';
 import 'package:dacx/services/update_service.dart';
-import 'package:dacx/widgets/audio_waveform_visualizer.dart';
+import 'package:dacx/widgets/audio_spectrum_visualizer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,7 +22,7 @@ void main() {
       );
     });
 
-    testWidgets('audio waveform visualizer builds', (tester) async {
+    testWidgets('audio spectrum visualizer builds', (tester) async {
       final stream = StreamController<List<double>>.broadcast();
       addTearDown(stream.close);
 
@@ -30,7 +30,7 @@ void main() {
         MaterialApp(
           home: SizedBox(
             height: 40,
-            child: AudioWaveformVisualizer(
+            child: AudioSpectrumVisualizer(
               isPlaying: false,
               position: Duration.zero,
               duration: const Duration(seconds: 1),
@@ -40,7 +40,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(AudioWaveformVisualizer), findsOneWidget);
+      expect(find.byType(AudioSpectrumVisualizer), findsOneWidget);
     });
 
     test('player screen constructor smoke', () async {

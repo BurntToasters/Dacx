@@ -14,7 +14,7 @@ const minOverallCoverage = Number.parseFloat(
 );
 const requiredSources = [
   "lib/services/audio_spectrum_service.dart",
-  "lib/widgets/audio_waveform_visualizer.dart",
+  "lib/widgets/audio_spectrum_visualizer.dart",
   "lib/screens/player_screen.dart",
 ];
 

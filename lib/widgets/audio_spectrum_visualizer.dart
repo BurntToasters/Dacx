@@ -8,8 +8,8 @@ import 'package:flutter/scheduler.dart';
 /// Receives per-band energy values (0–1) from [AudioSpectrumService] and
 /// renders them as animated bars. Falls back to gentle idle animation when
 /// stream is silent or unavailable.
-class AudioWaveformVisualizer extends StatefulWidget {
-  const AudioWaveformVisualizer({
+class AudioSpectrumVisualizer extends StatefulWidget {
+  const AudioSpectrumVisualizer({
     super.key,
     required this.isPlaying,
     required this.position,
@@ -23,11 +23,11 @@ class AudioWaveformVisualizer extends StatefulWidget {
   final Stream<List<double>> spectrumStream;
 
   @override
-  State<AudioWaveformVisualizer> createState() =>
-      _AudioWaveformVisualizerState();
+  State<AudioSpectrumVisualizer> createState() =>
+      _AudioSpectrumVisualizerState();
 }
 
-class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
+class _AudioSpectrumVisualizerState extends State<AudioSpectrumVisualizer>
     with TickerProviderStateMixin {
   static const int _barCount = 32;
 
@@ -129,7 +129,7 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer>
   }
 
   @override
-  void didUpdateWidget(covariant AudioWaveformVisualizer oldWidget) {
+  void didUpdateWidget(covariant AudioSpectrumVisualizer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isPlaying != oldWidget.isPlaying) {
       if (widget.isPlaying) {
