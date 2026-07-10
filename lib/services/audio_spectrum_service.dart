@@ -5,14 +5,13 @@ import 'package:flutter/foundation.dart';
 
 import 'player_service.dart';
 
-/// Polls true frequency-band energy metadata from mpv's `astats` audio filter.
+/// Polls RMS/Peak energy metadata from mpv's `astats` audio filter and
+/// distributes the energy across [bandCount] frequency-weighted bands for
+/// visualization.
 ///
-/// The filter graph builds a parallel probe branch:
-/// 1) duplicate the input,
-/// 2) split a mono probe signal into logarithmic crossover bands,
-/// 3) merge the main stereo path with probe bands,
-/// 4) measure per-channel RMS with astats metadata,
-/// 5) map output back to the original stereo channels.
+/// Uses a simple `astats` lavfi filter with metadata output — no crossover
+/// splitting or complex graph. The single RMS/Peak measurement is shaped
+/// into a pseudo-spectrum using frequency weighting and smoothing.
 class AudioSpectrumService {
   AudioSpectrumService({
     required PlayerService playerService,
@@ -26,15 +25,11 @@ class AudioSpectrumService {
 
   Timer? _pollTimer;
   bool _active = false;
+  bool _filterInstalled = false;
   int _pollSession = 0;
   bool _pollInFlight = false;
 
   // Current state
-  late final List<double> _lastBandDb = List<double>.filled(
-    _graphBandCount,
-    _dbFloor,
-  );
-
   late final List<double> _bandEnergy = List<double>.filled(bandCount, 0.0);
   final StreamController<List<double>> _spectrumController =
       StreamController<List<double>>.broadcast();
@@ -47,81 +42,92 @@ class AudioSpectrumService {
 
   bool get isActive => _active;
 
+  /// Whether the af filter was confirmed installed by mpv.
+  bool get isFilterInstalled => _filterInstalled;
+
   /// The af filter segment this service needs appended to the chain.
+  /// Simple astats with metadata enabled — lightweight and universally supported.
   static const String _afLabel = 'dacxstats';
-  static const int _graphBandCount = 10;
-  static const double _dbFloor = -80.0;
-  static const int _firstBandChannel = 3;
-  static final String afSegment = _buildAfSegment();
-  static const String _fallbackRmsProperty =
-      'af-metadata/$_afLabel/by-key/lavfi.astats.Overall.RMS_level';
-  static const String _fallbackPeakProperty =
-      'af-metadata/$_afLabel/by-key/lavfi.astats.Overall.Peak_level';
+  static const double _dbFloor = -60.0;
+  static const String afSegment =
+      '@$_afLabel:lavfi=[astats=metadata=1:reset=1:measure_perchannel=RMS_level+Peak_level:measure_overall=RMS_level+Peak_level]';
+
+  // Property paths for the simple astats filter.
+  static const String _rmsProperty =
+      'af-metadata/$_afLabel/lavfi.astats.Overall.RMS_level';
+  static const String _peakProperty =
+      'af-metadata/$_afLabel/lavfi.astats.Overall.Peak_level';
+  // Per-channel paths (stereo: channels 1 & 2)
+  static const String _rmsLeftProperty =
+      'af-metadata/$_afLabel/lavfi.astats.1.RMS_level';
+  static const String _rmsRightProperty =
+      'af-metadata/$_afLabel/lavfi.astats.2.RMS_level';
+
 
   /// Start polling. Call after playback begins.
+  /// Does NOT start the poll timer until [confirmFilterInstalled] is called.
   Future<void> start() async {
     if (_active) return;
     _active = true;
+    _filterInstalled = false;
     _pollSession++;
-    resetDynamics();
-    await _installFilter();
+    _resetBands();
+  }
+
+  /// Called by the caller after verifying the merged af chain was accepted
+  /// by mpv (i.e. `setAudioFilter` returned true). Only then is it safe to
+  /// poll `af-metadata` without risking a native crash.
+  void confirmFilterInstalled() {
     if (!_active) return;
+    _filterInstalled = true;
     _pollTimer?.cancel();
     final session = _pollSession;
     _pollTimer = Timer.periodic(pollInterval, (_) => _pollTick(session));
   }
 
-  /// Stop polling and remove filter.
+  /// Called when the filter chain was rejected by mpv.
+  /// Prevents polling and avoids native crashes.
+  void confirmFilterFailed() {
+    _filterInstalled = false;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  /// Stop polling and reset state.
   Future<void> stop() async {
     _pollSession++;
     _active = false;
+    _filterInstalled = false;
     _pollTimer?.cancel();
     _pollTimer = null;
-    resetDynamics();
-    // Stop emitting non-zero bars immediately when playback pauses/stops.
-    for (var i = 0; i < bandCount; i++) {
-      _bandEnergy[i] = 0.0;
-    }
+    _resetBands();
     if (!_spectrumController.isClosed) {
       _spectrumController.add(List<double>.from(_bandEnergy));
     }
   }
 
   /// Must be called when af chain is rebuilt (e.g. EQ toggled).
-  /// Signals that the merged af chain needs to be re-applied.
   void markFilterDirty() {
-    // No-op: caller manages af chain rebuild.
+    // Caller manages af chain rebuild; this pauses polling until
+    // confirmFilterInstalled is called again.
+    _filterInstalled = false;
+    _pollTimer?.cancel();
+    _pollTimer = null;
   }
 
-  Future<void> _installFilter() async {
-    // The caller (player_screen) manages the merged af chain.
-    // This method exists as a hook for future per-service filter setup.
-  }
+  // ── Polling ────────────────────────────────────────────────
 
-  Future<void> _pollOnce() async {
-    if (!_active || _playerService.isDisposed) return;
-
+  Future<void> _pollTick(int session) async {
+    if (!_active ||
+        !_filterInstalled ||
+        _playerService.isDisposed ||
+        session != _pollSession) {
+      return;
+    }
     if (_pollInFlight) return;
     _pollInFlight = true;
-
     try {
-      var measuredBand = false;
-      final targetBands = math.min(bandCount, _graphBandCount);
-      for (var i = 0; i < targetBands; i++) {
-        final key = _bandProperty(i);
-        final value = await _playerService.getProperty(key);
-        final parsed = _parseDb(value);
-        if (parsed != null) {
-          _lastBandDb[i] = parsed;
-          measuredBand = true;
-        }
-      }
-
-      if (measuredBand) {
-        _updateSpectrumFromBands();
-      } else {
-        await _updateSpectrumFallback();
-      }
+      await _pollOnce();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('AudioSpectrumService poll error: $e');
@@ -131,35 +137,65 @@ class AudioSpectrumService {
     }
   }
 
-  Future<void> _pollTick(int session) async {
-    if (!_active || _playerService.isDisposed || session != _pollSession) {
+  Future<void> _pollOnce() async {
+    if (!_active || !_filterInstalled || _playerService.isDisposed) return;
+
+    // Read overall RMS + Peak (most reliable)
+    final rmsStr = await _playerService.getProperty(_rmsProperty);
+    final peakStr = await _playerService.getProperty(_peakProperty);
+
+    // Also try per-channel for stereo spread
+    final rmsLeftStr = await _playerService.getProperty(_rmsLeftProperty);
+    final rmsRightStr = await _playerService.getProperty(_rmsRightProperty);
+
+    final rms = _parseDb(rmsStr);
+    final peak = _parseDb(peakStr);
+    final rmsLeft = _parseDb(rmsLeftStr);
+    final rmsRight = _parseDb(rmsRightStr);
+
+    // If we got nothing at all, the filter may not be producing metadata yet.
+    if (rms == null && peak == null && rmsLeft == null && rmsRight == null) {
       return;
     }
-    await _pollOnce();
+
+    final overallDb = math.max(rms ?? _dbFloor, peak ?? _dbFloor);
+    final leftDb = rmsLeft ?? overallDb;
+    final rightDb = rmsRight ?? overallDb;
+
+    _distributeEnergy(overallDb, leftDb, rightDb);
   }
 
-  void resetDynamics() {
-    for (var i = 0; i < _lastBandDb.length; i++) {
-      _lastBandDb[i] = _dbFloor;
-    }
-  }
+  /// Distributes overall + stereo energy across [bandCount] bands with
+  /// frequency weighting and smoothing to create a plausible spectrum shape.
+  void _distributeEnergy(double overallDb, double leftDb, double rightDb) {
+    final overallEnergy = _dbToLinear(overallDb);
+    final leftEnergy = _dbToLinear(leftDb);
+    final rightEnergy = _dbToLinear(rightDb);
+    final stereoSpread = (leftEnergy - rightEnergy).abs();
 
-  void _updateSpectrumFromBands() {
     for (var i = 0; i < bandCount; i++) {
-      final position = bandCount <= 1 ? 0.0 : i / (bandCount - 1);
-      final rawIndex = position * (_graphBandCount - 1);
-      final lowerIndex = rawIndex.floor();
-      final upperIndex = math.min(_graphBandCount - 1, rawIndex.ceil());
-      final fraction = rawIndex - lowerIndex;
+      final position = bandCount <= 1 ? 0.5 : i / (bandCount - 1);
 
-      final dbLower = _lastBandDb[lowerIndex];
-      final dbUpper = _lastBandDb[upperIndex];
-      final interpolatedDb = dbLower + (dbUpper - dbLower) * fraction;
+      // Shape factor: bass bands get more energy, treble less, mid stays neutral.
+      // This creates a natural-looking frequency distribution.
+      final bassWeight = math.pow(1.0 - position, 1.6).toDouble();
+      final trebleWeight = math.pow(position, 2.2).toDouble();
+      final midWeight =
+          math.sin(position * math.pi).toDouble(); // peak at center
 
-      final target = _dbToLinear(interpolatedDb);
+      // Combine: overall provides the base, with bass/treble shaping
+      final shaped = overallEnergy *
+          (0.55 + 0.30 * bassWeight + 0.15 * midWeight - 0.08 * trebleWeight);
 
-      final attackRate = 0.58 + 0.30 * position;
-      final releaseRate = 0.78 + 0.17 * (1.0 - position);
+      // Add stereo variation: left-heavy signals boost low bands, right boosts high
+      final stereoOffset =
+          stereoSpread * 0.12 * (position < 0.5 ? leftEnergy : rightEnergy);
+
+      final target = (shaped + stereoOffset).clamp(0.0, 1.0);
+
+      // Smooth with attack/release (faster attack for high bands, slower release for low)
+      final attackRate = 0.50 + 0.35 * position;
+      final releaseRate = 0.82 + 0.12 * (1.0 - position);
 
       if (target > _bandEnergy[i]) {
         _bandEnergy[i] =
@@ -176,20 +212,14 @@ class AudioSpectrumService {
     }
   }
 
-  Future<void> _updateSpectrumFallback() async {
-    final rms = _parseDb(
-      await _playerService.getProperty(_fallbackRmsProperty),
-    );
-    final peak = _parseDb(
-      await _playerService.getProperty(_fallbackPeakProperty),
-    );
-    final base = _dbToLinear(math.max(rms ?? _dbFloor, peak ?? _dbFloor));
-    for (var i = 0; i < bandCount; i++) {
-      _bandEnergy[i] = (_bandEnergy[i] * 0.86 + base * 0.14).clamp(0.0, 1.0);
-    }
+  // ── Helpers ────────────────────────────────────────────────
 
-    if (!_spectrumController.isClosed) {
-      _spectrumController.add(List<double>.from(_bandEnergy));
+  /// Reset all band energies to zero (e.g. on seek or source change).
+  void resetDynamics() => _resetBands();
+
+  void _resetBands() {
+    for (var i = 0; i < bandCount; i++) {
+      _bandEnergy[i] = 0.0;
     }
   }
 
@@ -200,46 +230,6 @@ class AudioSpectrumService {
     return parsed;
   }
 
-  static String _bandProperty(int bandIndex) {
-    final channel = _firstBandChannel + bandIndex;
-    return 'af-metadata/$_afLabel/by-key/lavfi.astats.$channel.RMS_level';
-  }
-
-  static String _buildAfSegment() {
-    final splitPoints = _buildCrossoverSplits(
-      _graphBandCount,
-      20.0,
-      20000.0,
-    ).map((v) => v.toStringAsFixed(2)).join(' ');
-    final bandLabels = List<String>.generate(
-      _graphBandCount,
-      (i) => '[b$i]',
-      growable: false,
-    );
-    final mergedInputs = <String>['[main]', ...bandLabels].join();
-
-    final graph =
-        '[in]aformat=channel_layouts=stereo,asplit=2[main][probe];'
-        '[probe]pan=mono|c0=0.5*c0+0.5*c1,acrossover=split=$splitPoints:order=8th${bandLabels.join()} ;'
-        '$mergedInputs'
-        'amerge=inputs=${_graphBandCount + 1}[merged];'
-        '[merged]astats=metadata=1:reset=1:measure_perchannel=RMS_level:measure_overall=RMS_level+Peak_level,pan=stereo|c0=c0|c1=c1[out]';
-    return '@$_afLabel:lavfi=[$graph]';
-  }
-
-  static List<double> _buildCrossoverSplits(
-    int bands,
-    double minHz,
-    double maxHz,
-  ) {
-    if (bands < 2) return const [];
-    final boundaries = List<double>.generate(bands + 1, (i) {
-      final t = i / bands;
-      return minHz * math.pow(maxHz / minHz, t).toDouble();
-    });
-    return boundaries.sublist(1, boundaries.length - 1);
-  }
-
   /// Convert dB to 0–1 perceptual scale. -60dB = 0, 0dB = 1.
   /// Uses a power curve to spread the musically-useful range (-30..0 dB)
   /// more evenly across the visual output.
@@ -247,11 +237,12 @@ class AudioSpectrumService {
     if (db <= _dbFloor) return 0.0;
     if (db >= 0.0) return 1.0;
     final linear = (db - _dbFloor) / -_dbFloor;
-    return math.pow(linear, 0.82).toDouble();
+    return math.pow(linear, 0.75).toDouble();
   }
 
   void dispose() {
     _active = false;
+    _filterInstalled = false;
     _pollTimer?.cancel();
     _pollTimer = null;
     _spectrumController.close();

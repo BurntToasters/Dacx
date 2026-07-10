@@ -7,15 +7,18 @@
 
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
-| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-x86_64.AppImage) |
-| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-arm64.deb)--> |
-| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-aarch64.rpm)--> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-aarch64.flatpak)--> |
+| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-x86_64.AppImage) |
+| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-arm64.deb)--> |
+| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-aarch64.rpm)--> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-x86_64.flatpak) |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-aarch64.flatpak)--> |
 
 > [!IMPORTANT]
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
+
+## Changes in `v0.10.0-beta.10 (RC4):`
+* **Misc:** General stability for the STABLE 0.10.0 release.
 
 ## Changes in `v0.10.0-beta.9 (RC3):`
 * **Audio Visualizer:** Fixed an issue where the audio visualizer prevented music files from being played.
@@ -61,8 +64,8 @@ The UI has been revamped to provide a way better user experience and UI moving f
   * **Misc:** Color scheme improvements, animation updates, general cleanup.
 
 * **NEW - Linux AppImage and Flatpak:** Added AppImage and Flatpak support!
-  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
-  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.9/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
+  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
+  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.0-beta.10/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
 - **NEW - Localization completeness:** Nearly all user-facing strings are now localized via `flutter gen-l10n`. Covered: transport control tooltips; folder + URL button and dialog labels; media info metadata labels; folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI; accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button); keyboard shortcut action names; equalizer preset labels; chapter and track fallback labels. Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
 - **Testing:** 352+ tests passing. Code verified clean with zero lint issues.
 - **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.
