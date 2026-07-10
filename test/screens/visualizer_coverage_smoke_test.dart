@@ -15,7 +15,7 @@ void main() {
     test('audio spectrum filter segment is labeled for metadata lookup', () {
       expect(AudioSpectrumService.afSegment, contains('@dacxstats:'));
       expect(AudioSpectrumService.afSegment, contains('astats='));
-      expect(AudioSpectrumService.afSegment, contains('acrossover='));
+      expect(AudioSpectrumService.afSegment, contains('metadata=1'));
       expect(
         AudioSpectrumService.afSegment,
         contains('measure_perchannel=RMS_level'),
