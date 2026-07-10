@@ -226,6 +226,18 @@ abstract class AppLocalizations {
   /// **'Publish playback to MPRIS / SMTC / Now Playing'**
   String get settingsMediaSessionSubtitle;
 
+  /// No description provided for @settingsAudioWaveform.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio spectrum visualizer'**
+  String get settingsAudioWaveform;
+
+  /// No description provided for @settingsAudioWaveformSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)'**
+  String get settingsAudioWaveformSubtitle;
+
   /// No description provided for @settingsAllowMultipleWindowsSubtitle.
   ///
   /// In en, this message translates to:
@@ -325,7 +337,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWindowOpacityBlurNote.
   ///
   /// In en, this message translates to:
-  /// **'With blur on (Windows), this adjusts UI translucency.'**
+  /// **'With blur on, this adjusts UI translucency (native window opacity stays off so blur can work).'**
   String get settingsWindowOpacityBlurNote;
 
   /// No description provided for @settingsPercent.
@@ -460,11 +472,29 @@ abstract class AppLocalizations {
   /// **'Failed to check for updates.'**
   String get snackUpdateCheckFailed;
 
+  /// No description provided for @snackUpdateRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Update check rate-limited. Please try again in a few minutes.'**
+  String get snackUpdateRateLimited;
+
   /// No description provided for @snackUpdateLatest.
   ///
   /// In en, this message translates to:
   /// **'You are on the latest version.'**
   String get snackUpdateLatest;
+
+  /// No description provided for @snackUpdateLatestBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'You are on the latest beta.'**
+  String get snackUpdateLatestBeta;
+
+  /// No description provided for @snackUpdateNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the update server. Check your connection.'**
+  String get snackUpdateNetworkError;
 
   /// No description provided for @settingsKeyboardShortcuts.
   ///

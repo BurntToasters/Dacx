@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:macos_window_utils/macos_window_utils.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -54,7 +55,9 @@ void _installAsyncErrorHandler(DebugLogService debugLog) {
       message: error.toString(),
       severity: DebugSeverity.error,
     );
-    return true;
+    // Let the platform fallback path still report the failure in production
+    // even when debug logging is disabled.
+    return false;
   };
 }
 
@@ -310,6 +313,74 @@ class _DacxAppState extends State<DacxApp>
     return false;
   }
 
+  bool _shouldBypassNativeOpacity(bool blurEnabled) {
+    if (!blurEnabled) return false;
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
+
+  static const MethodChannel _windowVisualsChannel = MethodChannel(
+    'run.rosie.dacx/window/methods',
+  );
+
+  Future<void> _clearWindowsLayeredStyle() async {
+    if (!Platform.isWindows) return;
+    try {
+      await _windowVisualsChannel.invokeMethod<bool>('clearLayeredStyle');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: clearLayeredStyle failed: $e');
+      }
+    }
+  }
+
+  /// macOS vibrancy: await material set (flutter_acrylic's setEffect does not),
+  /// force alpha=1, active blur state, and appearance so NSVisualEffectView
+  /// actually composites the desktop behind the window.
+  Future<void> _applyMacOSBlur({required double strength}) async {
+    final dark = _isDarkMode();
+    // Prefer materials that blur desktop content (research: windowBackground
+    // is mostly opaque wallpaper-tint and reads as "no blur").
+    final material = switch (strength) {
+      < 0.25 => NSVisualEffectViewMaterial.underWindowBackground,
+      < 0.50 => NSVisualEffectViewMaterial.hudWindow,
+      < 0.75 => NSVisualEffectViewMaterial.sidebar,
+      _ => NSVisualEffectViewMaterial.fullScreenUI,
+    };
+    try {
+      // Ensure window alpha is fully opaque — alpha < 1 fades the whole
+      // window including the vibrancy layer into sharp transparency.
+      await WindowManipulator.setWindowAlphaValue(1.0);
+      await WindowManipulator.setWindowBackgroundColorToClear();
+      await WindowManipulator.makeTitlebarTransparent();
+      await WindowManipulator.enableFullSizeContentView();
+      await WindowManipulator.hideTitle();
+      await WindowManipulator.setMaterial(material);
+      await WindowManipulator.setNSVisualEffectViewState(
+        NSVisualEffectViewState.active,
+      );
+      await WindowManipulator.overrideMacOSBrightness(dark: dark);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: macOS blur apply failed: $e');
+      }
+      // Fallback through flutter_acrylic in case direct manipulator failed.
+      try {
+        final effect = switch (strength) {
+          < 0.25 => WindowEffect.underWindowBackground,
+          < 0.50 => WindowEffect.hudWindow,
+          < 0.75 => WindowEffect.sidebar,
+          _ => WindowEffect.fullScreenUI,
+        };
+        await Window.setEffect(effect: effect, dark: dark);
+        await Window.setBlurViewState(MacOSBlurViewState.active);
+      } catch (e2) {
+        if (kDebugMode) {
+          debugPrint('Dacx: macOS blur fallback failed: $e2');
+        }
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -397,13 +468,20 @@ class _DacxAppState extends State<DacxApp>
       final s = widget.settings;
       final experimentalEnabled = s.experimentalFeaturesEnabled;
       final blurEnabled = _isEffectiveBlurEnabled(s);
-      final bypassNativeOpacity = Platform.isWindows && blurEnabled;
+      final bypassNativeOpacity = _shouldBypassNativeOpacity(blurEnabled);
       final effectiveOpacity = experimentalEnabled ? s.windowOpacity : 1.0;
 
       try {
         if (bypassNativeOpacity) {
-          // window_manager.setOpacity enables WS_EX_LAYERED on Windows, which
-          // can flatten/disable DWM blur materials.
+          // window_manager.setOpacity enables WS_EX_LAYERED on Windows and alters
+          // alphaValue on macOS / gtk opacity on Linux — all of which flatten or
+          // fight native blur/vibrancy/compositor blur.
+          if (Platform.isWindows) {
+            await _clearWindowsLayeredStyle();
+          } else {
+            // Reset any prior opacity fade so the transparent/blur path is clean.
+            await windowManager.setOpacity(1.0);
+          }
           await windowManager.setIgnoreMouseEvents(false);
         } else {
           await windowManager.setOpacity(effectiveOpacity);
@@ -432,6 +510,8 @@ class _DacxAppState extends State<DacxApp>
           final strength = s.windowBlurStrength;
           if (Platform.isWindows) {
             final dark = _isDarkMode();
+            // Ensure layered style is gone immediately before DWM effect apply.
+            await _clearWindowsLayeredStyle();
             if (strength < 0.12) {
               await Window.setEffect(
                 effect: WindowEffect.disabled,
@@ -439,24 +519,30 @@ class _DacxAppState extends State<DacxApp>
                 dark: dark,
               );
             } else {
-              final alpha = (220 - (strength * 120)).round().clamp(90, 220);
+              // Tint alpha: stronger glass → more see-through acrylic tint.
+              final alpha = (200 - (strength * 110)).round().clamp(70, 200);
+              // Prefer acrylic (true blur-behind). On Win11 22523+ the plugin
+              // maps this to DWMSBT_TRANSIENTWINDOW; older builds use
+              // ACCENT_ENABLE_ACRYLICBLURBEHIND.
               await Window.setEffect(
-                effect: WindowEffect.aero,
+                effect: WindowEffect.acrylic,
                 color: dark
                     ? Color.fromARGB(alpha, 24, 30, 37)
                     : Color.fromARGB(alpha, 245, 248, 252),
                 dark: dark,
               );
             }
+            // Size nudge forces DWM to recomposite after style/effect change.
+            try {
+              final size = await windowManager.getSize();
+              await windowManager.setSize(Size(size.width + 1, size.height));
+              await windowManager.setSize(size);
+            } catch (_) {}
           } else if (Platform.isMacOS) {
-            final effect = switch (strength) {
-              < 0.20 => WindowEffect.windowBackground,
-              < 0.40 => WindowEffect.sidebar,
-              < 0.60 => WindowEffect.hudWindow,
-              _ => WindowEffect.fullScreenUI,
-            };
-            await Window.setEffect(effect: effect, dark: _isDarkMode());
+            await _applyMacOSBlur(strength: strength);
           } else if (Platform.isLinux) {
+            // Linux has no GTK blur API — only transparency. Compositor
+            // (KWin forceblur, etc.) blurs the transparent regions.
             await Window.setEffect(
               effect: WindowEffect.transparent,
               color: Colors.transparent,
@@ -536,18 +622,30 @@ class _DacxAppState extends State<DacxApp>
         final experimentalEnabled = s.experimentalFeaturesEnabled;
         final blurEnabled = _isEffectiveBlurEnabled(s);
         final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
-        final opacitySliderT = ((uiOpacityValue - 0.65) / 0.35).clamp(0.0, 1.0);
-        final windowsBlurUiOpacity = (Platform.isWindows && blurEnabled)
-            ? lerpDouble(0.05, 1.0, Curves.easeOut.transform(opacitySliderT))!
+        const opacityMin = SettingsService.windowOpacityMin;
+        final opacitySliderT =
+            ((uiOpacityValue - opacityMin) / (1.0 - opacityMin)).clamp(
+              0.0,
+              1.0,
+            );
+        // Opacity slider → Flutter shell tint strength (native window opacity
+        // stays at 1.0 so acrylic/vibrancy can composite). Floor at ~0.22 so
+        // chrome stays readable over the blur.
+        final blurUiOpacity =
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+                blurEnabled
+            ? lerpDouble(0.22, 0.82, Curves.easeOut.transform(opacitySliderT))!
             : 1.0;
         final popupAlpha = blurEnabled
-            ? (Platform.isWindows ? windowsBlurUiOpacity : 0.96)
+            ? ((Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+                  ? (blurUiOpacity + 0.12).clamp(0.0, 1.0)
+                  : 0.96)
             : 1.0;
         final inputs = _ThemeInputs(
           seed: s.accentColor.color,
           blurEnabled: blurEnabled,
           blurStrength: s.windowBlurStrength,
-          windowsBlurUiOpacity: windowsBlurUiOpacity,
+          blurUiOpacity: blurUiOpacity,
           popupAlpha: popupAlpha,
         );
         final themes = _cachedThemeInputs == inputs && _cachedThemes != null
@@ -564,10 +662,27 @@ class _DacxAppState extends State<DacxApp>
           themeMode: s.themeMode,
           theme: themes.light,
           darkTheme: themes.dark,
-          builder: (context, child) => _MacInstallLocationWarning(
-            debugLog: widget.debugLog,
-            child: child ?? const SizedBox.shrink(),
-          ),
+          // Critical for macOS/Windows/Linux blur: Flutter's Metal/OpenGL
+          // surface starts opaque. Without BlendMode.clear, semi-transparent
+          // widgets composite onto that opaque buffer (looks solid dark) and
+          // never reveal the NSVisualEffectView / acrylic behind.
+          // Pattern from macos_window_utils official example.
+          builder: (context, child) {
+            Widget content = _MacInstallLocationWarning(
+              debugLog: widget.debugLog,
+              child: child ?? const SizedBox.shrink(),
+            );
+            if (blurEnabled) {
+              content = DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF000000),
+                  backgroundBlendMode: BlendMode.clear,
+                ),
+                child: content,
+              );
+            }
+            return content;
+          },
           home: PlayerScreen(
             settings: s,
             debugLog: widget.debugLog,
@@ -592,13 +707,13 @@ class _DacxAppState extends State<DacxApp>
       lightScheme,
       blurEnabled: inputs.blurEnabled,
       blurStrength: inputs.blurStrength,
-      uiOpacity: inputs.windowsBlurUiOpacity,
+      uiOpacity: inputs.blurUiOpacity,
     );
     final darkVisuals = WindowVisuals.fromScheme(
       darkScheme,
       blurEnabled: inputs.blurEnabled,
       blurStrength: inputs.blurStrength,
-      uiOpacity: inputs.windowsBlurUiOpacity,
+      uiOpacity: inputs.blurUiOpacity,
     );
     return _ThemeBundle(
       light: ThemeData(
@@ -610,13 +725,29 @@ class _DacxAppState extends State<DacxApp>
         canvasColor: lightVisuals.contentColor,
         dividerColor: lightVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: lightVisuals.contentColor.withValues(alpha: inputs.popupAlpha),
+          color: lightVisuals.panelTopColor.withValues(
+            alpha: inputs.popupAlpha,
+          ),
           surfaceTintColor: Colors.transparent,
+          elevation: inputs.blurEnabled
+              ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
+              : 8,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: lightVisuals.borderColor),
+            side: BorderSide(color: lightVisuals.panelBorderColor),
           ),
         ),
+        cardTheme: inputs.blurEnabled
+            ? CardThemeData(
+                color: lightVisuals.panelTopColor.withValues(alpha: 0.92),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: lightVisuals.panelBorderColor),
+                ),
+              )
+            : null,
+        snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
         extensions: [lightVisuals],
       ),
       dark: ThemeData(
@@ -629,13 +760,27 @@ class _DacxAppState extends State<DacxApp>
         canvasColor: darkVisuals.contentColor,
         dividerColor: darkVisuals.dividerColor,
         popupMenuTheme: PopupMenuThemeData(
-          color: darkVisuals.contentColor.withValues(alpha: inputs.popupAlpha),
+          color: darkVisuals.panelTopColor.withValues(alpha: inputs.popupAlpha),
           surfaceTintColor: Colors.transparent,
+          elevation: inputs.blurEnabled
+              ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
+              : 8,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: darkVisuals.borderColor),
+            side: BorderSide(color: darkVisuals.panelBorderColor),
           ),
         ),
+        cardTheme: inputs.blurEnabled
+            ? CardThemeData(
+                color: darkVisuals.panelTopColor.withValues(alpha: 0.92),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: darkVisuals.panelBorderColor),
+                ),
+              )
+            : null,
+        snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
         extensions: [darkVisuals],
       ),
     );
@@ -705,14 +850,14 @@ class _ThemeInputs {
   final Color seed;
   final bool blurEnabled;
   final double blurStrength;
-  final double windowsBlurUiOpacity;
+  final double blurUiOpacity;
   final double popupAlpha;
 
   const _ThemeInputs({
     required this.seed,
     required this.blurEnabled,
     required this.blurStrength,
-    required this.windowsBlurUiOpacity,
+    required this.blurUiOpacity,
     required this.popupAlpha,
   });
 
@@ -722,7 +867,7 @@ class _ThemeInputs {
       other.seed.toARGB32() == seed.toARGB32() &&
       other.blurEnabled == blurEnabled &&
       other.blurStrength == blurStrength &&
-      other.windowsBlurUiOpacity == windowsBlurUiOpacity &&
+      other.blurUiOpacity == blurUiOpacity &&
       other.popupAlpha == popupAlpha;
 
   @override
@@ -730,7 +875,7 @@ class _ThemeInputs {
     seed.toARGB32(),
     blurEnabled,
     blurStrength,
-    windowsBlurUiOpacity,
+    blurUiOpacity,
     popupAlpha,
   );
 }

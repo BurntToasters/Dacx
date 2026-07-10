@@ -113,6 +113,15 @@ void main() {
       expect(s.advance(1), isNull);
     });
 
+    test('advance wraps in non-shuffle mode when requested', () {
+      final s = PlaylistService();
+      s.replace(['a', 'b', 'c'], startIndex: 2);
+      expect(s.advance(1, wrap: true)?.value, 'a');
+      expect(s.index, 0);
+      expect(s.advance(-1, wrap: true)?.value, 'c');
+      expect(s.index, 2);
+    });
+
     test('hasNext / hasPrevious reflect bounds', () {
       final s = PlaylistService();
       s.replace(['a', 'b', 'c'], startIndex: 1);
@@ -156,6 +165,20 @@ void main() {
       }
       expect(visited.length, items.length);
       expect(s.advance(1), isNull);
+    });
+
+    test('advance wraps in shuffle mode when requested', () {
+      final s = PlaylistService();
+      s.replace(List.generate(5, (i) => 'item$i'), startIndex: 0);
+      s.setShuffle(true);
+      final first = s.current!.value;
+      for (var i = 0; i < 4; i++) {
+        expect(s.advance(1), isNotNull);
+      }
+      expect(s.advance(1, wrap: true), isNotNull);
+      final wrapped = s.current!.value;
+      expect(wrapped, isNotEmpty);
+      expect({first, wrapped}.length, greaterThanOrEqualTo(1));
     });
 
     test('disabling shuffle clears shuffle order', () {

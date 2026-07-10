@@ -79,6 +79,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Publish playback to MPRIS / SMTC / Now Playing';
 
   @override
+  String get settingsAudioWaveform => 'Audio spectrum visualizer';
+
+  @override
+  String get settingsAudioWaveformSubtitle =>
+      'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)';
+
+  @override
   String get settingsAllowMultipleWindowsSubtitle =>
       'When off (default), opening a file from your OS reuses the running Dacx window. Press Ctrl/Cmd+N to open an extra window on demand.';
 
@@ -133,7 +140,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWindowOpacityBlurNote =>
-      'With blur on (Windows), this adjusts UI translucency.';
+      'With blur on, this adjusts UI translucency (native window opacity stays off so blur can work).';
 
   @override
   String settingsPercent(int percent) {
@@ -221,7 +228,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackUpdateCheckFailed => 'Failed to check for updates.';
 
   @override
+  String get snackUpdateRateLimited =>
+      'Update check rate-limited. Please try again in a few minutes.';
+
+  @override
   String get snackUpdateLatest => 'You are on the latest version.';
+
+  @override
+  String get snackUpdateLatestBeta => 'You are on the latest beta.';
+
+  @override
+  String get snackUpdateNetworkError =>
+      'Could not reach the update server. Check your connection.';
 
   @override
   String get settingsKeyboardShortcuts => 'Keyboard shortcuts';

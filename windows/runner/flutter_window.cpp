@@ -31,6 +31,8 @@ bool FlutterWindow::OnCreate() {
   dacx::RegisterMediaSession(
       flutter_controller_->engine()->messenger());
   dacx::StartOpenFileServer(flutter_controller_->engine()->messenger());
+  dacx::RegisterWindowMethodsChannel(
+      flutter_controller_->engine()->messenger(), this);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {});

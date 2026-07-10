@@ -172,6 +172,7 @@ class SettingsService extends ChangeNotifier {
   static const _kScreenshotFormat = 'screenshot_format';
   static const _kOsdEnabled = 'osd_enabled';
   static const _kSeekPreviewEnabled = 'seek_preview_enabled';
+  static const _kAudioWaveformEnabled = 'audio_waveform_enabled';
   static const _kMultiAudioMix = 'multi_audio_mix';
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
@@ -216,6 +217,7 @@ class SettingsService extends ChangeNotifier {
     _kScreenshotFormat,
     _kOsdEnabled,
     _kSeekPreviewEnabled,
+    _kAudioWaveformEnabled,
     _kMultiAudioMix,
     _kMediaSession,
     _kKeybinds,
@@ -540,14 +542,17 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Minimum UI translucency when blur is on (Flutter shell alpha).
+  static const double windowOpacityMin = 0.55;
+
   double get windowOpacity {
     final stored = _prefs.getDouble(_kWindowOpacity);
     if (stored == null) return 1.0;
-    return stored.clamp(0.65, 1.0);
+    return stored.clamp(windowOpacityMin, 1.0);
   }
 
   set windowOpacity(double value) {
-    _prefs.setDouble(_kWindowOpacity, value.clamp(0.65, 1.0));
+    _prefs.setDouble(_kWindowOpacity, value.clamp(windowOpacityMin, 1.0));
     notifyListeners();
   }
 
@@ -690,6 +695,19 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Audio spectrum visualizer. Experimental — preference is preserved but
+  /// reported as `false` when Experimental Features is off (same pattern as
+  /// [multiAudioMix]).
+  bool get audioWaveformEnabled {
+    if (!experimentalFeaturesEnabled) return false;
+    return _prefs.getBool(_kAudioWaveformEnabled) ?? false;
+  }
+
+  set audioWaveformEnabled(bool v) {
+    _prefs.setBool(_kAudioWaveformEnabled, v);
+    notifyListeners();
+  }
+
   /// Mix all audio tracks into one output via mpv `lavfi-complex`.
   /// Marked experimental; the stored preference is preserved but
   /// reported as `false` whenever Experimental Features is disabled,
@@ -814,6 +832,14 @@ class SettingsService extends ChangeNotifier {
           debugPrint('Dacx: resume positions decode failed: $e');
         }
         result = <String, _ResumeEntry>{};
+      }
+    }
+    if (result.isNotEmpty) {
+      final maxAccess = result.values
+          .map((entry) => entry.lastAccessMs)
+          .fold<int>(0, (max, value) => value > max ? value : max);
+      if (maxAccess > _resumeAccessCounter) {
+        _resumeAccessCounter = maxAccess;
       }
     }
     _resumePositionsCache = Map<String, _ResumeEntry>.of(result);

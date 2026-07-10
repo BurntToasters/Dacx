@@ -184,21 +184,31 @@ class PlaylistService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Advances by [delta] in queue order. Returns the new path or null when out
-  /// of bounds. Honors shuffle.
-  PlayableSource? advance(int delta) {
+  /// Advances by [delta] in queue order. Returns the new item or null when out
+  /// of bounds unless [wrap] is true.
+  PlayableSource? advance(int delta, {bool wrap = false}) {
     if (_items.isEmpty) return null;
     if (_shuffle) {
       if (_shuffleOrder.isEmpty) return null;
-      final pos = _shufflePos + delta;
-      if (pos < 0 || pos >= _shuffleOrder.length) return null;
+      var pos = _shufflePos + delta;
+      if (wrap) {
+        final len = _shuffleOrder.length;
+        pos = ((pos % len) + len) % len;
+      } else if (pos < 0 || pos >= _shuffleOrder.length) {
+        return null;
+      }
       _shufflePos = pos;
       _index = _shuffleOrder[pos];
       notifyListeners();
       return _items[_index];
     }
-    final ni = _index + delta;
-    if (ni < 0 || ni >= _items.length) return null;
+    var ni = _index + delta;
+    if (wrap) {
+      final len = _items.length;
+      ni = ((ni % len) + len) % len;
+    } else if (ni < 0 || ni >= _items.length) {
+      return null;
+    }
     _index = ni;
     notifyListeners();
     return _items[_index];

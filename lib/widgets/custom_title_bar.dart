@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../l10n/app_localizations.dart';
-import '../theme/window_visuals.dart';
+import '../theme/glass_decorations.dart';
 
 /// Custom title bar for Windows and macOS. Returns [SizedBox.shrink] on Linux.
 class CustomTitleBar extends StatefulWidget {
@@ -119,7 +119,6 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
     }
 
     final colorScheme = Theme.of(context).colorScheme;
-    final visuals = context.windowVisuals;
     final isMac = Platform.isMacOS;
     final l10n = AppLocalizations.of(context);
 
@@ -135,66 +134,60 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
           await windowManager.maximize();
         }
       },
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: visuals.barColor,
-          border: Border(bottom: BorderSide(color: visuals.dividerColor)),
-        ),
-        child: SizedBox(
-          height: isMac ? 38 : 32,
-          child: Row(
-            children: [
-              SizedBox(width: isMac ? 72 : 12),
-              Icon(
-                Icons.play_circle_outline,
-                size: 16,
-                color: colorScheme.primary.withValues(alpha: 0.92),
+      child: GlassChrome(
+        height: isMac ? 38 : 32,
+        child: Row(
+          children: [
+            SizedBox(width: isMac ? 72 : 12),
+            Icon(
+              Icons.play_circle_outline,
+              size: 16,
+              color: colorScheme.primary.withValues(alpha: 0.92),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Dacx',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurface.withValues(alpha: 0.86),
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Dacx',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurface.withValues(alpha: 0.86),
-                  fontWeight: FontWeight.w600,
-                ),
+            ),
+            const Expanded(child: SizedBox.shrink()),
+            if (!isMac && _customControlsConfirmed) ...[
+              _WindowButton(
+                icon: Icons.minimize,
+                semanticLabel: l10n.windowMinimize,
+                onPressed: windowManager.minimize,
+                hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
+                iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
               ),
-              const Expanded(child: SizedBox.shrink()),
-              if (!isMac && _customControlsConfirmed) ...[
-                _WindowButton(
-                  icon: Icons.minimize,
-                  semanticLabel: l10n.windowMinimize,
-                  onPressed: windowManager.minimize,
-                  hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
-                  iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
-                ),
-                _WindowButton(
-                  icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
-                  iconSize: _isMaximized ? 14 : 16,
-                  semanticLabel: _isMaximized
-                      ? l10n.windowRestore
-                      : l10n.windowMaximize,
-                  onPressed: () async {
-                    if (_isMaximized) {
-                      await windowManager.unmaximize();
-                    } else {
-                      await windowManager.maximize();
-                    }
-                  },
-                  hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
-                  iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
-                ),
-                _WindowButton(
-                  icon: Icons.close,
-                  semanticLabel: l10n.windowClose,
-                  onPressed: windowManager.close,
-                  hoverColor: Colors.red,
-                  hoverIconColor: Colors.white,
-                  iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
-                ),
-              ],
+              _WindowButton(
+                icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+                iconSize: _isMaximized ? 14 : 16,
+                semanticLabel: _isMaximized
+                    ? l10n.windowRestore
+                    : l10n.windowMaximize,
+                onPressed: () async {
+                  if (_isMaximized) {
+                    await windowManager.unmaximize();
+                  } else {
+                    await windowManager.maximize();
+                  }
+                },
+                hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
+                iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
+              ),
+              _WindowButton(
+                icon: Icons.close,
+                semanticLabel: l10n.windowClose,
+                onPressed: windowManager.close,
+                hoverColor: Colors.red,
+                hoverIconColor: Colors.white,
+                iconColor: colorScheme.onSurface.withValues(alpha: 0.78),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

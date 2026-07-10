@@ -189,6 +189,23 @@ static void dacx_handle_open_path(MyApplication* self, const gchar* path) {
 static void dacx_window_method_call_cb(FlMethodChannel* channel,
                                        FlMethodCall* call,
                                        gpointer user_data) {
+  DacxWindowReg* reg = (DacxWindowReg*)user_data;
+  const gchar* method = fl_method_call_get_name(call);
+  // Windows-only helper; acknowledge so Dart can call unconditionally.
+  if (g_strcmp0(method, "clearLayeredStyle") == 0) {
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_bool(TRUE)));
+    fl_method_call_respond(call, response, nullptr);
+    return;
+  }
+  if (g_strcmp0(method, "openNewWindow") == 0) {
+    // Multi-window spawn is handled elsewhere; keep channel stable.
+    (void)reg;
+    g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+        fl_method_success_response_new(fl_value_new_bool(FALSE)));
+    fl_method_call_respond(call, response, nullptr);
+    return;
+  }
   g_autoptr(FlMethodResponse) not_implemented =
       FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   fl_method_call_respond(call, not_implemented, nullptr);
@@ -315,6 +332,18 @@ static GtkWindow* my_application_create_window(MyApplication* self,
 
   gtk_window_set_default_size(window, 1280, 720);
 
+  // RGBA visual
+  gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
+  {
+    GdkScreen* screen = gdk_screen_get_default();
+    if (screen != nullptr) {
+      GdkVisual* visual = gdk_screen_get_rgba_visual(screen);
+      if (visual != nullptr && gdk_screen_is_composited(screen)) {
+        gtk_widget_set_visual(GTK_WIDGET(window), visual);
+      }
+    }
+  }
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   if (dart_entrypoint_arguments != nullptr) {
     fl_dart_project_set_dart_entrypoint_arguments(project,
@@ -325,10 +354,10 @@ static GtkWindow* my_application_create_window(MyApplication* self,
   GdkRGBA background_color;
   gdk_rgba_parse(&background_color, "#00000000");
   fl_view_set_background_color(view, &background_color);
-  gtk_widget_show(GTK_WIDGET(view));
+  // Do NOT gtk_widget_show(view/window) here — flutter_acrylic's plugin
+  // registrant shows them after wiring the transparent draw callback.
+  // Early show locks in a non-RGBA path on some compositors.
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
-
-  gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 

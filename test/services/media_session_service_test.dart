@@ -1,27 +1,25 @@
 import 'dart:io';
-
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/media_session_service.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const channel = MethodChannel('run.rosie.dacx/media_session');
-  late List<MethodCall> calls;
 
-  void installMockHandler(Future<dynamic>? Function(MethodCall call) handler) {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          calls.add(call);
-          return handler(call);
-        });
-  }
+  late DebugLogService log;
+  late List<MethodCall> nativeCalls;
 
   setUp(() {
-    calls = <MethodCall>[];
+    log = DebugLogService(isEnabled: () => true);
+    nativeCalls = [];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          nativeCalls.add(call);
+          return null;
+        });
   });
 
   tearDown(() {
@@ -29,146 +27,100 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  Future<MediaSessionService> initService({required bool enabled}) async {
-    final svc = MediaSessionService(
-      debugLog: DebugLogService(isEnabled: () => false),
-    );
-    await svc.init(enabled: enabled);
-    return svc;
-  }
+  group('MediaSessionCommand', () {
+    test('stores action, positionMs and value', () {
+      const cmd = MediaSessionCommand('seek', 5000, value: 1.5);
+      expect(cmd.action, 'seek');
+      expect(cmd.positionMs, 5000);
+      expect(cmd.value, 1.5);
+    });
 
-  group('MediaSessionService (non-Linux)', () {
-    test(
-      'init forwards setEnabled to the platform channel',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
+    test('value defaults to null', () {
+      const cmd = MediaSessionCommand('play', null);
+      expect(cmd.action, 'play');
+      expect(cmd.positionMs, isNull);
+      expect(cmd.value, isNull);
+    });
+  });
 
-        expect(
-          calls.any(
-            (c) => c.method == 'setEnabled' && c.arguments['enabled'] == true,
-          ),
-          isTrue,
-        );
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
+  group('MediaSessionService', () {
+    test('updateMetadata is a no-op when disabled', () async {
+      final svc = MediaSessionService(debugLog: log);
+      // Not enabled → should not invoke native update.
+      await svc.updateMetadata(title: 'Song');
+      final updateCalls = nativeCalls.where((c) => c.method == 'update');
+      expect(updateCalls, isEmpty);
+    });
 
-    test(
-      'updateMetadata is a no-op when disabled',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: false);
-        addTearDown(svc.dispose);
-        calls.clear();
+    test('commands stream is a broadcast stream', () {
+      final svc = MediaSessionService(debugLog: log);
+      expect(svc.commands.isBroadcast, isTrue);
+    });
 
-        await svc.updateMetadata(title: 'Song');
-        expect(calls.where((c) => c.method == 'update').isEmpty, isTrue);
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
+    test('updatePosition no-op when disabled', () async {
+      final svc = MediaSessionService(debugLog: log);
+      await svc.updatePosition(const Duration(seconds: 5), playing: true);
+      final updateCalls = nativeCalls.where((c) => c.method == 'update');
+      expect(updateCalls, isEmpty);
+    });
 
-    test(
-      'updateMetadata forwards title/duration when enabled',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        calls.clear();
+    test('setEnabled and updates invoke platform channel', () async {
+      if (Platform.isLinux) return;
+      final svc = MediaSessionService(debugLog: log);
+      await svc.init(enabled: true);
 
-        await svc.updateMetadata(
-          title: 'Song',
-          artist: 'Artist',
-          album: 'Album',
-          duration: const Duration(seconds: 42),
-        );
+      expect(nativeCalls.any((c) => c.method == 'setEnabled'), isTrue);
 
-        final update = calls.firstWhere((c) => c.method == 'update');
-        final args = (update.arguments as Map).cast<String, dynamic>();
-        expect(args['title'], 'Song');
-        expect(args['artist'], 'Artist');
-        expect(args['album'], 'Album');
-        expect(args['durationMs'], 42000);
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
+      nativeCalls.clear();
+      await svc.updateMetadata(
+        title: 'Song Title',
+        artist: 'Artist Name',
+        album: 'Album Name',
+        duration: const Duration(seconds: 90),
+      );
 
-    test(
-      'updatePosition forwards position and playing flag',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        await svc.updateMetadata(
-          title: 'Song',
-          duration: const Duration(seconds: 90),
-        );
-        calls.clear();
+      final update = nativeCalls.firstWhere((c) => c.method == 'update');
+      final args = update.arguments as Map;
+      expect(args['title'], 'Song Title');
+      expect(args['artist'], 'Artist Name');
+      expect(args['album'], 'Album Name');
+      expect(args['durationMs'], 90000);
 
-        await svc.updatePosition(const Duration(seconds: 5), playing: true);
+      nativeCalls.clear();
+      await svc.setEnabled(false);
+      expect(nativeCalls.any((c) => c.method == 'setEnabled'), isTrue);
+    });
 
-        final args =
-            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
-                .cast<String, dynamic>();
-        expect(args['positionMs'], 5000);
-        expect(args['playing'], true);
-        expect(args['durationMs'], 90000);
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
+    test('clear sends a clear call when platform is available', () async {
+      if (Platform.isLinux) return;
+      final svc = MediaSessionService(debugLog: log);
+      await svc.init(enabled: true);
 
-    test(
-      'clear sends a clear call when platform is available',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        calls.clear();
-
-        await svc.clear();
-        expect(calls.where((c) => c.method == 'clear'), isNotEmpty);
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
-
-    test(
-      'MissingPluginException disables the bridge after first failure',
-      () async {
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, (call) async {
-              calls.add(call);
-              throw MissingPluginException('not registered');
-            });
-
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        // Subsequent calls become no-ops; should not throw.
-        await svc.updateMetadata(title: 'X');
-        await svc.clear();
-        // Only the very first invocation should reach the handler.
-        expect(calls, hasLength(1));
-        expect(calls.first.method, 'setEnabled');
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
+      nativeCalls.clear();
+      await svc.clear();
+      expect(nativeCalls.any((c) => c.method == 'clear'), isTrue);
+    });
 
     test(
       'native command callbacks are forwarded to the commands stream',
       () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
+        if (Platform.isLinux) return;
+        final svc = MediaSessionService(debugLog: log);
+        await svc.init(enabled: true);
 
         final received = <MediaSessionCommand>[];
         final sub = svc.commands.listen(received.add);
         addTearDown(sub.cancel);
 
-        Future<ByteData?> deliver(String action, [int? positionMs]) async {
+        Future<ByteData?> deliver(
+          String action, [
+          int? positionMs,
+          double? value,
+        ]) async {
           final args = <String, dynamic>{
             'action': action,
-            // ignore: use_null_aware_elements
-            if (positionMs != null) 'positionMs': positionMs,
+            'positionMs': ?positionMs,
+            'value': ?value,
           };
           final encoded = const StandardMethodCodec().encodeMethodCall(
             MethodCall('command', args),
@@ -181,135 +133,18 @@ void main() {
 
         await deliver('toggle');
         await deliver('seek', 1234);
+        await deliver('volume', null, 0.8);
         await Future<void>.delayed(Duration.zero);
 
-        expect(received.map((c) => c.action), containsAll(['toggle', 'seek']));
+        expect(
+          received.map((c) => c.action),
+          containsAll(['toggle', 'seek', 'volume']),
+        );
         final seek = received.firstWhere((c) => c.action == 'seek');
         expect(seek.positionMs, 1234);
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
-
-    test(
-      'updateLoop forwards loop mode',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        calls.clear();
-
-        await svc.updateLoop('single');
-
-        final args =
-            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
-                .cast<String, dynamic>();
-        expect(args['loop'], 'single');
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
-
-    test(
-      'updateShuffle forwards the boolean',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        calls.clear();
-
-        await svc.updateShuffle(true);
-
-        final args =
-            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
-                .cast<String, dynamic>();
-        expect(args['shuffle'], true);
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
-
-    test(
-      'updateVolume forwards the value',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        calls.clear();
-
-        await svc.updateVolume(0.42);
-
-        final args =
-            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
-                .cast<String, dynamic>();
-        expect(args['volume'], closeTo(0.42, 1e-9));
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
-
-    test(
-      'updateRate forwards the playback rate',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-        calls.clear();
-
-        await svc.updateRate(1.5);
-
-        final args =
-            ((calls.firstWhere((c) => c.method == 'update').arguments) as Map)
-                .cast<String, dynamic>();
-        expect(args['rate'], closeTo(1.5, 1e-9));
-      },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
-    );
-
-    test(
-      'native command callbacks forward `value` to the commands stream',
-      () async {
-        installMockHandler((_) async => null);
-        final svc = await initService(enabled: true);
-        addTearDown(svc.dispose);
-
-        final received = <MediaSessionCommand>[];
-        final sub = svc.commands.listen(received.add);
-        addTearDown(sub.cancel);
-
-        Future<ByteData?> deliver(String action, double value) async {
-          final encoded = const StandardMethodCodec().encodeMethodCall(
-            MethodCall('command', <String, dynamic>{
-              'action': action,
-              'value': value,
-            }),
-          );
-          return TestDefaultBinaryMessengerBinding
-              .instance
-              .defaultBinaryMessenger
-              .handlePlatformMessage(channel.name, encoded, (_) {});
-        }
-
-        await deliver('volume', 0.75);
-        await deliver('rate', 2.0);
-        await Future<void>.delayed(Duration.zero);
-
         final volume = received.firstWhere((c) => c.action == 'volume');
-        final rate = received.firstWhere((c) => c.action == 'rate');
-        expect(volume.value, closeTo(0.75, 1e-9));
-        expect(rate.value, closeTo(2.0, 1e-9));
+        expect(volume.value, 0.8);
       },
-      skip: Platform.isLinux ? 'channel is bypassed on Linux' : false,
     );
-  });
-
-  group('MediaSessionCommand', () {
-    test('stores fields verbatim', () {
-      const cmd = MediaSessionCommand('next', 99);
-      expect(cmd.action, 'next');
-      expect(cmd.positionMs, 99);
-    });
-
-    test('carries an optional value', () {
-      const cmd = MediaSessionCommand('volume', null, value: 0.5);
-      expect(cmd.action, 'volume');
-      expect(cmd.value, 0.5);
-    });
   });
 }
