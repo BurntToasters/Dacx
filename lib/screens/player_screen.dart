@@ -2757,9 +2757,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     // Spectrum analysis segment (only when visualizer is active)
-    if (_settings.audioWaveformEnabled &&
+    final spectrumWanted = _settings.audioWaveformEnabled &&
         _isAudioFile &&
-        _audioSpectrum.isActive) {
+        _audioSpectrum.isActive;
+    if (spectrumWanted) {
       segments.add(AudioSpectrumService.afSegment);
     }
 
@@ -2770,12 +2771,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (ok) {
       _lastAppliedAfChain = merged;
+      // Filter accepted — safe to start polling metadata.
+      if (spectrumWanted) {
+        _audioSpectrum.confirmFilterInstalled();
+      }
     } else {
       _log(
         'audio_filter_apply_failed',
         detailsBuilder: () => {'chain': merged},
         severity: DebugSeverity.warn,
       );
+      // Filter rejected — do NOT poll; would crash mpv.
+      if (spectrumWanted) {
+        _audioSpectrum.confirmFilterFailed();
+      }
+      // If the spectrum segment caused the failure, retry without it.
+      if (spectrumWanted && segments.length > 1) {
+        segments.removeLast();
+        final fallback = segments.join(',');
+        final fallbackOk = await _playerService.setAudioFilter(fallback);
+        if (fallbackOk) {
+          _lastAppliedAfChain = fallback;
+        }
+      }
     }
   }
 
