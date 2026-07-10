@@ -22,7 +22,7 @@ The `.asc` files are my normal GPG signatures which you can verify using my GPG 
 
 ## Changes in `v0.10.0-beta.9 (RC3):`
 * **Audio Visualizer:** Fixed an issue where the audio visualizer prevented music files from being played.
-  - Reminder that this is an experimental feature, meaning its implementation isn't stable and shouldnt be treated as such.
+  - Reminder that this is an experimental feature, meaning its implementation isn't stable and should not be treated as such.
 
 ## Changes in `v0.10.0-beta.8 (RC2):`
 * **Misc:** General fixes to the audio visualizer and UI.
