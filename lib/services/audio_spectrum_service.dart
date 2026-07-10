@@ -63,7 +63,6 @@ class AudioSpectrumService {
   static const String _rmsRightProperty =
       'af-metadata/$_afLabel/lavfi.astats.2.RMS_level';
 
-
   /// Start polling. Call after playback begins.
   /// Does NOT start the poll timer until [confirmFilterInstalled] is called.
   Future<void> start() async {
@@ -180,11 +179,13 @@ class AudioSpectrumService {
       // This creates a natural-looking frequency distribution.
       final bassWeight = math.pow(1.0 - position, 1.6).toDouble();
       final trebleWeight = math.pow(position, 2.2).toDouble();
-      final midWeight =
-          math.sin(position * math.pi).toDouble(); // peak at center
+      final midWeight = math
+          .sin(position * math.pi)
+          .toDouble(); // peak at center
 
       // Combine: overall provides the base, with bass/treble shaping
-      final shaped = overallEnergy *
+      final shaped =
+          overallEnergy *
           (0.55 + 0.30 * bassWeight + 0.15 * midWeight - 0.08 * trebleWeight);
 
       // Add stereo variation: left-heavy signals boost low bands, right boosts high

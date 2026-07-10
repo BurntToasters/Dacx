@@ -2757,7 +2757,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     // Spectrum analysis segment (only when visualizer is active)
-    final spectrumWanted = _settings.audioWaveformEnabled &&
+    final spectrumWanted =
+        _settings.audioWaveformEnabled &&
         _isAudioFile &&
         _audioSpectrum.isActive;
     if (spectrumWanted) {
