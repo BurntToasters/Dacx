@@ -834,6 +834,14 @@ class SettingsService extends ChangeNotifier {
         result = <String, _ResumeEntry>{};
       }
     }
+    if (result.isNotEmpty) {
+      final maxAccess = result.values
+          .map((entry) => entry.lastAccessMs)
+          .fold<int>(0, (max, value) => value > max ? value : max);
+      if (maxAccess > _resumeAccessCounter) {
+        _resumeAccessCounter = maxAccess;
+      }
+    }
     _resumePositionsCache = Map<String, _ResumeEntry>.of(result);
     return result;
   }

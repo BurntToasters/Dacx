@@ -83,7 +83,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAudioWaveformSubtitle =>
-      'Show a bass→treble spectrum above the playhead (simulated; not real FFT yet)';
+      'Show audio-reactive bars above the playhead';
 
   @override
   String get settingsAllowMultipleWindowsSubtitle =>

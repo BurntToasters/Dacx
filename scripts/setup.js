@@ -247,7 +247,7 @@ function setupLinux() {
   commonSetup();
 
   // ── appimagetool ──────────────────────────────────────────────
-  header('Installing appimagetool (.AppImage builds)');
+  header('appimagetool (.AppImage builds)');
   let machineArch = 'x86_64';
   try {
     machineArch = execSync('uname -m', { encoding: 'utf8' }).trim();
@@ -255,20 +255,25 @@ function setupLinux() {
     // uname unavailable — default to x86_64
   }
   const appimageArch = machineArch === 'aarch64' ? 'aarch64' : 'x86_64';
-  const appimageUrl =
-    `https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-${appimageArch}.AppImage`;
-  const tmpPath = '/tmp/appimagetool-download';
-  // Best-effort: run() exits the process on failure unless allowFail is set,
-  // so each step must pass allowFail and we branch on the boolean result.
-  const appimageInstalled =
-    run(`curl -fL --progress-bar -o "${tmpPath}" "${appimageUrl}"`, { allowFail: true }) &&
-    run(`chmod +x "${tmpPath}"`, { allowFail: true }) &&
-    run(`sudo mv -f "${tmpPath}" /usr/local/bin/appimagetool`, { allowFail: true });
-  if (appimageInstalled) {
-    console.log('✔ appimagetool installed → /usr/local/bin/appimagetool');
+  const appimageUrl = `https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-${appimageArch}.AppImage`;
+  const allowUnverifiedInstall = process.env.DACX_ALLOW_UNVERIFIED_APPIMAGETOOL === '1';
+  if (allowUnverifiedInstall) {
+    const tmpPath = '/tmp/appimagetool-download';
+    const appimageInstalled =
+      run(`curl -fL --progress-bar -o "${tmpPath}" "${appimageUrl}"`, { allowFail: true }) &&
+      run(`chmod +x "${tmpPath}"`, { allowFail: true }) &&
+      run(`sudo mv -f "${tmpPath}" /usr/local/bin/appimagetool`, { allowFail: true });
+    if (appimageInstalled) {
+      console.log('✔ appimagetool installed → /usr/local/bin/appimagetool');
+    } else {
+      console.warn('⚠ appimagetool install failed — .AppImage builds will be skipped.');
+      console.warn('  Install manually from a trusted release asset and verify checksum/signature first.');
+    }
   } else {
-    console.warn('⚠ appimagetool install failed — .AppImage builds will be skipped.');
-    console.warn('  Install manually: https://github.com/AppImage/appimagetool/releases');
+    console.warn('⚠ Skipping automatic appimagetool install by default (security hardening).');
+    console.warn('  Install manually with signature/checksum verification:');
+    console.warn(`  ${appimageUrl}`);
+    console.warn('  To force the previous behavior, set DACX_ALLOW_UNVERIFIED_APPIMAGETOOL=1.');
   }
 
   // ── Flatpak build runtime ─────────────────────────────────────

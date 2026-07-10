@@ -1,12 +1,8 @@
 #!/usr/bin/env node
 /**
- * Cheap-ish "does the Dart side actually compile in production mode"
- * smoke check. Runs `flutter build bundle` which performs tree-shaking
- * and asset resolution but skips native compilation, so it works on any
- * developer machine without platform toolchains.
- *
- * Skipped automatically when DACX_SKIP_BUILD_SMOKE=1 is set, or when
- * `flutter` is not on PATH (warn only).
+ * Build smoke gate.
+ * - CI: compile host desktop runner to catch native Swift/C++ regressions.
+ * - Local: run flutter build bundle as a cheap Dart-side sanity check.
  */
 import { spawnSync } from "node:child_process";
 import crossSpawn from "cross-spawn";
@@ -31,7 +27,20 @@ if (which.status !== 0) {
 }
 
 const start = Date.now();
-const r = crossSpawn.sync("fvm", ["flutter", "build", "bundle", "--release"], {
+const ci = process.env.CI === "true" || process.env.CI === "1";
+const args = ci
+  ? [
+      "flutter",
+      "build",
+      process.platform === "darwin"
+        ? "macos"
+        : process.platform === "win32"
+          ? "windows"
+          : "linux",
+      "--debug",
+    ]
+  : ["flutter", "build", "bundle", "--release"];
+const r = crossSpawn.sync("fvm", args, {
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,
@@ -41,15 +50,12 @@ const combinedOutput = `${r.stdout ?? ""}${r.stderr ?? ""}`;
 process.stdout.write(r.stdout ?? "");
 process.stderr.write(r.stderr ?? "");
 if (r.status !== 0) {
-  // The Flutter native_assets pipeline still resolves the Android target
-  // even for `build bundle`, so a missing Android SDK on a developer
-  // machine produces a confusing failure that has nothing to do with
-  // Dart code health. Treat this as inconclusive locally; in CI we want
-  // a real environment, so surface the failure.
+  // The Flutter native_assets pipeline can still probe Android SDK while
+  // building non-Android targets. Treat this as inconclusive locally.
   if (/Android SDK could not be found/.test(combinedOutput)) {
-    if (process.env.CI) {
+    if (ci) {
       console.error(
-        `flutter build bundle failed after ${elapsed}s; Android SDK missing in CI environment.`,
+        `flutter build failed after ${elapsed}s; Android SDK missing in CI environment.`,
       );
       process.exit(r.status ?? 1);
     }
@@ -58,7 +64,7 @@ if (r.status !== 0) {
     );
     process.exit(0);
   }
-  console.error(`flutter build bundle failed after ${elapsed}s.`);
+  console.error(`flutter build smoke failed after ${elapsed}s.`);
   process.exit(r.status ?? 1);
 }
 if (/do not support Swift Package Manager/i.test(combinedOutput)) {

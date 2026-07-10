@@ -51,6 +51,10 @@ class PlayerService {
     await player.open(Media(filePath), play: play);
   }
 
+  Future<void> play() => _guard('play', player.play);
+
+  Future<void> pause() => _guard('pause', player.pause);
+
   Future<void> playPause() => _guard('playPause', player.playOrPause);
 
   Future<void> stop() => _guard('stop', player.stop);
@@ -88,11 +92,26 @@ class PlayerService {
           final platform = player.platform;
           if (platform is NativePlayer) {
             await platform.setProperty(name, value);
+            if (_shouldVerifySetProperty(name)) {
+              final actual = (await platform.getProperty(name)).trim();
+              return actual == value.trim();
+            }
             return true;
           }
           return false;
         }) ??
         false;
+  }
+
+  bool _shouldVerifySetProperty(String name) {
+    switch (name) {
+      case 'chapter':
+      case 'hwdec':
+      case 'af':
+        return true;
+      default:
+        return false;
+    }
   }
 
   Future<String?> getProperty(String name) async {

@@ -45,11 +45,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
           file_paths.push_back(arg);
         }
       }
-      if (!file_paths.empty()) {
-        dacx::ForwardToRunningInstance(file_paths);
+      if (file_paths.empty()) {
+        ::CoUninitialize();
+        return EXIT_SUCCESS;
       }
-      ::CoUninitialize();
-      return EXIT_SUCCESS;
+      bool forwarded = false;
+      for (int attempt = 0; attempt < 10 && !forwarded; ++attempt) {
+        forwarded = dacx::ForwardToRunningInstance(file_paths);
+        if (!forwarded) {
+          ::Sleep(150);
+        }
+      }
+      if (forwarded) {
+        ::CoUninitialize();
+        return EXIT_SUCCESS;
+      }
+      // Pipe server may not be ready yet despite singleton mutex ownership.
+      // Continue startup so file-open requests are not dropped.
+      ::OutputDebugStringW(
+          L"[Dacx] ForwardToRunningInstance unavailable; continuing with new window.\n");
     }
   }
 

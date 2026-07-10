@@ -55,7 +55,9 @@ void _installAsyncErrorHandler(DebugLogService debugLog) {
       message: error.toString(),
       severity: DebugSeverity.error,
     );
-    return true;
+    // Let the platform fallback path still report the failure in production
+    // even when debug logging is disabled.
+    return false;
   };
 }
 
