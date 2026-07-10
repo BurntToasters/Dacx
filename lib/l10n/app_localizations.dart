@@ -235,7 +235,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAudioWaveformSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show audio-reactive bars above the playhead'**
+  /// **'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)'**
   String get settingsAudioWaveformSubtitle;
 
   /// No description provided for @settingsAllowMultipleWindowsSubtitle.

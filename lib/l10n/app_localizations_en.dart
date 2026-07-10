@@ -83,7 +83,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAudioWaveformSubtitle =>
-      'Show audio-reactive bars above the playhead';
+      'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)';
 
   @override
   String get settingsAllowMultipleWindowsSubtitle =>
