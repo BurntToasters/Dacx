@@ -206,7 +206,11 @@ void main() {
     });
 
     test('UpdateInfo defaults to empty assets', () {
-      const info = UpdateInfo(version: '1.0.0', url: 'https://x.com', notes: '');
+      const info = UpdateInfo(
+        version: '1.0.0',
+        url: 'https://x.com',
+        notes: '',
+      );
       expect(info.assets, isEmpty);
     });
   });

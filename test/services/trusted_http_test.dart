@@ -19,10 +19,10 @@ void main() {
       final context = SecurityContext(withTrustedRoots: false);
       // Invalid certificate data but valid base64 — should not throw.
       expect(
-        () => applyTrustedCertificatesFromBase64Lines(
-          context,
-          [base64Encode([0, 1, 2, 3]), 'not-base64!!!'],
-        ),
+        () => applyTrustedCertificatesFromBase64Lines(context, [
+          base64Encode([0, 1, 2, 3]),
+          'not-base64!!!',
+        ]),
         returnsNormally,
       );
     });

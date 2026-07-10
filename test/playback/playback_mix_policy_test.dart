@@ -107,10 +107,7 @@ void main() {
     });
 
     test('update filters and stores numeric ids', () {
-      state.update(
-        audioIds: ['auto', '1', '2', 'no'],
-        videoIds: ['auto', '1'],
-      );
+      state.update(audioIds: ['auto', '1', '2', 'no'], videoIds: ['auto', '1']);
       expect(state.audioIds, ['1', '2']);
       expect(state.videoIds, ['1']);
       expect(state.canMix, isTrue);

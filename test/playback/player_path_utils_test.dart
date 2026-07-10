@@ -7,7 +7,10 @@ void main() {
   group('PlayerPathUtils', () {
     group('coerceOpenPath', () {
       test('string value returns trimmed path', () {
-        expect(PlayerPathUtils.coerceOpenPath('  /tmp/file.mp3  '), '/tmp/file.mp3');
+        expect(
+          PlayerPathUtils.coerceOpenPath('  /tmp/file.mp3  '),
+          '/tmp/file.mp3',
+        );
       });
 
       test('empty string returns null', () {
@@ -77,7 +80,10 @@ void main() {
     group('normalizeDropPath', () {
       test('non-file-uri returns trimmed input', () {
         expect(
-          PlayerPathUtils.normalizeDropPath('  /path/to/file.mp3  ', windows: false),
+          PlayerPathUtils.normalizeDropPath(
+            '  /path/to/file.mp3  ',
+            windows: false,
+          ),
           '/path/to/file.mp3',
         );
       });
@@ -147,8 +153,9 @@ void main() {
       });
 
       test('audioExtensions and videoExtensions are disjoint', () {
-        final overlap = PlayerPathUtils.audioExtensions
-            .intersection(PlayerPathUtils.videoExtensions);
+        final overlap = PlayerPathUtils.audioExtensions.intersection(
+          PlayerPathUtils.videoExtensions,
+        );
         expect(overlap, isEmpty);
       });
 
@@ -156,7 +163,9 @@ void main() {
         expect(
           PlayerPathUtils.supportedExtensions,
           equals(
-            PlayerPathUtils.audioExtensions.union(PlayerPathUtils.videoExtensions),
+            PlayerPathUtils.audioExtensions.union(
+              PlayerPathUtils.videoExtensions,
+            ),
           ),
         );
       });
@@ -165,14 +174,18 @@ void main() {
     group('isPermissionDeniedError', () {
       test('detects permission denied string', () {
         expect(
-          PlayerPathUtils.isPermissionDeniedError(Exception('Permission denied')),
+          PlayerPathUtils.isPermissionDeniedError(
+            Exception('Permission denied'),
+          ),
           isTrue,
         );
       });
 
       test('detects access is denied string', () {
         expect(
-          PlayerPathUtils.isPermissionDeniedError(Exception('Access is denied')),
+          PlayerPathUtils.isPermissionDeniedError(
+            Exception('Access is denied'),
+          ),
           isTrue,
         );
       });
@@ -195,14 +208,17 @@ void main() {
         expect(PlayerPathUtils.isPermissionDeniedError(error), isTrue);
       });
 
-      test('detects FileSystemException with error code 5 (Windows ACCESS_DENIED)', () {
-        final error = FileSystemException(
-          'Cannot open',
-          'C:\\x',
-          const OSError('Access denied', 5),
-        );
-        expect(PlayerPathUtils.isPermissionDeniedError(error), isTrue);
-      });
+      test(
+        'detects FileSystemException with error code 5 (Windows ACCESS_DENIED)',
+        () {
+          final error = FileSystemException(
+            'Cannot open',
+            'C:\\x',
+            const OSError('Access denied', 5),
+          );
+          expect(PlayerPathUtils.isPermissionDeniedError(error), isTrue);
+        },
+      );
 
       test('returns false for unrelated errors', () {
         expect(

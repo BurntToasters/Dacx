@@ -5,19 +5,52 @@ void main() {
   group('EqualizerService', () {
     group('buildAfChain', () {
       test('flat gains produce empty chain', () {
-        final chain = EqualizerService.buildAfChain([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        final chain = EqualizerService.buildAfChain([
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]);
         expect(chain, isEmpty);
       });
 
       test('single non-zero gain produces one filter', () {
-        final chain = EqualizerService.buildAfChain([6, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        final chain = EqualizerService.buildAfChain([
+          6,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]);
         expect(chain, contains('equalizer=f=31'));
         expect(chain, contains('g=6.00'));
         expect(chain.split(',').length, 1);
       });
 
       test('multiple non-zero gains produce comma-separated filters', () {
-        final chain = EqualizerService.buildAfChain([3, 0, 0, 0, 0, 0, 0, 0, 0, -4]);
+        final chain = EqualizerService.buildAfChain([
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -4,
+        ]);
         final parts = chain.split(',');
         expect(parts.length, 2);
         expect(parts[0], contains('f=31'));
@@ -27,18 +60,51 @@ void main() {
       });
 
       test('gains are clamped to -12..12', () {
-        final chain = EqualizerService.buildAfChain([20, -20, 0, 0, 0, 0, 0, 0, 0, 0]);
+        final chain = EqualizerService.buildAfChain([
+          20,
+          -20,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]);
         expect(chain, contains('g=12.00'));
         expect(chain, contains('g=-12.00'));
       });
 
       test('very small gains below 0.05 are treated as zero', () {
-        final chain = EqualizerService.buildAfChain([0.04, -0.03, 0, 0, 0, 0, 0, 0, 0, 0]);
+        final chain = EqualizerService.buildAfChain([
+          0.04,
+          -0.03,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]);
         expect(chain, isEmpty);
       });
 
       test('each filter uses lavfi format with width_type=o', () {
-        final chain = EqualizerService.buildAfChain([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        final chain = EqualizerService.buildAfChain([
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]);
         expect(chain, contains('lavfi=[equalizer='));
         expect(chain, contains('width_type=o'));
         expect(chain, contains('width=2'));
@@ -50,7 +116,20 @@ void main() {
       });
 
       test('extra gains beyond 10 bands are ignored', () {
-        final chain = EqualizerService.buildAfChain([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        final chain = EqualizerService.buildAfChain([
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+        ]);
         // Should only produce filters for the 10 defined frequency bands
         final parts = chain.split(',');
         expect(parts.length, 10);
@@ -83,15 +162,24 @@ void main() {
       });
 
       test('values within epsilon of zero are flat', () {
-        expect(EqualizerService.isFlat([0.04, -0.04, 0.01, 0, 0, 0, 0, 0, 0, 0]), isTrue);
+        expect(
+          EqualizerService.isFlat([0.04, -0.04, 0.01, 0, 0, 0, 0, 0, 0, 0]),
+          isTrue,
+        );
       });
 
       test('any value above epsilon is not flat', () {
-        expect(EqualizerService.isFlat([0, 0, 0, 0, 0.1, 0, 0, 0, 0, 0]), isFalse);
+        expect(
+          EqualizerService.isFlat([0, 0, 0, 0, 0.1, 0, 0, 0, 0, 0]),
+          isFalse,
+        );
       });
 
       test('negative values above epsilon are not flat', () {
-        expect(EqualizerService.isFlat([0, 0, 0, -1, 0, 0, 0, 0, 0, 0]), isFalse);
+        expect(
+          EqualizerService.isFlat([0, 0, 0, -1, 0, 0, 0, 0, 0, 0]),
+          isFalse,
+        );
       });
 
       test('empty list is flat', () {
@@ -102,7 +190,11 @@ void main() {
     group('kEqPresets', () {
       test('all presets have 10 bands', () {
         for (final preset in kEqPresets) {
-          expect(preset.gains.length, 10, reason: '${preset.id} should have 10 bands');
+          expect(
+            preset.gains.length,
+            10,
+            reason: '${preset.id} should have 10 bands',
+          );
         }
       });
 

@@ -86,10 +86,7 @@ void main() {
 
     test('error category is always logged even when disabled', () {
       final disabled = DebugLogService(isEnabled: () => false);
-      disabled.log(
-        category: DebugLogCategory.error,
-        event: 'fatal',
-      );
+      disabled.log(category: DebugLogCategory.error, event: 'fatal');
       expect(disabled.entryCount, 1);
     });
 
@@ -226,7 +223,8 @@ void main() {
         category: DebugLogCategory.playback,
         severity: DebugSeverity.info,
         event: 'stream',
-        message: 'playing https://stream.example.com/secret/path/file.mp3?token=abc',
+        message:
+            'playing https://stream.example.com/secret/path/file.mp3?token=abc',
       );
       final text = DebugLogService.formatEntry(entry);
       // URL query params should be redacted

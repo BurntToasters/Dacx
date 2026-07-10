@@ -66,7 +66,11 @@ void main() {
 
     test('trims whitespace from title and language', () {
       expect(
-        formatTrackLabel(title: '  Hello  ', language: '  eng  ', fallbackId: '1'),
+        formatTrackLabel(
+          title: '  Hello  ',
+          language: '  eng  ',
+          fallbackId: '1',
+        ),
         'Hello \u00b7 eng',
       );
     });
