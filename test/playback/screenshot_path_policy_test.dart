@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:dacx/playback/screenshot_path_policy.dart';
 
@@ -42,7 +43,7 @@ void main() {
         format: 'png',
         timestamp: DateTime.utc(2026, 3, 21, 14, 30, 45),
       );
-      expect(path, '/tmp/shots/clip_2026-03-21T14-30-45.png');
+      expect(path, p.join('/tmp/shots', 'clip_2026-03-21T14-30-45.png'));
     });
   });
 }
