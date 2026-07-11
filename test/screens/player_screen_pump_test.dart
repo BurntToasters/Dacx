@@ -264,7 +264,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(player.openCalls.map((c) => c.path), contains('/media/second.flac'));
-    expect(find.bySemanticsLabel('Play: second.flac'), findsOneWidget);
+    expect(find.bySemanticsLabel('Play: second.flac. Reorder'), findsOneWidget);
   });
 
   testWidgets('rapid queue taps keep the last selected item', (tester) async {
@@ -303,7 +303,7 @@ void main() {
       '/media/second.flac',
       '/media/third.mkv',
     ]);
-    expect(find.bySemanticsLabel('Play: third.mkv'), findsOneWidget);
+    expect(find.bySemanticsLabel('Play: third.mkv. Reorder'), findsOneWidget);
   });
 
   testWidgets('settings resume toggle persists from player navigation', (
@@ -1334,10 +1334,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(player.openCalls, isEmpty);
-    expect(
-      find.textContaining('outside the sandbox or inaccessible'),
-      findsOneWidget,
-    );
+    expect(find.text('Could not read dropped file path.'), findsOneWidget);
   });
 
   testWidgets('shift p wraps to last item when loop-all is enabled', (
@@ -1512,10 +1509,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(player.openCalls.map((c) => c.path), contains('/media/valid.mp3'));
-    expect(
-      find.textContaining('outside the sandbox or inaccessible'),
-      findsOneWidget,
-    );
+    expect(find.text('Skipped 2 unreadable files.'), findsOneWidget);
   });
 
   testWidgets('ctrl arrow left at first chapter stays on intro', (
