@@ -27,6 +27,7 @@ enum PlayerShortcutAction {
   speedSlower,
   speedFaster,
   cycleSpeed,
+  openUrl,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -55,6 +56,7 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.speedSlower: ['['],
   PlayerShortcutAction.speedFaster: [']'],
   PlayerShortcutAction.cycleSpeed: ['\\'],
+  PlayerShortcutAction.openUrl: ['Ctrl+U'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -85,6 +87,7 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.speedSlower => l10n.shortcutSpeedSlower,
       PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
       PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
+      PlayerShortcutAction.openUrl => l10n.shortcutOpenUrl,
     };
   }
   return switch (a) {
@@ -112,6 +115,7 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.speedSlower => 'Decrease playback speed',
     PlayerShortcutAction.speedFaster => 'Increase playback speed',
     PlayerShortcutAction.cycleSpeed => 'Cycle playback speed',
+    PlayerShortcutAction.openUrl => 'Open URL',
   };
 }
 
@@ -182,6 +186,11 @@ class PlayerShortcutsService {
         primaryModifierPressed &&
         key == LogicalKeyboardKey.keyO) {
       return PlayerShortcutAction.openFile;
+    }
+    if (event is KeyDownEvent &&
+        primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyU) {
+      return PlayerShortcutAction.openUrl;
     }
     if (event is KeyDownEvent &&
         primaryModifierPressed &&
@@ -320,6 +329,19 @@ class PlayerShortcutsService {
     if (shift) parts.add('Shift');
     parts.add(_keyLabel(key));
     return parts.join('+');
+  }
+
+  /// Formats a stored accelerator for UI (⌘ on macOS instead of Ctrl).
+  static String formatAcceleratorForDisplay(
+    String accelerator, {
+    required bool useMacSymbols,
+  }) {
+    if (!useMacSymbols) return accelerator;
+    return accelerator
+        .replaceAll('Ctrl+', '⌘')
+        .replaceAll('Meta+', '⌘')
+        .replaceAll('Alt+', '⌥')
+        .replaceAll('Shift+', '⇧');
   }
 
   /// Public helper: translate a live key event into an accelerator string.

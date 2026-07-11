@@ -51,13 +51,17 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
 ## Features
 
 - Audio + video playback for MP3, FLAC, WAV, OGG, AAC, Opus, MP4, MKV, AVI, WebM, and more (anything libmpv handles).
+- Playlist files (`.m3u` / `.pls` import + save queue as `.m3u`); HLS `.m3u8` streams via mpv.
+- Playback speed control (transport chip + `[` / `]` / `\` shortcuts).
+- External audio / subtitle track load from the more menu.
 - 10-band equalizer with presets.
 - Optional multi-audio-track mixing via `lavfi-complex` (Experimental Features; unstable).
 - Optional audio spectrum visualizer (Experimental Features; off by default).
+- Optional seek thumbnails (Playback settings; uses extra memory).
 - Window transparency / background blur on Windows and macOS (Appearance settings). Linux compositor blur remains experimental.
 - Resume playback from where you left off; session queue restore.
 - Compact mode and always-on-top window.
-- System media-session integration: lock-screen / Now Playing / SMTC / MPRIS controls, artwork, and scrubbing.
+- System media-session integration: lock-screen / Now Playing / SMTC / MPRIS controls, artwork, rate, and scrubbing.
 - File associations + custom document icon on Windows, macOS, and Linux.
 - Built-in update checker: in-app self-update on **Windows (MSI)** and **macOS** (`/Applications`); Linux uses package-aware guidance (no in-app installer).
 - Notarized & signed DMG/ZIP for macOS; Windows/Linux packages carry **GPG** detached signatures. Windows MSI is not Authenticode-signed by default (SmartScreen may warn); optional Authenticode is a release-machine concern (see `SECURITY.md`).

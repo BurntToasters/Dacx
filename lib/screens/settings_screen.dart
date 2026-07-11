@@ -21,12 +21,14 @@ class SettingsScreen extends StatefulWidget {
   final SettingsService settings;
   final DebugLogService debugLog;
   final UpdateService updateService;
+  final VoidCallback? onEditKeybinds;
 
   const SettingsScreen({
     super.key,
     required this.settings,
     required this.debugLog,
     required this.updateService,
+    this.onEditKeybinds,
   });
 
   @override
@@ -179,15 +181,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             _windowBlurTile(),
                             _windowBlurStrengthTile(),
                           ],
-                          if (_s.experimentalFeaturesEnabled) ...[
-                            if (Platform.isLinux) ...[
-                              _experimentalTile(_linuxCompositorBlurTile()),
-                              _experimentalTile(_windowOpacityTile()),
-                              _experimentalTile(_windowBlurTile()),
-                              _experimentalTile(_windowBlurStrengthTile()),
-                            ],
-                            _experimentalTile(_audioWaveformTile()),
-                          ],
                           SwitchListTile(
                             title: Text(l10n.settingsAlwaysOnTop),
                             value: _s.alwaysOnTop,
@@ -245,6 +238,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const Divider(),
                           _sectionHeader(l10n.settingsSectionExperimental),
                           _experimentalTile(_experimentalFeaturesTile()),
+                          if (_s.experimentalFeaturesEnabled) ...[
+                            if (Platform.isLinux) ...[
+                              _experimentalTile(_linuxCompositorBlurTile()),
+                              _experimentalTile(_windowOpacityTile()),
+                              _experimentalTile(_windowBlurTile()),
+                              _experimentalTile(_windowBlurStrengthTile()),
+                            ],
+                            _experimentalTile(_audioWaveformTile()),
+                            _experimentalTile(_multiAudioMixTile()),
+                          ],
                           if (_s.debugModeEnabled) ...[
                             const Divider(),
                             _sectionHeader(l10n.settingsSectionDebug),
@@ -740,6 +743,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _multiAudioMixTile() {
+    final l10n = AppLocalizations.of(context);
+    return SwitchListTile(
+      secondary: _experimentalWarningIcon(),
+      title: Text(l10n.menuMixAllAudioTracks),
+      subtitle: Text(l10n.settingsMultiAudioMixSubtitle),
+      value: _s.multiAudioMix,
+      onChanged: (v) => setState(() {
+        _s.multiAudioMix = v;
+        if (v) {
+          _s.audioWaveformEnabled = false;
+        }
+        _log('multi_audio_mix_changed', detailsBuilder: () => {'value': v});
+      }),
+    );
+  }
+
   Widget _experimentalFeaturesTile() {
     final l10n = AppLocalizations.of(context);
     return SwitchListTile(
@@ -757,9 +777,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'experimental_features_changed',
             detailsBuilder: () => {'value': v},
           );
-          if (!v) {
+          // Win/mac blur + opacity live under Appearance (graduated). Only
+          // clear them on Linux, where they remain experimental-gated.
+          if (!v && Platform.isLinux) {
             _s.windowBlurEnabled = false;
             _s.windowOpacity = 1.0;
+            _s.linuxCompositorBlurExperimental = false;
           }
         });
       },
@@ -923,41 +946,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _keyboardShortcutsTile() {
     final l10n = AppLocalizations.of(context);
-    final openShortcut = Platform.isMacOS ? '⌘O' : 'Ctrl+O';
-    final reopenShortcut = Platform.isMacOS ? '⌘R' : 'Ctrl+R';
     return ListTile(
       title: Text(l10n.settingsKeyboardShortcuts),
       leading: const Icon(Icons.keyboard),
+      subtitle: Text(l10n.keybindsTip),
       onTap: () {
         _log('keyboard_shortcuts_opened', category: DebugLogCategory.ui);
-        showDialog(
+        final edit = widget.onEditKeybinds;
+        if (edit != null) {
+          edit();
+          return;
+        }
+        // Fallback if opened without a host (tests): show tip only.
+        showDialog<void>(
           context: context,
           builder: (dialogContext) {
             final dialogL10n = AppLocalizations.of(dialogContext);
             return AlertDialog(
               title: Text(dialogL10n.settingsKeyboardShortcuts),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ShortcutRow(
-                    openShortcut,
-                    dialogL10n.settingsShortcutOpenFile,
-                  ),
-                  _ShortcutRow(
-                    reopenShortcut,
-                    dialogL10n.settingsShortcutReopenLast,
-                  ),
-                  _ShortcutRow('Space', dialogL10n.settingsShortcutPlayPause),
-                  _ShortcutRow('←  →', dialogL10n.settingsShortcutSeek),
-                  _ShortcutRow('↑  ↓', dialogL10n.settingsShortcutVolume),
-                  _ShortcutRow('M', dialogL10n.settingsShortcutMute),
-                  _ShortcutRow('F', dialogL10n.settingsShortcutFullscreen),
-                  _ShortcutRow(
-                    'Esc',
-                    dialogL10n.settingsShortcutExitFullscreen,
-                  ),
-                ],
-              ),
+              content: Text(dialogL10n.keybindsTip),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext),
@@ -1253,35 +1260,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? l10n.snackDebugModeEnabled
               : l10n.snackDebugModeDisabled,
         ),
-      ),
-    );
-  }
-}
-
-class _ShortcutRow extends StatelessWidget {
-  final String shortcut;
-  final String description;
-
-  const _ShortcutRow(this.shortcut, this.description);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              shortcut,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(child: Text(description)),
-        ],
       ),
     );
   }

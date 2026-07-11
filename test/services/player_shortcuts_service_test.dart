@@ -424,6 +424,46 @@ void main() {
         PlayerShortcutAction.cycleSpeed,
       );
     });
+
+    test('Ctrl/Cmd+U opens URL', () {
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.keyU),
+          hasMedia: false,
+          isMetaPressed: false,
+          isControlPressed: true,
+        ),
+        PlayerShortcutAction.openUrl,
+      );
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.keyU),
+          hasMedia: false,
+          isMetaPressed: true,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.openUrl,
+      );
+    });
+  });
+
+  group('formatAcceleratorForDisplay', () {
+    test('maps Ctrl to command symbol on mac style', () {
+      expect(
+        PlayerShortcutsService.formatAcceleratorForDisplay(
+          'Ctrl+O',
+          useMacSymbols: true,
+        ),
+        '⌘O',
+      );
+      expect(
+        PlayerShortcutsService.formatAcceleratorForDisplay(
+          'Ctrl+O',
+          useMacSymbols: false,
+        ),
+        'Ctrl+O',
+      );
+    });
   });
 
   group('shortcutActionLabel', () {
