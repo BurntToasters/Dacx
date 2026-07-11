@@ -51,6 +51,10 @@
 					<string>opus</string>
 					<string>ape</string>
 					<string>alac</string>
+					<string>aiff</string>
+					<string>aif</string>
+					<string>wv</string>
+					<string>mpc</string>
 				</array>
 				<key>public.mime-type</key>
 				<array>
@@ -65,6 +69,10 @@
 					<string>audio/opus</string>
 					<string>audio/x-ape</string>
 					<string>audio/alac</string>
+					<string>audio/aiff</string>
+					<string>audio/x-aiff</string>
+					<string>audio/x-wavpack</string>
+					<string>audio/x-musepack</string>
 				</array>
 			</dict>
 		</dict>
@@ -95,6 +103,13 @@
 					<string>wmv</string>
 					<string>flv</string>
 					<string>m4v</string>
+					<string>ts</string>
+					<string>m2ts</string>
+					<string>mts</string>
+					<string>mpg</string>
+					<string>mpeg</string>
+					<string>vob</string>
+					<string>ogv</string>
 				</array>
 				<key>public.mime-type</key>
 				<array>
@@ -106,6 +121,9 @@
 					<string>video/x-ms-wmv</string>
 					<string>video/x-flv</string>
 					<string>video/x-m4v</string>
+					<string>video/mp2t</string>
+					<string>video/mpeg</string>
+					<string>video/ogg</string>
 				</array>
 			</dict>
 		</dict>

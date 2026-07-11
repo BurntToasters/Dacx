@@ -86,12 +86,35 @@
                                     <action selector="openMediaFile:" target="Voe-Tx-rLC" id="Fil-Op-Ac0"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Open Folder…" id="Fil-Op-Fld">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="openMediaFolder:" target="Voe-Tx-rLC" id="Fil-Fld-Ac0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open Playlist…" id="Fil-Op-Pls">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="openMediaPlaylist:" target="Voe-Tx-rLC" id="Fil-Pls-Ac0"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Open URL…" keyEquivalent="u" id="Fil-Op-Url">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES" shift="YES"/>
                                 <connections>
                                     <action selector="openMediaUrl:" target="Voe-Tx-rLC" id="Fil-Url-Ac0"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Reopen Last" keyEquivalent="r" id="Fil-Op-Reo">
+                                <connections>
+                                    <action selector="reopenLastMedia:" target="Voe-Tx-rLC" id="Fil-Reo-Ac0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="New Window" keyEquivalent="n" id="Fil-Nw-Win">
+                                <connections>
+                                    <action selector="newPlayerWindow:" target="Voe-Tx-rLC" id="Fil-Nw-Ac0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Fil-Sep-01"/>
                             <menuItem title="Open Recent" id="Fil-Rc-nt0">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <menu key="submenu" title="Open Recent" id="Fil-Rc-nt1">
@@ -99,6 +122,13 @@
                                         <menuItem title="No Recent Files" enabled="NO" id="Fil-Rc-Emp"/>
                                     </items>
                                 </menu>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Fil-Sep-02"/>
+                            <menuItem title="Save Playlist…" id="Fil-Sv-Pls">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="savePlaylist:" target="Voe-Tx-rLC" id="Fil-SvP-Ac0"/>
+                                </connections>
                             </menuItem>
                         </items>
                     </menu>

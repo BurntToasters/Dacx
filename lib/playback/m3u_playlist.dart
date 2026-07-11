@@ -32,6 +32,27 @@ abstract final class M3uPlaylist {
     return parse(content, baseDir: p.dirname(playlistPath));
   }
 
+  /// Serializes [sources] as an `#EXTM3U` playlist (absolute paths / URLs).
+  static String encode(List<PlayableSource> sources) {
+    final buf = StringBuffer('#EXTM3U\n');
+    for (final source in sources) {
+      final value = source.value.trim();
+      if (value.isEmpty) continue;
+      if (source.isUrl && !PlayableSource.isSupportedUrl(value)) continue;
+      if (source.isFile && PlayerPathUtils.isUnsafeOpenPath(value)) continue;
+      buf.writeln(value);
+    }
+    return buf.toString();
+  }
+
+  static Future<void> writeFile(
+    String playlistPath,
+    List<PlayableSource> sources,
+  ) async {
+    final file = File(playlistPath);
+    await file.writeAsString(encode(sources), flush: true);
+  }
+
   static List<PlayableSource> _parseM3u(String content, {String? baseDir}) {
     final out = <PlayableSource>[];
     for (final rawLine in const LineSplitter().convert(content)) {

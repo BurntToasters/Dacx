@@ -22,6 +22,7 @@ final class MediaSessionBridge {
   private var artworkRequestId: UInt64 = 0
   private var artworkTask: URLSessionDataTask?
   private var commandsConfigured = false
+  private var playbackRate: Double = 1.0
 
   deinit {
     let task = stateQueue.sync { artworkTask }
@@ -122,12 +123,18 @@ final class MediaSessionBridge {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = Double(posMs) / 1000.0
       }
       var playingFlag: Bool? = nil
-      if let playing = args["playing"] as? Bool {
-        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? 1.0 : 0.0
-        playingFlag = playing
-      }
       if let rate = args["rate"] as? Double, rate > 0 {
+        playbackRate = rate
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate
+      }
+      if let playing = args["playing"] as? Bool {
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? playbackRate : 0.0
+        playingFlag = playing
+      } else if args.keys.contains("rate"),
+                let current = info[MPNowPlayingInfoPropertyPlaybackRate] as? Double,
+                current > 0 {
+        // Live rate update while already playing.
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playbackRate
       }
       if let artUri = args["artUri"] as? String, !artUri.isEmpty {
         if isLocalArtwork(artUri) {
@@ -213,6 +220,10 @@ final class MediaSessionBridge {
     cc.nextTrackCommand.isEnabled = true
     cc.previousTrackCommand.isEnabled = true
     cc.changePlaybackPositionCommand.isEnabled = true
+    cc.changePlaybackRateCommand.isEnabled = true
+    cc.changePlaybackRateCommand.supportedPlaybackRates = [
+      0.5, 0.75, 1.0, 1.25, 1.5, 2.0,
+    ]
 
     cc.playCommand.addTarget { [weak self] _ in
       self?.invokeCommand("play"); return .success
@@ -240,11 +251,23 @@ final class MediaSessionBridge {
       self?.invokeCommand("seek", positionMs: posMs)
       return .success
     }
+    cc.changePlaybackRateCommand.addTarget { [weak self] event in
+      guard let evt = event as? MPChangePlaybackRateCommandEvent else {
+        return .commandFailed
+      }
+      self?.invokeCommand("rate", value: evt.playbackRate)
+      return .success
+    }
   }
 
-  private func invokeCommand(_ action: String, positionMs: Int? = nil) {
+  private func invokeCommand(
+    _ action: String,
+    positionMs: Int? = nil,
+    value: Double? = nil
+  ) {
     var args: [String: Any] = ["action": action]
     if let pos = positionMs { args["positionMs"] = pos }
+    if let value { args["value"] = value }
     let target: FlutterMethodChannel? = stateQueue.sync {
       activeChannel ?? channels.first
     }

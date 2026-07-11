@@ -172,5 +172,73 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('more menu is enabled without media', (tester) async {
+      var morePressed = false;
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _wrap(
+          TransportControls(
+            isPlaying: false,
+            volume: 50,
+            hasMedia: false,
+            speed: 1.0,
+            loopMode: LoopMode.none,
+            recentFiles: const [],
+            onPlayPause: () {},
+            onStop: () {},
+            onOpenFile: () {},
+            onReopenLast: () {},
+            onVolumeChanged: (_) {},
+            onLoopModeChanged: (_) {},
+            onRecentFileSelected: (_) {},
+            onSettingsPressed: () {},
+            onMoreActions: () => morePressed = true,
+          ),
+        ),
+      );
+
+      final moreIcon = find.byIcon(Icons.more_vert);
+      expect(moreIcon, findsOneWidget);
+      final button = tester.widget<IconButton>(
+        find.ancestor(of: moreIcon, matching: find.byType(IconButton)).first,
+      );
+      expect(button.onPressed, isNotNull);
+      await tester.tap(moreIcon);
+      expect(morePressed, isTrue);
+    });
+
+    testWidgets('speed chip cycles when tapped', (tester) async {
+      var cycles = 0;
+      await tester.pumpWidget(
+        _wrap(
+          TransportControls(
+            isPlaying: false,
+            volume: 50,
+            hasMedia: true,
+            speed: 1.0,
+            loopMode: LoopMode.none,
+            recentFiles: const [],
+            onPlayPause: () {},
+            onStop: () {},
+            onOpenFile: () {},
+            onReopenLast: () {},
+            onVolumeChanged: (_) {},
+            onLoopModeChanged: (_) {},
+            onRecentFileSelected: (_) {},
+            onSettingsPressed: () {},
+            onCycleSpeed: () => cycles++,
+          ),
+        ),
+      );
+
+      final chip = find.byKey(const Key('transport-speed-chip'));
+      expect(chip, findsOneWidget);
+      expect(find.text('1×'), findsOneWidget);
+      await tester.tap(chip);
+      expect(cycles, 1);
+    });
   });
 }

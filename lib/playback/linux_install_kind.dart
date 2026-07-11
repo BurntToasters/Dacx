@@ -32,11 +32,14 @@ abstract final class LinuxInstallDetector {
     if (lower.endsWith('.appimage') || lower.contains('/appimagekit_')) {
       return LinuxInstallKind.appImage;
     }
-    // Distro packages typically land under /usr.
+    // Distro packages typically land under /usr, or /opt/<pkg> with a
+    // /usr/bin wrapper (our deb/rpm install to /opt/dacx/dacx).
     final normalized = p.normalize(exe);
     if (normalized.startsWith('/usr/') ||
         normalized.startsWith('/bin/') ||
-        normalized.startsWith('/sbin/')) {
+        normalized.startsWith('/sbin/') ||
+        normalized == '/opt/dacx/dacx' ||
+        normalized.startsWith('/opt/dacx/')) {
       return LinuxInstallKind.debOrRpm;
     }
     return LinuxInstallKind.portable;

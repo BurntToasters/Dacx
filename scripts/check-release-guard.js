@@ -2,7 +2,7 @@
 
 import { spawnSync } from 'node:child_process';
 
-const allowedBranches = new Set(['main', 'beta', 'next-0.10.1']);
+const allowedBranches = new Set(['main', 'beta']);
 
 function runGit(args) {
   const result = spawnSync('git', args, {

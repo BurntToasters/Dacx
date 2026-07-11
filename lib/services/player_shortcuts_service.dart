@@ -24,6 +24,9 @@ enum PlayerShortcutAction {
   playlistPrev,
   toggleCompactMode,
   newWindow,
+  speedSlower,
+  speedFaster,
+  cycleSpeed,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -49,6 +52,9 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.playlistPrev: ['Shift+P'],
   PlayerShortcutAction.toggleCompactMode: ['Ctrl+Shift+M'],
   PlayerShortcutAction.newWindow: ['Ctrl+N'],
+  PlayerShortcutAction.speedSlower: ['['],
+  PlayerShortcutAction.speedFaster: [']'],
+  PlayerShortcutAction.cycleSpeed: ['\\'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -76,6 +82,9 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.playlistPrev => l10n.shortcutPlaylistPrev,
       PlayerShortcutAction.toggleCompactMode => l10n.shortcutToggleCompactMode,
       PlayerShortcutAction.newWindow => l10n.shortcutNewWindow,
+      PlayerShortcutAction.speedSlower => l10n.shortcutSpeedSlower,
+      PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
+      PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
     };
   }
   return switch (a) {
@@ -100,6 +109,9 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.playlistPrev => 'Previous in queue',
     PlayerShortcutAction.toggleCompactMode => 'Toggle mini-player',
     PlayerShortcutAction.newWindow => 'Open new window',
+    PlayerShortcutAction.speedSlower => 'Decrease playback speed',
+    PlayerShortcutAction.speedFaster => 'Increase playback speed',
+    PlayerShortcutAction.cycleSpeed => 'Cycle playback speed',
   };
 }
 
@@ -258,6 +270,24 @@ class PlayerShortcutsService {
         !primaryModifierPressed &&
         key == LogicalKeyboardKey.keyM) {
       return PlayerShortcutAction.toggleMute;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.bracketLeft) {
+      return PlayerShortcutAction.speedSlower;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.bracketRight) {
+      return PlayerShortcutAction.speedFaster;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.backslash) {
+      return PlayerShortcutAction.cycleSpeed;
     }
     return null;
   }

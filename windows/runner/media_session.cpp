@@ -275,6 +275,17 @@ class MediaSession {
                                    : MediaPlaybackStatus::Paused);
     }
 
+    // SMTC has no public PlaybackRate property; accept rate from Dart so
+    // updates stay coherent with MPRIS/macOS and future WinRT surfaces.
+    auto rateIt = m.find(EncodableValue("rate"));
+    if (rateIt != m.end()) {
+      if (auto pr = std::get_if<double>(&rateIt->second)) {
+        if (*pr > 0) last_rate_ = *pr;
+      } else if (auto pr = std::get_if<int32_t>(&rateIt->second)) {
+        if (*pr > 0) last_rate_ = static_cast<double>(*pr);
+      }
+    }
+
     auto durIt = m.find(EncodableValue("durationMs"));
     auto posIt = m.find(EncodableValue("positionMs"));
     int64_t durMs = -1;
@@ -364,6 +375,7 @@ class MediaSession {
   std::atomic<bool> enabled_{false};
   int64_t last_duration_ms_{0};
   int64_t last_position_ms_{0};
+  double last_rate_{1.0};
 };
 
 }  // namespace

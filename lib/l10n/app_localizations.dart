@@ -265,7 +265,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsExperimentalStoredPrefsHint.
   ///
   /// In en, this message translates to:
-  /// **'Stored experimental options (visualizer, mix, blur) turn back on when you re-enable this'**
+  /// **'Stored experimental options (visualizer, mix, Linux compositor blur) turn back on when you re-enable this'**
   String get settingsExperimentalStoredPrefsHint;
 
   /// No description provided for @snackDropPathInaccessible.
@@ -291,6 +291,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unmute'**
   String get tooltipUnmute;
+
+  /// No description provided for @tooltipCycleSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle playback speed'**
+  String get tooltipCycleSpeed;
 
   /// No description provided for @tooltipShuffle.
   ///
@@ -895,7 +901,7 @@ abstract class AppLocalizations {
   /// No description provided for @emptyStateTipReopenLast.
   ///
   /// In en, this message translates to:
-  /// **'Tip: Reopen Last (or Ctrl+R) restores your previous file'**
+  /// **'Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file'**
   String get emptyStateTipReopenLast;
 
   /// No description provided for @actionDismissTip.
@@ -934,6 +940,12 @@ abstract class AppLocalizations {
   /// **'Open Playlist'**
   String get buttonOpenPlaylist;
 
+  /// No description provided for @buttonSavePlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Playlist'**
+  String get buttonSavePlaylist;
+
   /// No description provided for @buttonOpenUrl.
   ///
   /// In en, this message translates to:
@@ -952,10 +964,22 @@ abstract class AppLocalizations {
   /// **'Could not import playlist'**
   String get snackPlaylistImportFailed;
 
+  /// No description provided for @snackPlaylistExportSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist saved'**
+  String get snackPlaylistExportSaved;
+
+  /// No description provided for @snackPlaylistExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save playlist'**
+  String get snackPlaylistExportFailed;
+
   /// No description provided for @linuxUpdateGuidanceFlatpak.
   ///
   /// In en, this message translates to:
-  /// **'Update with Flatpak (flatpak update) or reinstall from the release page.'**
+  /// **'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not on Flathub yet.'**
   String get linuxUpdateGuidanceFlatpak;
 
   /// No description provided for @linuxUpdateGuidanceAppImage.
@@ -1258,12 +1282,6 @@ abstract class AppLocalizations {
   /// **'Seek thumbnails (uses more resources)'**
   String get menuSeekThumbnails;
 
-  /// No description provided for @menuSeekThumbnailsBeta.
-  ///
-  /// In en, this message translates to:
-  /// **'Seek thumbnails (uses more resources)'**
-  String get menuSeekThumbnailsBeta;
-
   /// No description provided for @menuQueueEmpty.
   ///
   /// In en, this message translates to:
@@ -1549,13 +1567,13 @@ abstract class AppLocalizations {
   /// No description provided for @tooltipPreviousTrack.
   ///
   /// In en, this message translates to:
-  /// **'Previous Track (PageUp)'**
+  /// **'Previous Track (Shift+P)'**
   String get tooltipPreviousTrack;
 
   /// No description provided for @tooltipNextTrack.
   ///
   /// In en, this message translates to:
-  /// **'Next Track (PageDown)'**
+  /// **'Next Track (Shift+N)'**
   String get tooltipNextTrack;
 
   /// No description provided for @tooltipPlayQueue.
@@ -1977,6 +1995,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open new window'**
   String get shortcutNewWindow;
+
+  /// No description provided for @shortcutSpeedSlower.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease playback speed'**
+  String get shortcutSpeedSlower;
+
+  /// No description provided for @shortcutSpeedFaster.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase playback speed'**
+  String get shortcutSpeedFaster;
+
+  /// No description provided for @shortcutCycleSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle playback speed'**
+  String get shortcutCycleSpeed;
 
   /// No description provided for @eqPresetFlat.
   ///

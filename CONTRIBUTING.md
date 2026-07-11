@@ -18,10 +18,14 @@ Run every project Flutter or Dart command through FVM: `fvm flutter ...` or
 npm run test:all
 ```
 
-This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **55%**. Required sources (`player_screen`, spectrum) must appear in the lcov report but are excluded from the scoped gate. CI runs a subset plus multi-OS build smoke on `main`, `beta`, and `next-0.10.1` (and `v*` tags).
+This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **55%**. Required sources (`player_screen`, spectrum) must appear in the lcov report but are excluded from the scoped gate. CI runs a subset plus multi-OS build smoke on `main` and `beta` only (and `v*` tags) — interim branches are skipped to save minutes.
+
+Before a stable cut, run the manual checklist in [docs/QA.md](docs/QA.md).
 
 Before packaging a release, `release:prepare` runs `npm run licenses` to refresh
 `build/THIRD_PARTY_NOTICES.txt` (copied into installers by `package-release.js`).
+
+Update channels: **STABLE** is the default for end users after a `v1.0.0` (or final stable `v0.11.0`) tag; **BETA** tracks pre-release builds. Keep channel defaults honest in Settings when cutting the first stable.
 
 ## Pull requests
 

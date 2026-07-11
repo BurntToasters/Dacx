@@ -102,7 +102,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsExperimentalStoredPrefsHint =>
-      'Stored experimental options (visualizer, mix, blur) turn back on when you re-enable this';
+      'Stored experimental options (visualizer, mix, Linux compositor blur) turn back on when you re-enable this';
 
   @override
   String get snackDropPathInaccessible =>
@@ -117,6 +117,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tooltipUnmute => 'Unmute';
+
+  @override
+  String get tooltipCycleSpeed => 'Cycle playback speed';
 
   @override
   String get tooltipShuffle => 'Shuffle queue';
@@ -479,7 +482,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emptyStateTipReopenLast =>
-      'Tip: Reopen Last (or Ctrl+R) restores your previous file';
+      'Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file';
 
   @override
   String get actionDismissTip => 'Got it';
@@ -500,6 +503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get buttonOpenPlaylist => 'Open Playlist';
 
   @override
+  String get buttonSavePlaylist => 'Save Playlist';
+
+  @override
   String get buttonOpenUrl => 'Open URL';
 
   @override
@@ -510,8 +516,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackPlaylistImportFailed => 'Could not import playlist';
 
   @override
+  String get snackPlaylistExportSaved => 'Playlist saved';
+
+  @override
+  String get snackPlaylistExportFailed => 'Could not save playlist';
+
+  @override
   String get linuxUpdateGuidanceFlatpak =>
-      'Update with Flatpak (flatpak update) or reinstall from the release page.';
+      'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not on Flathub yet.';
 
   @override
   String get linuxUpdateGuidanceAppImage =>
@@ -671,9 +683,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuSeekThumbnails => 'Seek thumbnails (uses more resources)';
 
   @override
-  String get menuSeekThumbnailsBeta => 'Seek thumbnails (uses more resources)';
-
-  @override
   String get menuQueueEmpty => 'Queue (empty)';
 
   @override
@@ -831,10 +840,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipMediaInfo => 'Media info';
 
   @override
-  String get tooltipPreviousTrack => 'Previous Track (PageUp)';
+  String get tooltipPreviousTrack => 'Previous Track (Shift+P)';
 
   @override
-  String get tooltipNextTrack => 'Next Track (PageDown)';
+  String get tooltipNextTrack => 'Next Track (Shift+N)';
 
   @override
   String get tooltipPlayQueue => 'Play Queue';
@@ -1075,6 +1084,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutNewWindow => 'Open new window';
+
+  @override
+  String get shortcutSpeedSlower => 'Decrease playback speed';
+
+  @override
+  String get shortcutSpeedFaster => 'Increase playback speed';
+
+  @override
+  String get shortcutCycleSpeed => 'Cycle playback speed';
 
   @override
   String get eqPresetFlat => 'Flat';

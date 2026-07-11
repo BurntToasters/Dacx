@@ -1,6 +1,7 @@
 import Cocoa
 import CoreServices
 import FlutterMacOS
+import IOKit.pwr_mgt
 import os.log
 
 private let dacxLog = OSLog(subsystem: "run.rosie.dacx", category: "open-file")
@@ -77,6 +78,7 @@ class AppDelegate: FlutterAppDelegate {
   // MPNowPlayingInfoCenter / MPRemoteCommandCenter are process singletons;
   // one bridge attached to every engine's messenger.
   private let mediaSessionBridge = MediaSessionBridge()
+  private var idleAssertionID: IOPMAssertionID = 0
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
@@ -165,6 +167,10 @@ class AppDelegate: FlutterAppDelegate {
         result(self.openNewWindow())
       case "clearLayeredStyle":
         // Windows-only helper; no-op on macOS so Dart can call unconditionally.
+        result(true)
+      case "setIdleInhibit":
+        let inhibit = (call.arguments as? Bool) ?? false
+        self.setIdleInhibit(inhibit)
         result(true)
       default:
         result(FlutterMethodNotImplemented)
@@ -362,9 +368,44 @@ class AppDelegate: FlutterAppDelegate {
     invokeFlutterMethod("openFile")
   }
 
+  /// File → Open Folder….
+  @IBAction func openMediaFolder(_ sender: Any?) {
+    invokeFlutterMethod("openFolder")
+  }
+
+  /// File → Open Playlist….
+  @IBAction func openMediaPlaylist(_ sender: Any?) {
+    invokeFlutterMethod("openPlaylist")
+  }
+
   /// File → Open URL….
   @IBAction func openMediaUrl(_ sender: Any?) {
     invokeFlutterMethod("openUrl")
+  }
+
+  /// File → Reopen Last.
+  @IBAction func reopenLastMedia(_ sender: Any?) {
+    invokeFlutterMethod("reopenLast")
+  }
+
+  /// File → Save Playlist….
+  @IBAction func savePlaylist(_ sender: Any?) {
+    invokeFlutterMethod("savePlaylist")
+  }
+
+  /// File → New Window.
+  @IBAction func newPlayerWindow(_ sender: Any?) {
+    _ = openNewWindow()
+  }
+
+  /// Open Recent → Clear Menu.
+  @IBAction func clearRecentFiles(_ sender: Any?) {
+    guard let channel = preferredWindowMethodChannel() else { return }
+    channel.invokeMethod("clearRecentFiles", arguments: nil) { [weak self] _ in
+      DispatchQueue.main.async {
+        self?.refreshOpenRecentMenu()
+      }
+    }
   }
 
   /// File → Open Recent item (representedObject is the path string).
@@ -373,6 +414,44 @@ class AppDelegate: FlutterAppDelegate {
           let path = item.representedObject as? String,
           !path.isEmpty else { return }
     invokeFlutterMethod("openRecent", arguments: path)
+  }
+
+  private func setIdleInhibit(_ inhibit: Bool) {
+    if inhibit {
+      if idleAssertionID != 0 { return }
+      let status = IOPMAssertionCreateWithName(
+        kIOPMAssertionTypeNoDisplaySleep as CFString,
+        IOPMAssertionLevel(kIOPMAssertionLevelOn),
+        "Dacx playing media" as CFString,
+        &idleAssertionID
+      )
+      if status != kIOReturnSuccess {
+        idleAssertionID = 0
+        os_log("IOPMAssertionCreateWithName failed: %d", log: dacxLog, type: .error, status)
+      }
+    } else if idleAssertionID != 0 {
+      IOPMAssertionRelease(idleAssertionID)
+      idleAssertionID = 0
+    }
+  }
+
+  override func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+    let menu = NSMenu()
+    let newWindow = NSMenuItem(
+      title: "New Window",
+      action: #selector(newPlayerWindow(_:)),
+      keyEquivalent: ""
+    )
+    newWindow.target = self
+    menu.addItem(newWindow)
+    let open = NSMenuItem(
+      title: "Open…",
+      action: #selector(openMediaFile(_:)),
+      keyEquivalent: ""
+    )
+    open.target = self
+    menu.addItem(open)
+    return menu
   }
 
   private func invokeFlutterMethod(_ method: String, arguments: Any? = nil) {
@@ -423,6 +502,14 @@ class AppDelegate: FlutterAppDelegate {
           item.representedObject = path
           recentMenu.addItem(item)
         }
+        recentMenu.addItem(NSMenuItem.separator())
+        let clear = NSMenuItem(
+          title: "Clear Menu",
+          action: #selector(self.clearRecentFiles(_:)),
+          keyEquivalent: ""
+        )
+        clear.target = self
+        recentMenu.addItem(clear)
       }
     }
   }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'instance_mode_service.dart';
+import 'idle_inhibit_service.dart';
 
 /// Windows shell helpers: Jump Lists + taskbar progress.
 abstract final class WindowsShellService {
@@ -13,6 +14,19 @@ abstract final class WindowsShellService {
 
   static const updateJumpListMethod = 'updateJumpList';
   static const setTaskbarProgressMethod = 'setTaskbarProgress';
+  static const setIdleInhibitMethod = IdleInhibitService.setIdleInhibitMethod;
+
+  /// Prevents system/display idle sleep while [inhibit] is true.
+  static Future<void> setIdleInhibit(bool inhibit) async {
+    if (!Platform.isWindows) return;
+    try {
+      await _channel.invokeMethod<bool>(setIdleInhibitMethod, inhibit);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: setIdleInhibit failed: $e');
+      }
+    }
+  }
 
   /// Pushes recent local/URL paths into the taskbar Jump List.
   static Future<void> updateJumpList(List<String> paths) async {

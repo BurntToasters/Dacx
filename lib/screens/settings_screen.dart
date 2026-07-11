@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
+import '../playback/playback_speed_policy.dart';
 import '../services/debug_log_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/settings_service.dart';
@@ -173,12 +174,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _sectionHeader(l10n.settingsSectionAppearance),
                           _themeModeTile(),
                           _accentColorTile(colorScheme),
+                          if (Platform.isWindows || Platform.isMacOS) ...[
+                            _windowOpacityTile(),
+                            _windowBlurTile(),
+                            _windowBlurStrengthTile(),
+                          ],
                           if (_s.experimentalFeaturesEnabled) ...[
-                            _experimentalTile(_windowOpacityTile()),
-                            if (Platform.isLinux)
+                            if (Platform.isLinux) ...[
                               _experimentalTile(_linuxCompositorBlurTile()),
-                            _experimentalTile(_windowBlurTile()),
-                            _experimentalTile(_windowBlurStrengthTile()),
+                              _experimentalTile(_windowOpacityTile()),
+                              _experimentalTile(_windowBlurTile()),
+                              _experimentalTile(_windowBlurStrengthTile()),
+                            ],
                             _experimentalTile(_audioWaveformTile()),
                           ],
                           SwitchListTile(
@@ -315,15 +322,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListTile(
       title: Text(l10n.settingsPlaybackSpeed),
       trailing: DropdownButton<double>(
-        value: _s.speed,
+        value: PlaybackSpeedPolicy.nearestPreset(_s.speed),
         underline: const SizedBox.shrink(),
-        items: const [
-          DropdownMenuItem(value: 0.5, child: Text('0.5×')),
-          DropdownMenuItem(value: 0.75, child: Text('0.75×')),
-          DropdownMenuItem(value: 1.0, child: Text('1.0×')),
-          DropdownMenuItem(value: 1.25, child: Text('1.25×')),
-          DropdownMenuItem(value: 1.5, child: Text('1.5×')),
-          DropdownMenuItem(value: 2.0, child: Text('2.0×')),
+        items: [
+          for (final rate in PlaybackSpeedPolicy.presets)
+            DropdownMenuItem(
+              value: rate,
+              child: Text(PlaybackSpeedPolicy.formatLabel(rate)),
+            ),
         ],
         onChanged: (v) {
           if (v != null) {
@@ -601,7 +607,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final divisions = ((1.0 - minOpacity) / 0.05).round();
 
     return ListTile(
-      leading: _experimentalWarningIcon(),
       title: Text(l10n.settingsWindowOpacity),
       subtitle: Column(
         mainAxisSize: MainAxisSize.min,
@@ -630,17 +635,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowBlurTile() {
     final l10n = AppLocalizations.of(context);
-    if (!_s.experimentalFeaturesEnabled) {
-      return const SizedBox.shrink();
-    }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
-        (Platform.isLinux && _s.linuxCompositorBlurExperimental);
+        (Platform.isLinux &&
+            _s.experimentalFeaturesEnabled &&
+            _s.linuxCompositorBlurExperimental);
     final effectiveEnabled = isSupported && _s.windowBlurEnabled;
 
     return SwitchListTile(
-      secondary: _experimentalWarningIcon(),
       title: Text(l10n.settingsBackgroundBlur),
       subtitle: Text(
         Platform.isLinux
@@ -661,18 +664,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowBlurStrengthTile() {
     final l10n = AppLocalizations.of(context);
-    if (!_s.experimentalFeaturesEnabled) {
-      return const SizedBox.shrink();
-    }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
-        (Platform.isLinux && _s.linuxCompositorBlurExperimental);
+        (Platform.isLinux &&
+            _s.experimentalFeaturesEnabled &&
+            _s.linuxCompositorBlurExperimental);
     final strength = _s.windowBlurStrength;
     final percent = (strength * 100).round();
 
     return ListTile(
-      leading: _experimentalWarningIcon(),
       title: Text(l10n.settingsGlassStrength),
       subtitle: Column(
         mainAxisSize: MainAxisSize.min,

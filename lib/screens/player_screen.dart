@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui';
@@ -49,6 +50,7 @@ import '../playback/drop_path_batch_policy.dart';
 import '../playback/enqueue_policy.dart';
 import '../playback/linux_install_kind.dart';
 import '../playback/m3u_playlist.dart';
+import '../playback/playback_speed_policy.dart';
 import '../playback/resume_playback_policy.dart';
 import '../playback/screenshot_path_policy.dart';
 import '../playback/source_load_post_open_policy.dart';
@@ -299,6 +301,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       lastAlwaysOnTop: _settings.alwaysOnTop,
       lastMediaSessionEnabled: _settings.mediaSessionEnabled,
       lastPlaylistShuffle: _settings.playlistShuffle,
+      lastHwDec: _settings.hwDec,
       lastMultiAudioMix: _settings.multiAudioMix,
       lastAudioWaveformEnabled: _settings.audioWaveformEnabled,
       lastEqEnabled: _settings.eqEnabled,
@@ -756,7 +759,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     if (delta.playlistShuffle != null) {
+      _playlist.setShuffle(delta.playlistShuffle!);
       unawaited(_mediaSession.updateShuffle(delta.playlistShuffle!));
+    }
+
+    if (delta.hwDec != null) {
+      _applyHwDec(delta.hwDec!);
     }
 
     if (delta.alwaysOnTop != null) {
@@ -810,8 +818,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
         case InstanceModeService.openFileMethod:
           unawaited(_openFile());
           return null;
+        case InstanceModeService.openFolderMethod:
+          unawaited(_openFolder());
+          return null;
+        case InstanceModeService.openPlaylistMethod:
+          unawaited(_openPlaylistPicker());
+          return null;
         case InstanceModeService.openUrlMethod:
           unawaited(_openUrl());
+          return null;
+        case InstanceModeService.reopenLastMethod:
+          unawaited(_reopenLastFile());
+          return null;
+        case InstanceModeService.savePlaylistMethod:
+          unawaited(_exportPlaylistQueue());
+          return null;
+        case InstanceModeService.clearRecentFilesMethod:
+          _settings.clearRecentFiles();
+          if (Platform.isWindows) {
+            unawaited(WindowsShellService.updateJumpList(const []));
+          }
           return null;
         case InstanceModeService.openRecentMethod:
           final path = call.arguments;
@@ -895,6 +921,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'playback_rate_applied',
       detailsBuilder: () => {'rate': speed.toStringAsFixed(2)},
     );
+  }
+
+  void _setPlaybackSpeed(double speed, {required String source}) {
+    _settings.speed = speed;
+    _applySpeed(speed);
+    unawaited(_mediaSession.updateRate(speed));
+    if (mounted) {
+      _showOsdMessage(PlaybackSpeedPolicy.formatLabel(speed));
+      setState(() {});
+    }
+    _log(
+      'playback_speed_changed',
+      category: DebugLogCategory.ui,
+      detailsBuilder: () => {
+        'value': speed.toStringAsFixed(2),
+        'source': source,
+      },
+    );
+  }
+
+  void _cyclePlaybackSpeed() {
+    _setPlaybackSpeed(
+      PlaybackSpeedPolicy.cycleNext(_settings.speed),
+      source: 'cycle',
+    );
+  }
+
+  void _nudgePlaybackSpeed({required bool faster}) {
+    final next = faster
+        ? PlaybackSpeedPolicy.stepFaster(_settings.speed)
+        : PlaybackSpeedPolicy.stepSlower(_settings.speed);
+    if (next == _settings.speed) return;
+    _setPlaybackSpeed(next, source: faster ? 'faster' : 'slower');
   }
 
   bool _shouldEnableHardwareAcceleration(String hwDec) {
@@ -1224,7 +1283,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _openUrl() async {
-    if (!PlayerUiPolicies.showOpenUrlButton(_settings)) return;
     final l10n = AppLocalizations.of(context);
     final url = await OpenUrlDialog.show(context);
     if (!mounted) return;
@@ -1276,6 +1334,59 @@ class _PlayerScreenState extends State<PlayerScreen> {
         message: e.message ?? e.code,
         severity: DebugSeverity.error,
       );
+    }
+  }
+
+  Future<void> _exportPlaylistQueue() async {
+    if (_playlist.isEmpty) return;
+    _log('playlist_export_requested', category: DebugLogCategory.ui);
+    final l10n = AppLocalizations.of(context);
+    try {
+      final content = M3uPlaylist.encode(_playlist.items);
+      final path = await FilePicker.saveFile(
+        dialogTitle: l10n.buttonSavePlaylist,
+        fileName: 'playlist.m3u',
+        type: FileType.custom,
+        allowedExtensions: const ['m3u'],
+        bytes: Uint8List.fromList(utf8.encode(content)),
+        lockParentWindow: true,
+        initialDirectory: _settings.lastOpenDirectory,
+      );
+      if (path == null || path.trim().isEmpty) return;
+      _rememberLastOpenDirectory(path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.snackPlaylistExportSaved)),
+      );
+      _log(
+        'playlist_exported',
+        detailsBuilder: () => {
+          'path': path,
+          'count': '${_playlist.items.length}',
+        },
+      );
+    } on PlatformException catch (e) {
+      _log(
+        'playlist_export_platform_exception',
+        message: e.message ?? e.code,
+        severity: DebugSeverity.error,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.snackPlaylistExportFailed)),
+        );
+      }
+    } catch (e) {
+      _log(
+        'playlist_export_failed',
+        message: e.toString(),
+        severity: DebugSeverity.error,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.snackPlaylistExportFailed)),
+        );
+      }
     }
   }
 
@@ -2004,6 +2115,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _log('shortcut_new_window', category: DebugLogCategory.ui);
         unawaited(InstanceModeService.openNewWindow());
         return KeyEventResult.handled;
+      case PlayerShortcutAction.speedSlower:
+        _log('shortcut_speed_slower', category: DebugLogCategory.ui);
+        _nudgePlaybackSpeed(faster: false);
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.speedFaster:
+        _log('shortcut_speed_faster', category: DebugLogCategory.ui);
+        _nudgePlaybackSpeed(faster: true);
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.cycleSpeed:
+        _log('shortcut_cycle_speed', category: DebugLogCategory.ui);
+        _cyclePlaybackSpeed();
+        return KeyEventResult.handled;
       case null:
         return KeyEventResult.ignored;
     }
@@ -2408,9 +2531,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             },
             onOpenFile: _openFile,
             onOpenFolder: () => unawaited(_openFolder()),
-            onOpenUrl: PlayerUiPolicies.showOpenUrlButton(_settings)
-                ? () => unawaited(_openUrl())
-                : null,
             onReopenLast: () {
               _log(
                 'control_reopen_last_pressed',
@@ -2451,6 +2571,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onNext: () => unawaited(_advancePlaylist(1)),
             onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
             onToggleMute: _toggleMute,
+            onCycleSpeed: _cyclePlaybackSpeed,
           ),
         ],
       ),
@@ -2502,7 +2623,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                             tooltip: l10n.tooltipShuffle,
                             onPressed: () {
-                              _playlist.setShuffle(!_playlist.shuffle);
+                              final next = !_playlist.shuffle;
+                              _settings.playlistShuffle = next;
+                              _playlist.setShuffle(next);
+                              unawaited(_mediaSession.updateShuffle(next));
                             },
                           ),
                         if (items.isNotEmpty)
@@ -2594,6 +2718,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                         if (items.isNotEmpty)
                           FilledButton.tonalIcon(
+                            key: const Key('queue-save-playlist-button'),
+                            onPressed: () => unawaited(_exportPlaylistQueue()),
+                            icon: const Icon(Icons.save_alt),
+                            label: Text(l10n.buttonSavePlaylist),
+                          ),
+                        if (items.isNotEmpty)
+                          FilledButton.tonalIcon(
                             key: const Key('queue-remove-missing-button'),
                             onPressed: () =>
                                 unawaited(_removeMissingQueueItems()),
@@ -2617,80 +2748,84 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final l10n = AppLocalizations.of(context);
     final flatpak = LinuxInstallDetector.isFlatpak;
 
-    return Center(
-      child: _buildCenterPanel(
-        maxWidth: 440,
-        children: [
-          _buildCenterIconSurface(
-            icon: Icons.music_note,
-            size: 40,
-            color: colorScheme.primary.withValues(alpha: 0.88),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            flatpak ? l10n.emptyStateFlatpakMessage : l10n.emptyStateMessage,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.74),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: _buildCenterPanel(
+                maxWidth: 440,
+                children: [
+                  _buildCenterIconSurface(
+                    icon: Icons.music_note,
+                    size: 40,
+                    color: colorScheme.primary.withValues(alpha: 0.88),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    flatpak
+                        ? l10n.emptyStateFlatpakMessage
+                        : l10n.emptyStateMessage,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.74),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (!_settings.emptyStateTipDismissed) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.emptyStateTipReopenLast,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withValues(alpha: 0.58),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    TextButton(
+                      key: const Key('empty-state-tip-dismiss'),
+                      onPressed: () => setState(() {
+                        _settings.emptyStateTipDismissed = true;
+                      }),
+                      child: Text(l10n.actionDismissTip),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _openFile,
+                        icon: const Icon(Icons.folder_open),
+                        label: Text(l10n.buttonOpenFile),
+                      ),
+                      FilledButton.tonalIcon(
+                        key: const Key('open-folder-empty-button'),
+                        onPressed: () => unawaited(_openFolder()),
+                        icon: const Icon(Icons.create_new_folder),
+                        label: Text(l10n.buttonOpenFolder),
+                      ),
+                      FilledButton.tonalIcon(
+                        key: const Key('open-playlist-empty-button'),
+                        onPressed: () => unawaited(_openPlaylistPicker()),
+                        icon: const Icon(Icons.queue_music),
+                        label: Text(l10n.buttonOpenPlaylist),
+                      ),
+                      FilledButton.tonalIcon(
+                        key: const Key('reopen-last-empty-button'),
+                        onPressed: _reopenLastFile,
+                        icon: const Icon(Icons.history),
+                        label: Text(l10n.buttonReopenLast),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            textAlign: TextAlign.center,
           ),
-          if (!_settings.emptyStateTipDismissed) ...[
-            const SizedBox(height: 12),
-            Text(
-              l10n.emptyStateTipReopenLast,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.58),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            TextButton(
-              key: const Key('empty-state-tip-dismiss'),
-              onPressed: () => setState(() {
-                _settings.emptyStateTipDismissed = true;
-              }),
-              child: Text(l10n.actionDismissTip),
-            ),
-          ],
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              FilledButton.icon(
-                onPressed: _openFile,
-                icon: const Icon(Icons.folder_open),
-                label: Text(l10n.buttonOpenFile),
-              ),
-              FilledButton.tonalIcon(
-                key: const Key('open-folder-empty-button'),
-                onPressed: () => unawaited(_openFolder()),
-                icon: const Icon(Icons.create_new_folder),
-                label: Text(l10n.buttonOpenFolder),
-              ),
-              FilledButton.tonalIcon(
-                key: const Key('open-playlist-empty-button'),
-                onPressed: () => unawaited(_openPlaylistPicker()),
-                icon: const Icon(Icons.queue_music),
-                label: Text(l10n.buttonOpenPlaylist),
-              ),
-              if (PlayerUiPolicies.showOpenUrlButton(_settings))
-                FilledButton.tonalIcon(
-                  key: const Key('open-url-empty-button'),
-                  onPressed: () => unawaited(_openUrl()),
-                  icon: const Icon(Icons.link),
-                  label: Text(l10n.buttonOpenUrl),
-                ),
-              FilledButton.tonalIcon(
-                key: const Key('reopen-last-empty-button'),
-                onPressed: _reopenLastFile,
-                icon: const Icon(Icons.history),
-                label: Text(l10n.buttonReopenLast),
-              ),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -3598,6 +3733,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final l10n = AppLocalizations.of(context);
     final width = await _playerService.getProperty('width');
     final height = await _playerService.getProperty('height');
+    String? metaTitle;
+    String? metaArtist;
+    String? metaAlbum;
+    try {
+      metaTitle = await _playerService.getProperty('metadata/by-key/title');
+      metaArtist = await _playerService.getProperty('metadata/by-key/artist');
+      metaAlbum = await _playerService.getProperty('metadata/by-key/album');
+    } catch (_) {
+      // Best-effort tags; fall back to cached display fields / unknown.
+    }
     if (!mounted) return;
     final tracks = _player.currentTracks;
     final audioTracks =
@@ -3619,12 +3764,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
         : (_player.isAudioFile
               ? l10n.mediaInfoTypeAudioFile
               : l10n.mediaInfoTypeVideoFile);
+    final titleValue = () {
+      final fromMeta = metaTitle?.trim();
+      if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
+      final cached = _mediaDisplayTitle?.trim();
+      if (cached != null && cached.isNotEmpty) return cached;
+      return source.displayName;
+    }();
+    final artistValue = () {
+      final fromMeta = metaArtist?.trim();
+      if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
+      final cached = _mediaDisplayArtist?.trim();
+      if (cached != null && cached.isNotEmpty) return cached;
+      return l10n.mediaInfoUnknown;
+    }();
+    final albumValue = () {
+      final fromMeta = metaAlbum?.trim();
+      if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
+      return l10n.mediaInfoUnknown;
+    }();
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => MediaInfoDialog(
         width: _dialogWidth(ctx, 520),
         fields: [
+          MediaInfoField(label: l10n.mediaInfoTitle, value: titleValue),
+          MediaInfoField(label: l10n.mediaInfoArtist, value: artistValue),
+          MediaInfoField(label: l10n.mediaInfoAlbum, value: albumValue),
           MediaInfoField(
             label: l10n.mediaInfoSource,
             value: source.isUrl
@@ -3800,6 +3967,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          item(
+                            icon: Icons.link,
+                            label: l10n.buttonOpenUrl,
+                            action: 'open_url',
+                          ),
+                          const Divider(height: 1),
                           if (hasAudioOptions)
                             item(
                               icon: Icons.audiotrack,
@@ -3841,6 +4014,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               label: l10n.menuTakeScreenshot,
                               action: 'screenshot',
                             ),
+                          const Divider(height: 1),
                           if (hasAudioOptions &&
                               _settings.experimentalFeaturesEnabled)
                             switchItem(
@@ -3952,6 +4126,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (!mounted) return;
     switch (result) {
+      case 'open_url':
+        unawaited(_openUrl());
+        break;
       case 'audio':
         unawaited(_showAudioTracksDialog());
         break;

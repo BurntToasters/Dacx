@@ -394,6 +394,36 @@ void main() {
       );
       expect(action, PlayerShortcutAction.screenshot);
     });
+
+    test('bracket keys adjust speed', () {
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.bracketLeft),
+          hasMedia: true,
+          isMetaPressed: false,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.speedSlower,
+      );
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.bracketRight),
+          hasMedia: true,
+          isMetaPressed: false,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.speedFaster,
+      );
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.backslash),
+          hasMedia: true,
+          isMetaPressed: false,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.cycleSpeed,
+      );
+    });
   });
 
   group('shortcutActionLabel', () {

@@ -37,6 +37,18 @@ std::unordered_map<flutter::BinaryMessenger*, std::unique_ptr<MethodChannel>>
     g_channels;
 
 ITaskbarList3* g_taskbar = nullptr;
+bool g_idle_inhibit_active = false;
+
+void SetIdleInhibit(bool inhibit) {
+  if (inhibit) {
+    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED |
+                            ES_DISPLAY_REQUIRED);
+    g_idle_inhibit_active = true;
+  } else {
+    SetThreadExecutionState(ES_CONTINUOUS);
+    g_idle_inhibit_active = false;
+  }
+}
 
 void ClearLayeredWindowStyle(HWND hwnd) {
   if (hwnd == nullptr) return;
@@ -246,6 +258,15 @@ void RegisterWindowMethodsChannel(flutter::BinaryMessenger* messenger,
             progress = static_cast<double>(*value);
           }
           SetTaskbarProgress(window->GetHandle(), progress);
+          result->Success(flutter::EncodableValue(true));
+          return;
+        }
+        if (method == "setIdleInhibit") {
+          bool inhibit = false;
+          if (const auto* value = std::get_if<bool>(call.arguments())) {
+            inhibit = *value;
+          }
+          SetIdleInhibit(inhibit);
           result->Success(flutter::EncodableValue(true));
           return;
         }

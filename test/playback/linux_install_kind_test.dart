@@ -41,11 +41,28 @@ void main() {
       );
     });
 
-    test('other paths are portable', () {
+    test('detects /opt/dacx package installs', () {
       expect(
         LinuxInstallDetector.detect(
           environment: const {},
           resolvedExecutable: '/opt/dacx/dacx',
+        ),
+        LinuxInstallKind.debOrRpm,
+      );
+      expect(
+        LinuxInstallDetector.detect(
+          environment: const {},
+          resolvedExecutable: '/opt/dacx/lib/dacx',
+        ),
+        LinuxInstallKind.debOrRpm,
+      );
+    });
+
+    test('other paths are portable', () {
+      expect(
+        LinuxInstallDetector.detect(
+          environment: const {},
+          resolvedExecutable: '/home/u/Downloads/dacx/dacx',
         ),
         LinuxInstallKind.portable,
       );

@@ -46,6 +46,10 @@ const AUDIO_EXTENSIONS = [
   "opus",
   "ape",
   "alac",
+  "aiff",
+  "aif",
+  "wv",
+  "mpc",
 ];
 const VIDEO_EXTENSIONS = [
   "mp4",
@@ -56,6 +60,13 @@ const VIDEO_EXTENSIONS = [
   "wmv",
   "flv",
   "m4v",
+  "ts",
+  "m2ts",
+  "mts",
+  "mpg",
+  "mpeg",
+  "vob",
+  "ogv",
 ];
 const PLAYLIST_EXTENSIONS = ["m3u", "pls"];
 const SUPPORTED_MEDIA_EXTENSIONS = [
@@ -656,15 +667,14 @@ function renderWixStartMenuShortcutTree({ indent, includeIcon }) {
 }
 
 function renderWixApplicationSearchRegistrationComponent({ indent }) {
+  // App identity only — open command + SupportedTypes live in CMP_FILE_ASSOC
+  // so we never write the same shell\open\command key twice (quoted vs not).
   return [
     `${indent}<Component Id="CMP_APP_SEARCH_REGISTRATION" Guid="*">`,
     `${indent}  <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe">`,
-    `${indent}    <RegistryValue Type="string" Value="Dacx" />`,
+    `${indent}    <RegistryValue Type="string" Value="Dacx" KeyPath="yes" />`,
     `${indent}    <RegistryValue Name="FriendlyAppName" Type="string" Value="Dacx" />`,
     `${indent}    <RegistryValue Name="ApplicationDescription" Type="string" Value="Dacx media player" />`,
-    `${indent}    <RegistryKey Key="shell\\open\\command">`,
-    `${indent}      <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; %1" KeyPath="yes" />`,
-    `${indent}    </RegistryKey>`,
     `${indent}  </RegistryKey>`,
     `${indent}</Component>`,
   ].join("\n");
@@ -1306,6 +1316,27 @@ function findIcon() {
   return null;
 }
 
+/** Install all sizes under linux/packaging/icons/hicolor into a share root. */
+function installHicolorIcons(shareRoot, fallbackIconFile) {
+  const hicolorSrc = path.join(root, "linux", "packaging", "icons", "hicolor");
+  let installed = 0;
+  if (fs.existsSync(hicolorSrc)) {
+    for (const size of fs.readdirSync(hicolorSrc)) {
+      const src = path.join(hicolorSrc, size, "apps", "dacx.png");
+      if (!fs.existsSync(src)) continue;
+      const destDir = path.join(shareRoot, "icons", "hicolor", size, "apps");
+      fs.mkdirSync(destDir, { recursive: true });
+      fs.copyFileSync(src, path.join(destDir, "dacx.png"));
+      installed++;
+    }
+  }
+  if (installed > 0) return;
+  if (!fallbackIconFile) return;
+  const destDir = path.join(shareRoot, "icons", "hicolor", "256x256", "apps");
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(fallbackIconFile, path.join(destDir, "dacx.png"));
+}
+
 function buildDeb(buildDir, desktopFile, iconFile) {
   if (!hasCommand("dpkg-deb")) {
     console.warn("  ⚠ dpkg-deb not found — skipping .deb");
@@ -1319,14 +1350,13 @@ function buildDeb(buildDir, desktopFile, iconFile) {
   const optDir = path.join(debRoot, "opt", "dacx");
   const binDir = path.join(debRoot, "usr", "bin");
   const appsDir = path.join(debRoot, "usr", "share", "applications");
-  const iconDir = path.join(debRoot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const shareRoot = path.join(debRoot, "usr", "share");
   const docDir = path.join(debRoot, "usr", "share", "doc", "dacx");
   const debianDir = path.join(debRoot, "DEBIAN");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
-  fs.mkdirSync(iconDir, { recursive: true });
   fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(debianDir, { recursive: true });
 
@@ -1348,10 +1378,7 @@ function buildDeb(buildDir, desktopFile, iconFile) {
     fs.writeFileSync(path.join(appsDir, "dacx.desktop"), desktop);
   }
 
-  // Copy icon
-  if (iconFile) {
-    fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
-  }
+  installHicolorIcons(shareRoot, iconFile);
 
   installLegalFilesInDir(docDir);
 
@@ -1414,13 +1441,12 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   const optDir = path.join(buildroot, "opt", "dacx");
   const binDir = path.join(buildroot, "usr", "bin");
   const appsDir = path.join(buildroot, "usr", "share", "applications");
-  const iconDir = path.join(buildroot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const shareRoot = path.join(buildroot, "usr", "share");
   const docDir = path.join(buildroot, "usr", "share", "doc", "dacx");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
-  fs.mkdirSync(iconDir, { recursive: true });
   fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(specsDir, { recursive: true });
   fs.mkdirSync(rpmsDir, { recursive: true });
@@ -1442,10 +1468,7 @@ function buildRpm(buildDir, desktopFile, iconFile) {
     fs.writeFileSync(path.join(appsDir, "dacx.desktop"), desktop);
   }
 
-  // Icon
-  if (iconFile) {
-    fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
-  }
+  installHicolorIcons(shareRoot, iconFile);
 
   installLegalFilesInDir(docDir);
 
@@ -1501,12 +1524,11 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
   const optDir = path.join(appDir, "opt", "dacx");
   const binDir = path.join(appDir, "usr", "bin");
   const appsDir = path.join(appDir, "usr", "share", "applications");
-  const iconDir = path.join(appDir, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const shareRoot = path.join(appDir, "usr", "share");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
-  fs.mkdirSync(iconDir, { recursive: true });
 
   // Copy bundle
   copyDirSync(buildDir, optDir);
@@ -1526,10 +1548,22 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
     fs.writeFileSync(path.join(appsDir, "dacx.desktop"), desktop);
   }
 
-  // Icon at root and in hicolor
+  // Icon at root and full hicolor set
+  installHicolorIcons(shareRoot, iconFile);
   if (iconFile) {
     fs.copyFileSync(iconFile, path.join(appDir, "dacx.png"));
-    fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
+  } else {
+    const hicolor256 = path.join(
+      shareRoot,
+      "icons",
+      "hicolor",
+      "256x256",
+      "apps",
+      "dacx.png",
+    );
+    if (fs.existsSync(hicolor256)) {
+      fs.copyFileSync(hicolor256, path.join(appDir, "dacx.png"));
+    }
   }
 
   // AppRun entry point
