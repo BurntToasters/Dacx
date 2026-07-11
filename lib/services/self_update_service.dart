@@ -1122,8 +1122,9 @@ exit 0
         });
   }
 
+  static const macUpdateChannelName = 'run.rosie.dacx/update';
   static const MethodChannel _macUpdateChannel = MethodChannel(
-    'run.rosie.dacx/update',
+    macUpdateChannelName,
   );
 }
 

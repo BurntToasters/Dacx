@@ -235,8 +235,110 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAudioWaveformSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)'**
+  /// **'Real-time frequency bars while playing audio (Experimental)'**
   String get settingsAudioWaveformSubtitle;
+
+  /// No description provided for @osdSpectrumUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio visualizer unavailable on this system'**
+  String get osdSpectrumUnavailable;
+
+  /// No description provided for @osdSpectrumDisabledForMix.
+  ///
+  /// In en, this message translates to:
+  /// **'Visualizer paused while mixing audio tracks'**
+  String get osdSpectrumDisabledForMix;
+
+  /// No description provided for @settingsSeekPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek thumbnails'**
+  String get settingsSeekPreview;
+
+  /// No description provided for @settingsSeekPreviewSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview frames while scrubbing (uses extra memory)'**
+  String get settingsSeekPreviewSubtitle;
+
+  /// No description provided for @settingsExperimentalStoredPrefsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored experimental options (visualizer, mix, Linux compositor blur) turn back on when you re-enable this'**
+  String get settingsExperimentalStoredPrefsHint;
+
+  /// No description provided for @snackDropPathInaccessible.
+  ///
+  /// In en, this message translates to:
+  /// **'Some dropped files are outside the sandbox or inaccessible'**
+  String get snackDropPathInaccessible;
+
+  /// No description provided for @snackScreenshotDirInaccessible.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot folder is not writable'**
+  String get snackScreenshotDirInaccessible;
+
+  /// No description provided for @tooltipMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get tooltipMute;
+
+  /// No description provided for @tooltipUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get tooltipUnmute;
+
+  /// No description provided for @tooltipCycleSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle playback speed'**
+  String get tooltipCycleSpeed;
+
+  /// No description provided for @tooltipShuffle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle queue'**
+  String get tooltipShuffle;
+
+  /// No description provided for @queueReorderSemantic.
+  ///
+  /// In en, this message translates to:
+  /// **'Reorder'**
+  String get queueReorderSemantic;
+
+  /// No description provided for @mediaInfoArtist.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get mediaInfoArtist;
+
+  /// No description provided for @mediaInfoAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get mediaInfoAlbum;
+
+  /// No description provided for @mediaInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get mediaInfoTitle;
+
+  /// No description provided for @audioPlaybackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio playback'**
+  String get audioPlaybackLabel;
+
+  /// No description provided for @flatpakSandboxHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Flatpak can only open files from Music, Videos, Downloads, and Pictures unless you use the file picker.'**
+  String get flatpakSandboxHint;
 
   /// No description provided for @settingsAllowMultipleWindowsSubtitle.
   ///
@@ -790,6 +892,36 @@ abstract class AppLocalizations {
   /// **'Drop a file here or click Open'**
   String get emptyStateMessage;
 
+  /// No description provided for @emptyStateFlatpakMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Open File or Open Folder — drag-and-drop only works for Music, Videos, Downloads, and Pictures'**
+  String get emptyStateFlatpakMessage;
+
+  /// No description provided for @emptyStateTipReopenLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file'**
+  String get emptyStateTipReopenLast;
+
+  /// No description provided for @actionDismissTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get actionDismissTip;
+
+  /// No description provided for @dropOverlayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop media files to play or enqueue'**
+  String get dropOverlayHint;
+
+  /// No description provided for @keyCaptureWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting…'**
+  String get keyCaptureWaiting;
+
   /// No description provided for @buttonOpenFile.
   ///
   /// In en, this message translates to:
@@ -802,11 +934,83 @@ abstract class AppLocalizations {
   /// **'Open Folder'**
   String get buttonOpenFolder;
 
+  /// No description provided for @buttonOpenPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Playlist'**
+  String get buttonOpenPlaylist;
+
+  /// No description provided for @buttonSavePlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Playlist'**
+  String get buttonSavePlaylist;
+
   /// No description provided for @buttonOpenUrl.
   ///
   /// In en, this message translates to:
   /// **'Open URL'**
   String get buttonOpenUrl;
+
+  /// No description provided for @snackPlaylistEmptyOrInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist is empty or could not be read'**
+  String get snackPlaylistEmptyOrInvalid;
+
+  /// No description provided for @snackPlaylistImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not import playlist'**
+  String get snackPlaylistImportFailed;
+
+  /// No description provided for @snackPlaylistExportSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist saved'**
+  String get snackPlaylistExportSaved;
+
+  /// No description provided for @snackPlaylistExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save playlist'**
+  String get snackPlaylistExportFailed;
+
+  /// No description provided for @linuxUpdateGuidanceFlatpak.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not on Flathub yet.'**
+  String get linuxUpdateGuidanceFlatpak;
+
+  /// No description provided for @linuxUpdateGuidanceAppImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the new AppImage from the release page and replace this file.'**
+  String get linuxUpdateGuidanceAppImage;
+
+  /// No description provided for @linuxUpdateGuidanceDebRpm.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the new package (.deb / .rpm) from the release page.'**
+  String get linuxUpdateGuidanceDebRpm;
+
+  /// No description provided for @linuxUpdateGuidancePortable.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the latest Linux build from the release page and replace this install.'**
+  String get linuxUpdateGuidancePortable;
+
+  /// No description provided for @linuxUpdateGuidanceGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the latest Linux build from the release page.'**
+  String get linuxUpdateGuidanceGeneric;
+
+  /// No description provided for @settingsLinuxUpdateHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Linux self-update is not built in — use your package type’s update path.'**
+  String get settingsLinuxUpdateHint;
 
   /// No description provided for @buttonReopenLast.
   ///
@@ -988,17 +1192,95 @@ abstract class AppLocalizations {
   /// **'Take screenshot'**
   String get menuTakeScreenshot;
 
+  /// No description provided for @menuLoadExternalAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Load external audio…'**
+  String get menuLoadExternalAudio;
+
+  /// No description provided for @menuLoadExternalSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Load external subtitle…'**
+  String get menuLoadExternalSubtitle;
+
   /// No description provided for @menuMixAllAudioTracks.
   ///
   /// In en, this message translates to:
   /// **'Mix all audio tracks'**
   String get menuMixAllAudioTracks;
 
-  /// No description provided for @menuSeekThumbnailsBeta.
+  /// No description provided for @osdExternalAudioLoaded.
   ///
   /// In en, this message translates to:
-  /// **'Seek thumbnails (beta: uses more resources)'**
-  String get menuSeekThumbnailsBeta;
+  /// **'External audio loaded'**
+  String get osdExternalAudioLoaded;
+
+  /// No description provided for @osdExternalAudioFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load external audio'**
+  String get osdExternalAudioFailed;
+
+  /// No description provided for @osdExternalSubtitleLoaded.
+  ///
+  /// In en, this message translates to:
+  /// **'External subtitle loaded'**
+  String get osdExternalSubtitleLoaded;
+
+  /// No description provided for @osdExternalSubtitleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load external subtitle'**
+  String get osdExternalSubtitleFailed;
+
+  /// No description provided for @settingsScreenshotDir.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot folder'**
+  String get settingsScreenshotDir;
+
+  /// No description provided for @settingsScreenshotDirSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Where video screenshots are saved'**
+  String get settingsScreenshotDirSubtitle;
+
+  /// No description provided for @settingsScreenshotFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot format'**
+  String get settingsScreenshotFormat;
+
+  /// No description provided for @settingsScreenshotFormatPng.
+  ///
+  /// In en, this message translates to:
+  /// **'PNG'**
+  String get settingsScreenshotFormatPng;
+
+  /// No description provided for @settingsScreenshotFormatJpg.
+  ///
+  /// In en, this message translates to:
+  /// **'JPEG'**
+  String get settingsScreenshotFormatJpg;
+
+  /// No description provided for @settingsChooseScreenshotDir.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose folder…'**
+  String get settingsChooseScreenshotDir;
+
+  /// No description provided for @settingsResetScreenshotDir.
+  ///
+  /// In en, this message translates to:
+  /// **'Use default (Pictures/DACX)'**
+  String get settingsResetScreenshotDir;
+
+  /// No description provided for @menuSeekThumbnails.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek thumbnails (uses more resources)'**
+  String get menuSeekThumbnails;
 
   /// No description provided for @menuQueueEmpty.
   ///
@@ -1285,13 +1567,13 @@ abstract class AppLocalizations {
   /// No description provided for @tooltipPreviousTrack.
   ///
   /// In en, this message translates to:
-  /// **'Previous Track (PageUp)'**
+  /// **'Previous Track (Shift+P)'**
   String get tooltipPreviousTrack;
 
   /// No description provided for @tooltipNextTrack.
   ///
   /// In en, this message translates to:
-  /// **'Next Track (PageDown)'**
+  /// **'Next Track (Shift+N)'**
   String get tooltipNextTrack;
 
   /// No description provided for @tooltipPlayQueue.
@@ -1431,6 +1713,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Self-update is not supported on this platform.'**
   String get updateOutcomeUnsupportedPlatform;
+
+  /// No description provided for @updateOutcomeUnsupportedPlatformLinux.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-update is not available on Linux. {guidance}'**
+  String updateOutcomeUnsupportedPlatformLinux(String guidance);
 
   /// No description provided for @updateOutcomeMissingAsset.
   ///
@@ -1707,6 +1995,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open new window'**
   String get shortcutNewWindow;
+
+  /// No description provided for @shortcutSpeedSlower.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease playback speed'**
+  String get shortcutSpeedSlower;
+
+  /// No description provided for @shortcutSpeedFaster.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase playback speed'**
+  String get shortcutSpeedFaster;
+
+  /// No description provided for @shortcutCycleSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle playback speed'**
+  String get shortcutCycleSpeed;
 
   /// No description provided for @eqPresetFlat.
   ///

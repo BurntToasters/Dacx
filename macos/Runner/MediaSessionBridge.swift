@@ -22,6 +22,7 @@ final class MediaSessionBridge {
   private var artworkRequestId: UInt64 = 0
   private var artworkTask: URLSessionDataTask?
   private var commandsConfigured = false
+  private var playbackRate: Double = 1.0
 
   deinit {
     let task = stateQueue.sync { artworkTask }
@@ -122,12 +123,18 @@ final class MediaSessionBridge {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = Double(posMs) / 1000.0
       }
       var playingFlag: Bool? = nil
-      if let playing = args["playing"] as? Bool {
-        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? 1.0 : 0.0
-        playingFlag = playing
-      }
       if let rate = args["rate"] as? Double, rate > 0 {
+        playbackRate = rate
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate
+      }
+      if let playing = args["playing"] as? Bool {
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? playbackRate : 0.0
+        playingFlag = playing
+      } else if args.keys.contains("rate"),
+                let current = info[MPNowPlayingInfoPropertyPlaybackRate] as? Double,
+                current > 0 {
+        // Live rate update while already playing.
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playbackRate
       }
       if let artUri = args["artUri"] as? String, !artUri.isEmpty {
         if isLocalArtwork(artUri) {
@@ -165,7 +172,10 @@ final class MediaSessionBridge {
   }
 
   private func loadRemoteArtworkAsync(_ uri: String) {
-    guard let url = URL(string: uri) else { return }
+    guard let url = URL(string: uri),
+          let scheme = url.scheme?.lowercased(),
+          scheme == "http" || scheme == "https",
+          isPublicRemoteArtworkHost(url.host) else { return }
     let token: UInt64 = stateQueue.sync {
       artworkRequestId = artworkRequestId &+ 1
       artworkTask?.cancel()
@@ -210,6 +220,10 @@ final class MediaSessionBridge {
     cc.nextTrackCommand.isEnabled = true
     cc.previousTrackCommand.isEnabled = true
     cc.changePlaybackPositionCommand.isEnabled = true
+    cc.changePlaybackRateCommand.isEnabled = true
+    cc.changePlaybackRateCommand.supportedPlaybackRates = [
+      0.5, 0.75, 1.0, 1.25, 1.5, 2.0,
+    ]
 
     cc.playCommand.addTarget { [weak self] _ in
       self?.invokeCommand("play"); return .success
@@ -237,11 +251,23 @@ final class MediaSessionBridge {
       self?.invokeCommand("seek", positionMs: posMs)
       return .success
     }
+    cc.changePlaybackRateCommand.addTarget { [weak self] event in
+      guard let evt = event as? MPChangePlaybackRateCommandEvent else {
+        return .commandFailed
+      }
+      self?.invokeCommand("rate", value: evt.playbackRate)
+      return .success
+    }
   }
 
-  private func invokeCommand(_ action: String, positionMs: Int? = nil) {
+  private func invokeCommand(
+    _ action: String,
+    positionMs: Int? = nil,
+    value: Double? = nil
+  ) {
     var args: [String: Any] = ["action": action]
     if let pos = positionMs { args["positionMs"] = pos }
+    if let value { args["value"] = value }
     let target: FlutterMethodChannel? = stateQueue.sync {
       activeChannel ?? channels.first
     }
@@ -252,7 +278,30 @@ final class MediaSessionBridge {
 }
 
 private func isLocalArtwork(_ uri: String) -> Bool {
-  return !(uri.hasPrefix("http://") || uri.hasPrefix("https://"))
+  let lower = uri.lowercased()
+  return !(lower.hasPrefix("http://") || lower.hasPrefix("https://"))
+}
+
+/// Rejects loopback / private / link-local / .local hosts for remote artwork.
+private func isPublicRemoteArtworkHost(_ rawHost: String?) -> Bool {
+  guard let raw = rawHost?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !raw.isEmpty else { return false }
+  let host = raw.lowercased()
+  if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+    return false
+  }
+  if host.hasSuffix(".local") { return false }
+  if host.hasPrefix("10.") { return false }
+  if host.hasPrefix("192.168.") { return false }
+  if host.hasPrefix("169.254.") { return false }
+  // 172.16.0.0 – 172.31.255.255
+  if host.hasPrefix("172.") {
+    let parts = host.split(separator: ".")
+    if parts.count >= 2, let second = Int(parts[1]), (16...31).contains(second) {
+      return false
+    }
+  }
+  return true
 }
 
 private func loadLocalArtwork(_ uri: String) -> NSImage? {

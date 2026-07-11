@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
+import '../playback/playback_speed_policy.dart';
 import '../services/debug_log_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/settings_service.dart';
@@ -12,6 +14,7 @@ import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/debug_log_panel.dart';
+import '../widgets/manual_update_check.dart';
 import '../widgets/update_progress_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -114,6 +117,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           _helpFaqTile(),
                           _supportProjectTile(),
+                          if (Platform.isLinux &&
+                              (Platform.environment['FLATPAK_ID'] ?? '')
+                                  .isNotEmpty)
+                            ListTile(
+                              leading: const Icon(Icons.info_outline),
+                              title: Text(l10n.flatpakSandboxHint),
+                              dense: true,
+                            ),
                           const Divider(),
                           _sectionHeader(l10n.settingsSectionPlayback),
                           _speedTile(),
@@ -142,6 +153,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: _s.osdEnabled,
                             onChanged: (v) => setState(() => _s.osdEnabled = v),
                           ),
+                          _screenshotDirTile(),
+                          _screenshotFormatTile(),
+                          SwitchListTile(
+                            title: Text(l10n.settingsSeekPreview),
+                            subtitle: Text(l10n.settingsSeekPreviewSubtitle),
+                            value: _s.seekPreviewEnabled,
+                            onChanged: (v) =>
+                                setState(() => _s.seekPreviewEnabled = v),
+                          ),
                           SwitchListTile(
                             title: Text(l10n.settingsMediaSession),
                             subtitle: Text(l10n.settingsMediaSessionSubtitle),
@@ -154,12 +174,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _sectionHeader(l10n.settingsSectionAppearance),
                           _themeModeTile(),
                           _accentColorTile(colorScheme),
+                          if (Platform.isWindows || Platform.isMacOS) ...[
+                            _windowOpacityTile(),
+                            _windowBlurTile(),
+                            _windowBlurStrengthTile(),
+                          ],
                           if (_s.experimentalFeaturesEnabled) ...[
-                            _experimentalTile(_windowOpacityTile()),
-                            if (Platform.isLinux)
+                            if (Platform.isLinux) ...[
                               _experimentalTile(_linuxCompositorBlurTile()),
-                            _experimentalTile(_windowBlurTile()),
-                            _experimentalTile(_windowBlurStrengthTile()),
+                              _experimentalTile(_windowOpacityTile()),
+                              _experimentalTile(_windowBlurTile()),
+                              _experimentalTile(_windowBlurStrengthTile()),
+                            ],
                             _experimentalTile(_audioWaveformTile()),
                           ],
                           SwitchListTile(
@@ -296,15 +322,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListTile(
       title: Text(l10n.settingsPlaybackSpeed),
       trailing: DropdownButton<double>(
-        value: _s.speed,
+        value: PlaybackSpeedPolicy.nearestPreset(_s.speed),
         underline: const SizedBox.shrink(),
-        items: const [
-          DropdownMenuItem(value: 0.5, child: Text('0.5×')),
-          DropdownMenuItem(value: 0.75, child: Text('0.75×')),
-          DropdownMenuItem(value: 1.0, child: Text('1.0×')),
-          DropdownMenuItem(value: 1.25, child: Text('1.25×')),
-          DropdownMenuItem(value: 1.5, child: Text('1.5×')),
-          DropdownMenuItem(value: 2.0, child: Text('2.0×')),
+        items: [
+          for (final rate in PlaybackSpeedPolicy.presets)
+            DropdownMenuItem(
+              value: rate,
+              child: Text(PlaybackSpeedPolicy.formatLabel(rate)),
+            ),
         ],
         onChanged: (v) {
           if (v != null) {
@@ -357,6 +382,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _log(
             'loop_mode_changed',
             detailsBuilder: () => {'value': s.first.name},
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _screenshotDirTile() {
+    final l10n = AppLocalizations.of(context);
+    final dir = _s.screenshotDir;
+    return ListTile(
+      title: Text(l10n.settingsScreenshotDir),
+      subtitle: Text(
+        dir ?? l10n.settingsScreenshotDirSubtitle,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () async {
+              final picked = await FilePicker.getDirectoryPath(
+                dialogTitle: l10n.settingsChooseScreenshotDir,
+              );
+              if (picked == null || !mounted) return;
+              setState(() {
+                _s.screenshotDir = picked;
+                _log(
+                  'screenshot_dir_changed',
+                  detailsBuilder: () => {'value': picked},
+                );
+              });
+            },
+            child: Text(l10n.settingsChooseScreenshotDir),
+          ),
+          TextButton(
+            onPressed: dir == null
+                ? null
+                : () => setState(() {
+                    _s.screenshotDir = null;
+                    _log('screenshot_dir_reset');
+                  }),
+            child: Text(l10n.settingsResetScreenshotDir),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _screenshotFormatTile() {
+    final l10n = AppLocalizations.of(context);
+    return ListTile(
+      title: Text(l10n.settingsScreenshotFormat),
+      trailing: SegmentedButton<String>(
+        segments: [
+          ButtonSegment(
+            value: 'png',
+            label: Text(l10n.settingsScreenshotFormatPng),
+          ),
+          ButtonSegment(
+            value: 'jpg',
+            label: Text(l10n.settingsScreenshotFormatJpg),
+          ),
+        ],
+        selected: {_s.screenshotFormat},
+        onSelectionChanged: (s) => setState(() {
+          _s.screenshotFormat = s.first;
+          _log(
+            'screenshot_format_changed',
+            detailsBuilder: () => {'value': s.first},
           );
         }),
       ),
@@ -512,7 +607,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final divisions = ((1.0 - minOpacity) / 0.05).round();
 
     return ListTile(
-      leading: _experimentalWarningIcon(),
       title: Text(l10n.settingsWindowOpacity),
       subtitle: Column(
         mainAxisSize: MainAxisSize.min,
@@ -541,17 +635,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowBlurTile() {
     final l10n = AppLocalizations.of(context);
-    if (!_s.experimentalFeaturesEnabled) {
-      return const SizedBox.shrink();
-    }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
-        (Platform.isLinux && _s.linuxCompositorBlurExperimental);
+        (Platform.isLinux &&
+            _s.experimentalFeaturesEnabled &&
+            _s.linuxCompositorBlurExperimental);
     final effectiveEnabled = isSupported && _s.windowBlurEnabled;
 
     return SwitchListTile(
-      secondary: _experimentalWarningIcon(),
       title: Text(l10n.settingsBackgroundBlur),
       subtitle: Text(
         Platform.isLinux
@@ -572,18 +664,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _windowBlurStrengthTile() {
     final l10n = AppLocalizations.of(context);
-    if (!_s.experimentalFeaturesEnabled) {
-      return const SizedBox.shrink();
-    }
     final isSupported =
         Platform.isWindows ||
         Platform.isMacOS ||
-        (Platform.isLinux && _s.linuxCompositorBlurExperimental);
+        (Platform.isLinux &&
+            _s.experimentalFeaturesEnabled &&
+            _s.linuxCompositorBlurExperimental);
     final strength = _s.windowBlurStrength;
     final percent = (strength * 100).round();
 
     return ListTile(
-      leading: _experimentalWarningIcon(),
       title: Text(l10n.settingsGlassStrength),
       subtitle: Column(
         mainAxisSize: MainAxisSize.min,
@@ -655,7 +745,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SwitchListTile(
       secondary: _experimentalWarningIcon(),
       title: Text(l10n.settingsExperimentalEnable),
-      subtitle: Text(l10n.settingsExperimentalUnstable),
+      subtitle: Text(
+        '${l10n.settingsExperimentalUnstable}\n${l10n.settingsExperimentalStoredPrefsHint}',
+      ),
+      isThreeLine: true,
       value: _s.experimentalFeaturesEnabled,
       onChanged: (v) {
         setState(() {
@@ -774,97 +867,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _checkForUpdatesTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
-      title: Text(l10n.settingsCheckForUpdates),
-      trailing: _checkingUpdate
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : FilledButton.tonal(
-              onPressed: _doCheckForUpdate,
-              child: Text(l10n.settingsCheckNow),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          title: Text(l10n.settingsCheckForUpdates),
+          trailing: _checkingUpdate
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : FilledButton.tonal(
+                  onPressed: _doCheckForUpdate,
+                  child: Text(l10n.settingsCheckNow),
+                ),
+        ),
+        if (Platform.isLinux)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              '${l10n.settingsLinuxUpdateHint} ${linuxUpdateGuidance(l10n)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.64),
+              ),
             ),
+          ),
+      ],
     );
   }
 
   Future<void> _doCheckForUpdate() async {
-    _log('manual_update_check_requested', category: DebugLogCategory.update);
     setState(() => _checkingUpdate = true);
     try {
-      final update = await _updateService.checkForUpdate(
-        channel: _s.updateChannel,
-      );
-      if (!mounted) return;
-      if (!_updateService.lastCheckSucceeded) {
-        _log(
-          'manual_update_check_failed',
-          category: DebugLogCategory.update,
-          severity: DebugSeverity.warn,
-        );
-        final l10n = AppLocalizations.of(context);
-        String message;
-        if (_updateService.lastCheckRateLimited) {
-          message = l10n.snackUpdateRateLimited;
-        } else if (_updateService.lastCheckNetworkError) {
-          message = l10n.snackUpdateNetworkError;
-        } else {
-          message = l10n.snackUpdateCheckFailed;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-        return;
-      }
-      if (update != null) {
-        _log(
-          'manual_update_available',
-          category: DebugLogCategory.update,
-          detailsBuilder: () => {'version': update.version},
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUpdateAvailable(update.version),
-            ),
-            action: SnackBarAction(
-              label: updateActionLabel(AppLocalizations.of(context)),
-              onPressed: () => triggerUpdateAction(
-                context: context,
-                info: update,
-                updateService: _updateService,
-                channelName: _s.updateChannel.name,
-                debugLog: widget.debugLog,
-              ),
-            ),
-          ),
-        );
-      } else {
-        _log('manual_update_not_available', category: DebugLogCategory.update);
-        final l10n = AppLocalizations.of(context);
-        final isBeta =
-            _updateService.lastEffectiveChannel == UpdateChannel.beta;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isBeta ? l10n.snackUpdateLatestBeta : l10n.snackUpdateLatest,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      _log(
-        'manual_update_check_failed',
-        category: DebugLogCategory.update,
-        message: e.toString(),
-        severity: DebugSeverity.error,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).snackUpdateCheckFailed),
-        ),
+      await runManualUpdateCheck(
+        context: context,
+        updateService: _updateService,
+        settings: _s,
+        debugLog: widget.debugLog,
+        onLog: (event, {message, severity}) {
+          _log(
+            event,
+            category: DebugLogCategory.update,
+            message: message,
+            severity: severity ?? DebugSeverity.info,
+          );
+        },
       );
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);

@@ -5,14 +5,12 @@ on:
     branches:
       - main
       - beta
-      - next-0.10.0
     tags:
       - 'v*'
   pull_request:
     branches:
       - main
       - beta
-      - next-0.10.0
   workflow_dispatch:
 
 jobs:

@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 
 import '../l10n/app_localizations.dart';
 import '../models/playable_source.dart';
+import '../playback/playback_speed_policy.dart';
 import '../services/settings_service.dart';
 
 class TransportControls extends StatelessWidget {
@@ -26,6 +27,8 @@ class TransportControls extends StatelessWidget {
   final VoidCallback? onNext;
   final VoidCallback? onToggleQueue;
   final VoidCallback? onMoreActions;
+  final VoidCallback? onToggleMute;
+  final VoidCallback? onCycleSpeed;
 
   const TransportControls({
     super.key,
@@ -49,6 +52,8 @@ class TransportControls extends StatelessWidget {
     this.onNext,
     this.onToggleQueue,
     this.onMoreActions,
+    this.onToggleMute,
+    this.onCycleSpeed,
   });
 
   void _cycleLoopMode() {
@@ -151,7 +156,7 @@ class TransportControls extends StatelessWidget {
                 onPressed: _cycleLoopMode,
                 iconSize: 20,
               ),
-              // Speed chip (visible when != 1.0)
+              // Speed control — tap to cycle presets
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 switchInCurve: Curves.easeOutCubic,
@@ -161,28 +166,38 @@ class TransportControls extends StatelessWidget {
                     opacity: animation,
                     child: SizeTransition(
                       axis: Axis.horizontal,
-                      axisAlignment: -1.0,
+                      alignment: Alignment.centerLeft,
                       sizeFactor: animation,
                       child: child,
                     ),
                   );
                 },
-                child: speed != 1.0
-                    ? Padding(
-                        key: ValueKey<double>(speed),
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Chip(
-                          label: Text(
-                            '$speed×',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      )
-                    : const SizedBox(key: ValueKey('speed-empty')),
+                child: Tooltip(
+                  key: ValueKey<double>(speed),
+                  message: l10n.tooltipCycleSpeed,
+                  child: TextButton(
+                    key: const Key('transport-speed-chip'),
+                    onPressed: onCycleSpeed,
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: Text(
+                      PlaybackSpeedPolicy.formatLabel(speed),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: speed == 1.0
+                            ? FontWeight.w500
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -196,9 +211,22 @@ class TransportControls extends StatelessWidget {
                   label: volume == 0
                       ? l10n.volumeMuted
                       : l10n.volumePercent(volume.round()),
-                  child: Icon(
-                    volume == 0 ? Icons.volume_off : Icons.volume_up,
-                    size: 20,
+                  button: onToggleMute != null,
+                  child: IconButton(
+                    icon: Icon(
+                      volume == 0 ? Icons.volume_off : Icons.volume_up,
+                      size: 20,
+                    ),
+                    tooltip: volume == 0
+                        ? l10n.tooltipUnmute
+                        : l10n.tooltipMute,
+                    onPressed: onToggleMute,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ),
                 if (showVolumeSlider)
@@ -233,7 +261,9 @@ class TransportControls extends StatelessWidget {
                     icon: const Icon(Icons.more_vert),
                     tooltip: l10n.tooltipMore,
                     iconSize: 20,
-                    onPressed: hasMedia ? onMoreActions : null,
+                    // Always enabled: Open URL / keybinds / enqueue must work
+                    // on the empty state (Win/Linux have no File → Open URL).
+                    onPressed: onMoreActions,
                   ),
                 // Settings gear
                 IconButton(

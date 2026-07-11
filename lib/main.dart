@@ -306,10 +306,22 @@ class _DacxAppState extends State<DacxApp>
   _ThemeInputs? _cachedThemeInputs;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
-    if (!settings.experimentalFeaturesEnabled) return false;
     if (!settings.windowBlurEnabled) return false;
+    // Win/mac blur is a graduated Appearance setting.
     if (Platform.isWindows || Platform.isMacOS) return true;
-    if (Platform.isLinux) return settings.linuxCompositorBlurExperimental;
+    // Linux compositor blur stays behind Experimental Features.
+    if (Platform.isLinux) {
+      return settings.experimentalFeaturesEnabled &&
+          settings.linuxCompositorBlurExperimental;
+    }
+    return false;
+  }
+
+  /// Window opacity slider applies on Win/mac always; on Linux only with
+  /// Experimental Features (pairs with compositor blur).
+  bool _windowOpacityAllowed(SettingsService settings) {
+    if (Platform.isWindows || Platform.isMacOS) return true;
+    if (Platform.isLinux) return settings.experimentalFeaturesEnabled;
     return false;
   }
 
@@ -466,10 +478,9 @@ class _DacxAppState extends State<DacxApp>
     do {
       _pendingWindowVisuals = false;
       final s = widget.settings;
-      final experimentalEnabled = s.experimentalFeaturesEnabled;
       final blurEnabled = _isEffectiveBlurEnabled(s);
       final bypassNativeOpacity = _shouldBypassNativeOpacity(blurEnabled);
-      final effectiveOpacity = experimentalEnabled ? s.windowOpacity : 1.0;
+      final effectiveOpacity = _windowOpacityAllowed(s) ? s.windowOpacity : 1.0;
 
       try {
         if (bypassNativeOpacity) {
@@ -572,7 +583,7 @@ class _DacxAppState extends State<DacxApp>
           category: DebugLogCategory.system,
           event: 'window_visuals_applied',
           detailsBuilder: () => {
-            'experimental_enabled': experimentalEnabled,
+            'experimental_enabled': s.experimentalFeaturesEnabled,
             'blur_enabled': blurEnabled,
             'bypass_native_opacity': bypassNativeOpacity,
             'effective_opacity': effectiveOpacity.toStringAsFixed(3),
@@ -619,9 +630,8 @@ class _DacxAppState extends State<DacxApp>
       listenable: widget.settings,
       builder: (context, _) {
         final s = widget.settings;
-        final experimentalEnabled = s.experimentalFeaturesEnabled;
         final blurEnabled = _isEffectiveBlurEnabled(s);
-        final uiOpacityValue = experimentalEnabled ? s.windowOpacity : 1.0;
+        final uiOpacityValue = _windowOpacityAllowed(s) ? s.windowOpacity : 1.0;
         const opacityMin = SettingsService.windowOpacityMin;
         final opacitySliderT =
             ((uiOpacityValue - opacityMin) / (1.0 - opacityMin)).clamp(

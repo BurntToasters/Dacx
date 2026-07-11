@@ -27,6 +27,7 @@ void main() {
         lastAudioWaveformEnabled: false,
         lastEqEnabled: false,
         lastEqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        lastHwDec: 'auto',
       );
 
       final (delta, next) = PlayerSettingsSync.diff(
@@ -134,6 +135,19 @@ void main() {
 
       expect(delta.playlistShuffle, isTrue);
       expect(next.lastPlaylistShuffle, isTrue);
+    });
+
+    test('detects hwDec change', () async {
+      final settings = await settingsWith({'system_hwdec': 'no'});
+      const state = PlayerSettingsSyncState(lastHwDec: 'auto');
+
+      final (delta, next) = PlayerSettingsSync.diff(
+        state: state,
+        settings: settings,
+      );
+
+      expect(delta.hwDec, 'no');
+      expect(next.lastHwDec, 'no');
     });
 
     test('detects audio waveform-only change', () async {

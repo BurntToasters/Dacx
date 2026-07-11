@@ -44,7 +44,10 @@ class PlayableSource {
   static bool isSupportedUrl(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) return false;
-    return uri.scheme == 'http' || uri.scheme == 'https';
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    // Refuse embedded credentials (logging/UI redaction is not enough).
+    if (uri.userInfo.isNotEmpty) return false;
+    return true;
   }
 
   static bool isDisplaySafeUrl(String value) {

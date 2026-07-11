@@ -227,5 +227,42 @@ void main() {
         );
       });
     });
+
+    group('isUncPath', () {
+      test('detects backslash UNC', () {
+        expect(PlayerPathUtils.isUncPath(r'\\server\share\file.mp3'), isTrue);
+        expect(
+          PlayerPathUtils.isUncPath(r'\\?\UNC\server\share\a.mp3'),
+          isTrue,
+        );
+      });
+
+      test('detects forward-slash UNC', () {
+        expect(PlayerPathUtils.isUncPath('//server/share/file.mp3'), isTrue);
+      });
+
+      test('rejects local and device paths', () {
+        expect(PlayerPathUtils.isUncPath('/tmp/file.mp3'), isFalse);
+        expect(PlayerPathUtils.isUncPath(r'C:\Users\a.mp3'), isFalse);
+        expect(PlayerPathUtils.isUncPath('//./pipe/name'), isFalse);
+      });
+    });
+
+    group('isUnsafeOpenPath', () {
+      test('rejects empty, NUL, and UNC', () {
+        expect(PlayerPathUtils.isUnsafeOpenPath(''), isTrue);
+        expect(PlayerPathUtils.isUnsafeOpenPath('  '), isTrue);
+        expect(PlayerPathUtils.isUnsafeOpenPath('a\x00b.mp3'), isTrue);
+        expect(
+          PlayerPathUtils.isUnsafeOpenPath(r'\\server\share\file.mp3'),
+          isTrue,
+        );
+      });
+
+      test('accepts normal local paths', () {
+        expect(PlayerPathUtils.isUnsafeOpenPath('/tmp/file.mp3'), isFalse);
+        expect(PlayerPathUtils.isUnsafeOpenPath(r'C:\media\a.mp3'), isFalse);
+      });
+    });
   });
 }

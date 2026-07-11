@@ -24,6 +24,9 @@ enum PlayerShortcutAction {
   playlistPrev,
   toggleCompactMode,
   newWindow,
+  speedSlower,
+  speedFaster,
+  cycleSpeed,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -49,6 +52,9 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.playlistPrev: ['Shift+P'],
   PlayerShortcutAction.toggleCompactMode: ['Ctrl+Shift+M'],
   PlayerShortcutAction.newWindow: ['Ctrl+N'],
+  PlayerShortcutAction.speedSlower: ['['],
+  PlayerShortcutAction.speedFaster: [']'],
+  PlayerShortcutAction.cycleSpeed: ['\\'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -76,6 +82,9 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.playlistPrev => l10n.shortcutPlaylistPrev,
       PlayerShortcutAction.toggleCompactMode => l10n.shortcutToggleCompactMode,
       PlayerShortcutAction.newWindow => l10n.shortcutNewWindow,
+      PlayerShortcutAction.speedSlower => l10n.shortcutSpeedSlower,
+      PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
+      PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
     };
   }
   return switch (a) {
@@ -100,6 +109,9 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.playlistPrev => 'Previous in queue',
     PlayerShortcutAction.toggleCompactMode => 'Toggle mini-player',
     PlayerShortcutAction.newWindow => 'Open new window',
+    PlayerShortcutAction.speedSlower => 'Decrease playback speed',
+    PlayerShortcutAction.speedFaster => 'Increase playback speed',
+    PlayerShortcutAction.cycleSpeed => 'Cycle playback speed',
   };
 }
 
@@ -107,8 +119,10 @@ class PlayerShortcutsService {
   /// Resolves a key event into an action.
   ///
   /// Default behavior preserves the original built-in mapping. When
-  /// [customBindings] is provided (action name -> accelerator strings) it
-  /// overrides defaults entirely (only listed actions are matched).
+  /// [customBindings] is provided (action name -> accelerator strings), those
+  /// bindings are checked first and **overlay** the defaults: unlisted actions
+  /// still use built-in accelerators. A custom accelerator that collides with
+  /// a default wins (custom match is preferred).
   static PlayerShortcutAction? resolve({
     required KeyEvent event,
     required bool hasMedia,
@@ -142,7 +156,7 @@ class PlayerShortcutsService {
         }
         return action;
       }
-      return null;
+      // Fall through so unbound actions keep their defaults.
     }
 
     return _defaultResolve(
@@ -256,6 +270,24 @@ class PlayerShortcutsService {
         !primaryModifierPressed &&
         key == LogicalKeyboardKey.keyM) {
       return PlayerShortcutAction.toggleMute;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.bracketLeft) {
+      return PlayerShortcutAction.speedSlower;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.bracketRight) {
+      return PlayerShortcutAction.speedFaster;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.backslash) {
+      return PlayerShortcutAction.cycleSpeed;
     }
     return null;
   }

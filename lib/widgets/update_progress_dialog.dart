@@ -4,9 +4,31 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../playback/linux_install_kind.dart';
 import '../services/debug_log_service.dart';
 import '../services/self_update_service.dart';
 import '../services/update_service.dart';
+
+/// Package-aware Linux update copy (and generic fallback).
+String linuxUpdateGuidance(AppLocalizations l10n, {LinuxInstallKind? kind}) {
+  final detected = kind ?? LinuxInstallDetector.detect();
+  return switch (detected) {
+    LinuxInstallKind.flatpak => l10n.linuxUpdateGuidanceFlatpak,
+    LinuxInstallKind.appImage => l10n.linuxUpdateGuidanceAppImage,
+    LinuxInstallKind.debOrRpm => l10n.linuxUpdateGuidanceDebRpm,
+    LinuxInstallKind.portable => l10n.linuxUpdateGuidancePortable,
+    LinuxInstallKind.unknown => l10n.linuxUpdateGuidanceGeneric,
+  };
+}
+
+String unsupportedPlatformUpdateMessage(AppLocalizations l10n) {
+  if (Platform.isLinux) {
+    return l10n.updateOutcomeUnsupportedPlatformLinux(
+      linuxUpdateGuidance(l10n),
+    );
+  }
+  return l10n.updateOutcomeUnsupportedPlatform;
+}
 
 /// Snackbar/Settings entry point. On Win/Mac shows the install progress
 /// dialog and exits the app on a successful spawn so the helper/watchdog
@@ -99,8 +121,9 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
 
   String _outcomeLabel(AppLocalizations l10n, SelfUpdateOutcome o) {
     return switch (o) {
-      SelfUpdateOutcome.unsupportedPlatform =>
-        l10n.updateOutcomeUnsupportedPlatform,
+      SelfUpdateOutcome.unsupportedPlatform => unsupportedPlatformUpdateMessage(
+        l10n,
+      ),
       SelfUpdateOutcome.missingAsset => l10n.updateOutcomeMissingAsset,
       SelfUpdateOutcome.missingChecksums => l10n.updateOutcomeMissingChecksums,
       SelfUpdateOutcome.missingSignature => l10n.updateOutcomeMissingSignature,

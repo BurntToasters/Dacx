@@ -1334,7 +1334,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(player.openCalls, isEmpty);
-    expect(find.textContaining('Could not read dropped file'), findsOneWidget);
+    expect(
+      find.textContaining('outside the sandbox or inaccessible'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shift p wraps to last item when loop-all is enabled', (
@@ -1509,7 +1512,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(player.openCalls.map((c) => c.path), contains('/media/valid.mp3'));
-    expect(find.textContaining('Skipped 2 unreadable'), findsOneWidget);
+    expect(
+      find.textContaining('outside the sandbox or inaccessible'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ctrl arrow left at first chapter stays on intro', (

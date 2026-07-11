@@ -35,5 +35,13 @@ void main() {
       expect(batch.paths, ['/media/first.mp3', '/media/second.flac']);
       expect(batch.skippedCount, 0);
     });
+    test('skips UNC paths on Windows-style drops', () {
+      final batch = DropPathBatchPolicy.fromRawPaths(
+        rawPaths: [r'\\server\share\a.mp3', r'C:\media\a.mp3'],
+        windows: true,
+      );
+      expect(batch.paths, [r'C:\media\a.mp3']);
+      expect(batch.skippedCount, 1);
+    });
   });
 }

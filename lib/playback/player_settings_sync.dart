@@ -15,6 +15,7 @@ class PlayerSettingsSyncState {
     this.lastAudioWaveformEnabled,
     this.lastEqEnabled,
     this.lastEqBands,
+    this.lastHwDec,
   });
 
   final double? lastSpeed;
@@ -26,6 +27,7 @@ class PlayerSettingsSyncState {
   final bool? lastAudioWaveformEnabled;
   final bool? lastEqEnabled;
   final List<double>? lastEqBands;
+  final String? lastHwDec;
 
   PlayerSettingsSyncState copyWith({
     double? lastSpeed,
@@ -37,6 +39,7 @@ class PlayerSettingsSyncState {
     bool? lastAudioWaveformEnabled,
     bool? lastEqEnabled,
     List<double>? lastEqBands,
+    String? lastHwDec,
   }) {
     return PlayerSettingsSyncState(
       lastSpeed: lastSpeed ?? this.lastSpeed,
@@ -50,6 +53,7 @@ class PlayerSettingsSyncState {
           lastAudioWaveformEnabled ?? this.lastAudioWaveformEnabled,
       lastEqEnabled: lastEqEnabled ?? this.lastEqEnabled,
       lastEqBands: lastEqBands ?? this.lastEqBands,
+      lastHwDec: lastHwDec ?? this.lastHwDec,
     );
   }
 }
@@ -65,6 +69,7 @@ class PlayerSettingsSyncDelta {
     this.mediaSessionEnabled,
     this.playlistShuffle,
     this.alwaysOnTop,
+    this.hwDec,
     this.rebuildUi = false,
   });
 
@@ -75,6 +80,7 @@ class PlayerSettingsSyncDelta {
   final bool? mediaSessionEnabled;
   final bool? playlistShuffle;
   final bool? alwaysOnTop;
+  final String? hwDec;
   final bool rebuildUi;
 
   bool get isEmpty =>
@@ -85,6 +91,7 @@ class PlayerSettingsSyncDelta {
       mediaSessionEnabled == null &&
       playlistShuffle == null &&
       alwaysOnTop == null &&
+      hwDec == null &&
       !rebuildUi;
 }
 
@@ -102,6 +109,7 @@ abstract final class PlayerSettingsSync {
     bool? mediaSessionEnabled;
     bool? playlistShuffle;
     bool? alwaysOnTop;
+    String? hwDec;
 
     if (state.lastSpeed != settings.speed) {
       speed = settings.speed;
@@ -148,6 +156,11 @@ abstract final class PlayerSettingsSync {
       next = next.copyWith(lastAlwaysOnTop: settings.alwaysOnTop);
     }
 
+    if (state.lastHwDec != settings.hwDec) {
+      hwDec = settings.hwDec;
+      next = next.copyWith(lastHwDec: settings.hwDec);
+    }
+
     final delta = PlayerSettingsSyncDelta(
       speed: speed,
       loopMode: loopMode,
@@ -156,6 +169,7 @@ abstract final class PlayerSettingsSync {
       mediaSessionEnabled: mediaSessionEnabled,
       playlistShuffle: playlistShuffle,
       alwaysOnTop: alwaysOnTop,
+      hwDec: hwDec,
       rebuildUi:
           speed != null ||
           loopMode != null ||
@@ -163,7 +177,8 @@ abstract final class PlayerSettingsSync {
           multiAudioMix ||
           mediaSessionEnabled != null ||
           playlistShuffle != null ||
-          alwaysOnTop != null,
+          alwaysOnTop != null ||
+          hwDec != null,
     );
 
     return (delta, next);

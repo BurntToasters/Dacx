@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:dacx/l10n/app_localizations.dart';
-import 'package:dacx/playback/player_ui_policies.dart';
 import 'package:dacx/screens/player_screen.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/headless_player_service.dart';
@@ -14,9 +13,6 @@ import 'package:dacx/widgets/transport_controls.dart';
 import '../support/player_screen_harness.dart';
 
 /// Widget-level checks for player UI gating without libmpv.
-///
-/// Full [PlayerScreen] pump tests belong in integration/build environments
-/// where native media_kit libraries are available (see `npm run check:build-smoke`).
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -29,10 +25,7 @@ void main() {
     return SettingsService(shared);
   }
 
-  Widget wrapTransport({
-    required SettingsService settings,
-    required VoidCallback? onOpenUrl,
-  }) {
+  Widget wrapTransport({VoidCallback? onOpenUrl}) {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey);
     return MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -61,36 +54,12 @@ void main() {
   }
 
   group('PlayerScreen experimental UI gating', () {
-    testWidgets('hides Open URL when experimental features are disabled', (
+    testWidgets('Open URL transport chrome stays hidden by default', (
       tester,
     ) async {
-      final settings = await settingsWith({
-        'experimental_features_enabled': false,
-      });
-      final showUrl = PlayerUiPolicies.showOpenUrlButton(settings);
-
-      await tester.pumpWidget(
-        wrapTransport(settings: settings, onOpenUrl: showUrl ? () {} : null),
-      );
+      await tester.pumpWidget(wrapTransport());
       await tester.pumpAndSettle();
-
       expect(find.byTooltip('Open URL'), findsNothing);
-    });
-
-    testWidgets('shows Open URL when experimental features are enabled', (
-      tester,
-    ) async {
-      final settings = await settingsWith({
-        'experimental_features_enabled': true,
-      });
-      final showUrl = PlayerUiPolicies.showOpenUrlButton(settings);
-
-      await tester.pumpWidget(
-        wrapTransport(settings: settings, onOpenUrl: showUrl ? () {} : null),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byTooltip('Open URL'), findsOneWidget);
     });
 
     test('accepts injected IPlayerService reference', () async {

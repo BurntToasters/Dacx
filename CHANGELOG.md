@@ -1,29 +1,56 @@
-<!-- > [!NOTE]
-> 🅱️ This is a Beta build. -->
-
-### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
+> [!NOTE]
+> 🅱️ This is a Beta build.
 
 # ⬇️ Downloads
 
-| <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
+| <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI: [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Windows-x64.msi)**<!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Windows-arm64.msi)** -->| **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.AppImage) |
-| <!-- <div align="center"><a href="https://apps.microsoft.com/detail/9pkgd6lkcl5j?referrer=appbadge&mode=full"><img src="https://get.microsoft.com/images/en-us%20light.svg" width="150"/></a></div>--> | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-amd64.deb) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-arm64.deb)--> |
-| <!--*See MSI note below*--> | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.rpm) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-aarch64.rpm)--> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.tar.gz) <!--/ [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-aarch64.flatpak)--> |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-arm64.AppImage) --> |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-arm64.deb) --> |
+| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-aarch64.rpm) --> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-aarch64.flatpak) --> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
-The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
-⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
+> The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
+>
+> This is a pre-1.0 beta — expect rough edges. Arm64 Linux and Windows binaries are *not* available yet.
+
+### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
+
+Hello again — Dacx is my lightweight desktop music and video player, meant to launch quick and play media without extra nonsense. This beta packs a big chunk of the road toward a stable `1.0`.
+
+## Changes in `v0.11.0-beta.1:`
+
+- **Ver:** Bumped version to `v0.11.0-beta.1`.
+- **NEW - Playlist files:** Added open/import for `.m3u` / `.pls` (file picker, empty state, and drag-drop) plus save/export of the play queue as `.m3u`. HLS `.m3u8` still opens as a stream for mpv.
+- **NEW - Session queue restore:** I now restore the last session queue (paths + index) on launch, prune missing files, and keep shuffle via the existing preference.
+- **NEW - Playback speed:** Added a transport speed chip that cycles presets, plus `[` / `]` / `\` shortcuts.
+- **NEW - External tracks:** You can load external audio or subtitle files from the more menu.
+- **macOS:** Expanded File / Dock menus (Open Folder / Playlist / URL / Reopen Last / New Window / Open Recent → Clear Menu / Save Playlist), Preferences… (⌘,), Check for Updates…, display-sleep inhibit while playing, Now Playing playback rate, and richer Launch Services types including playlists.
+- **Windows:** Added Jump Lists from recents, taskbar playback progress, idle inhibit while playing, SMTC rate updates, playlist Open With ProgIDs, and expanded media extensions. Fixed an issue where App Search registered an unquoted Open With command alongside the file-assoc entry.
+- **Linux:** Idle/screensaver inhibit while playing now uses a persistent D-Bus session so it actually sticks. Update guidance is package-aware (Flatpak / AppImage / deb·rpm / portable). Fixed an issue where deb/rpm installs under `/opt/dacx` were mislabeled as portable. MPRIS `desktopEntry` matches the packaged `.desktop`; fuller icons / MIME / AppStream coverage; Flatpak ScreenSaver talk-name.
+- **UI:** Moved Open URL into the ⋯ more menu (macOS File → Open URL stays), and the more menu now works on the empty state so Win/Linux can still open streams. Grouped the menu with dividers. Mute toggles from the volume icon. Prev/next tooltips now match `Shift+P` / `Shift+N`. Media Info shows title / artist / album when tags are present. Empty-state Reopen Last tip mentions Ctrl/Cmd+R.
+- **UI:** Single-file Open / Open With / URL loads sync into the play queue; Open With on the same path restarts when already playing; queue drag-reorder + shuffle on the drawer (shuffle now persists and stays in sync with Settings / media session).
+- **Settings:** Graduated window blur / opacity to Appearance on Windows and macOS (Linux compositor blur stays experimental). Added screenshot folder + format, a seek-thumbnail toggle (still opt-in; uses extra memory), Flatpak sandbox hint, and an experimental stored-prefs warning. Hardware decode changes re-apply at runtime. Expanded folder-scan extensions (`ts` / `m2ts` / `mpg` / …).
+- **Misc:** Rebuilt the experimental audio visualizer as real multiband lavfi analysis (4 bands → 32 bars) with a safer filter lifecycle, mutual exclusion with multi-audio mix, and a capability probe with OSD. Still experimental and off by default.
+- **Shortcuts:** Custom keybinds now overlay defaults instead of replacing the entire map.
+- **Updater:** Linux Check for Updates copy is package-aware; Flatpak empty state is picker-first with a Reopen Last tip.
+- **Misc:** Media session now passes title / artist / album from tags and exports embedded album art for OS Now Playing.
+- **Security:** Reject UNC / unsafe open paths and URLs with embedded credentials; hardened macOS update zip containment and Now Playing remote artwork hosts; clarified that Windows self-update trust is Ed25519-first with optional Authenticode pin.
+- **Codebase:** Extracted `PlayerAudioSession` from `PlayerScreen`; limited CI / release guard to `main` and `beta`; destructive `npm run b` / `r` now require `DACX_ALLOW_DESTRUCTIVE=1`.
+- **Testing:** Expanded VM tests and the headless `PlayerScreen` harness around playback policies and recent UI wiring.
+- **Misc:** Documented the support contract in the README (en-only, macOS 15+, x64), Flatpak sideload update guidance, and a manual QA checklist in `docs/QA.md`.
+- **PKG:** Updated packages.
 
 ## Changes in `v0.10.1-beta.1:`
-* **Audio Visualizer:** Added a new audio-reactive bar visualizer for audio playback.
-* **Window Transparency/Blurring:** More work has been done on this experimental feature! 
-  - Window Transparency/Blur is closer to being moved out of the experimental features options and becoming stable!
-* **Backend:** Updated base flutter version to `v3.44.5`.
-* **Testing:** 839 VM tests in `npm run test:all`; headless `PlayerScreen` widget harness exercises transport, queue, settings, drag-drop load paths (including mixed valid/invalid batches), load-validation feedback, keyboard shortcuts (play/pause, seek, mute, volume, fullscreen, chapter prev/next with bounds, playlist wrap/end-stop, loop-single completion and manual advance bounds, media session loop/shuffle/volume/rate/next in single mode, equalizer, audio/subtitle tracks, screenshot save/fail with OSD probe and overlay, compact mode, escape, open file, reopen last/url, new window, shortcuts dialog), load-failure feedback, and playback UI without libmpv; `OsdOverlay` shows transient messages on first mount; pre/post-open load orchestration, screenshot path, drop-path batching, playlist advance, and playback policies extracted for unit coverage.
-* **Stability:** `IPlayerService` injection and load-generation guards reduce stale UI after rapid queue changes; self-update redirect allowlist and Windows manifest validation covered by direct tests.
+
+- **NEW - Audio visualizer:** Added a new audio-reactive bar visualizer for audio playback (experimental).
+- **UI:** More work on window transparency / blur — closer to graduating out of Experimental!
+- **Codebase:** Updated the pinned Flutter version to `v3.44.5`.
+- **Testing:** Expanded `npm run test:all` with a headless `PlayerScreen` harness (transport, queue, settings, drag-drop, shortcuts, media session, screenshots, and more) plus extracted playback-policy unit coverage.
+- **Misc:** `IPlayerService` injection and load-generation guards reduce stale UI after rapid queue changes; self-update redirect allowlist and Windows manifest validation covered by direct tests.
+- **PKG:** Updated packages.
 
 <details>
 <summary>Full changelog</summary>
@@ -137,10 +164,10 @@ Welcome to the first beta build of Dacx! I've pruned through the codebase enough
 
 </details>
 
-Hello everyone its me again releasing another app/tool I developed for my own niche but of course love to share :)
-This is intended to be a light-weight music and video player just meant to launch quick and play media without any extra nonsense!
+## ℹ️ Release Info
 
-## Info
-More information about Dacx is available via the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md) and also via: [https://help.rosie.run/dacx/en-us/faq](https://help.rosie.run/dacx/en-us/faq).
-
-[i] This changelog is made using the BCLS standard: https://github.com/BurntToasters/BCLS
+- **GPG Signed:** My public key is attached to every release to ensure authenticity.
+- **GPG Key:** Public key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc .
+- **Code Signing:** macOS releases are fully signed and notarized. Windows MSIs are not Authenticode-signed by default; trust the GPG `.asc` plus the Ed25519-signed update manifest for self-update. Linux packages are GPG-signed the same way.
+- **Windows package:** Dacx ships MSI (not EXE) on Windows, including betas — that is intentional for the self-updater.
+- **More info:** See the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md), [FAQ](https://help.rosie.run/dacx/en-us/faq), and [BCLS](https://github.com/BurntToasters/BCLS).

@@ -25,6 +25,32 @@ void main() {
       );
     });
 
+    test('rejects unsafe local paths (UNC / empty / NUL)', () {
+      expect(
+        SourceLoadValidationPolicy.validateRequest(
+          source: PlayableSource.file(r'\\server\share\file.mp3'),
+          trimmedValue: r'\\server\share\file.mp3',
+        ).failure,
+        SourceLoadValidationFailure.unsafePath,
+      );
+      expect(
+        SourceLoadValidationPolicy.validateRequest(
+          source: PlayableSource.file('a\x00b.mp3'),
+          trimmedValue: 'a\x00b.mp3',
+        ).failure,
+        SourceLoadValidationFailure.unsafePath,
+      );
+    });
+
+    test('maps unsafePath to invalid path feedback', () {
+      final reaction = SourceLoadValidationPolicy.reactionFor(
+        SourceLoadValidationFailure.unsafePath,
+      );
+      expect(reaction.logEvent, 'file_load_unsafe_path');
+      expect(reaction.shouldPruneRecentFiles, isFalse);
+      expect(reaction.userMessage, SourceLoadUserMessageKind.invalidFilePath);
+    });
+
     test('accepts valid file and http(s) requests', () {
       expect(
         SourceLoadValidationPolicy.validateRequest(

@@ -17,12 +17,17 @@ abstract final class DropPathBatchPolicy {
     required bool windows,
   }) {
     final raw = rawPaths.toList(growable: false);
-    final paths = raw
-        .map(
-          (path) => PlayerPathUtils.normalizeDropPath(path, windows: windows),
-        )
-        .where((path) => path.trim().isNotEmpty)
-        .toList(growable: false);
+    final paths = <String>[];
+    for (final rawPath in raw) {
+      final path = PlayerPathUtils.normalizeDropPath(
+        rawPath,
+        windows: windows,
+      ).trim();
+      if (path.isEmpty || PlayerPathUtils.isUnsafeOpenPath(path)) {
+        continue;
+      }
+      paths.add(path);
+    }
     return DropPathBatch(paths: paths, skippedCount: raw.length - paths.length);
   }
 }

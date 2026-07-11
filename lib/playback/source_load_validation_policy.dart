@@ -2,7 +2,13 @@ import '../models/playable_source.dart';
 import 'player_path_utils.dart';
 
 /// Pre-open validation outcome for [PlayerScreen._loadSourceInternal].
-enum SourceLoadValidationFailure { none, emptySource, invalidUrl, missingFile }
+enum SourceLoadValidationFailure {
+  none,
+  emptySource,
+  invalidUrl,
+  missingFile,
+  unsafePath,
+}
 
 /// User-visible message kind for load validation / open failures.
 enum SourceLoadUserMessageKind {
@@ -62,6 +68,12 @@ abstract final class SourceLoadValidationPolicy {
           shouldPruneRecentFiles: true,
           userMessage: SourceLoadUserMessageKind.fileNotFound,
         ),
+      SourceLoadValidationFailure.unsafePath =>
+        const SourceLoadValidationReaction(
+          logEvent: 'file_load_unsafe_path',
+          shouldPruneRecentFiles: false,
+          userMessage: SourceLoadUserMessageKind.invalidFilePath,
+        ),
     };
   }
 
@@ -77,6 +89,11 @@ abstract final class SourceLoadValidationPolicy {
     if (source.isUrl && !PlayableSource.isSupportedUrl(trimmedValue)) {
       return const SourceLoadValidationResult(
         SourceLoadValidationFailure.invalidUrl,
+      );
+    }
+    if (source.isFile && PlayerPathUtils.isUnsafeOpenPath(trimmedValue)) {
+      return const SourceLoadValidationResult(
+        SourceLoadValidationFailure.unsafePath,
       );
     }
     return const SourceLoadValidationResult(SourceLoadValidationFailure.none);

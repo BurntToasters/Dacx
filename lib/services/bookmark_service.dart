@@ -16,9 +16,8 @@ class ResolvedBookmark {
 }
 
 class BookmarkService {
-  static const MethodChannel _channel = MethodChannel(
-    'run.rosie.dacx/bookmarks',
-  );
+  static const methodChannelName = 'run.rosie.dacx/bookmarks';
+  static const MethodChannel _channel = MethodChannel(methodChannelName);
 
   static bool get isSupported => Platform.isMacOS;
 

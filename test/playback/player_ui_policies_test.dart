@@ -12,23 +12,6 @@ void main() {
   }
 
   group('PlayerUiPolicies', () {
-    test(
-      'showOpenUrlButton is false when experimental master is off',
-      () async {
-        final settings = await settingsWith({
-          'experimental_features_enabled': false,
-        });
-        expect(PlayerUiPolicies.showOpenUrlButton(settings), isFalse);
-      },
-    );
-
-    test('showOpenUrlButton is true when experimental master is on', () async {
-      final settings = await settingsWith({
-        'experimental_features_enabled': true,
-      });
-      expect(PlayerUiPolicies.showOpenUrlButton(settings), isTrue);
-    });
-
     test('showSeekPreview requires video file and enabled setting', () async {
       final settings = await settingsWith({'seek_preview_enabled': true});
       expect(

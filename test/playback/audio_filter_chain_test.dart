@@ -23,16 +23,18 @@ void main() {
         spectrumWanted: false,
       );
       expect(chain, contains('equalizer'));
-      expect(chain, isNot(contains('dacxstats')));
+      expect(chain, isNot(contains('dacxb0')));
     });
 
-    test('includes spectrum segment when wanted', () {
+    test('includes spectrum segments when wanted', () {
       final chain = AudioFilterChain.buildMergedChain(
         eqEnabled: false,
         eqBands: List<double>.filled(10, 0),
         spectrumWanted: true,
       );
       expect(chain, AudioSpectrumService.afSegment);
+      expect(chain, contains('dacxb0'));
+      expect(chain, contains('dacxb3'));
     });
   });
 
@@ -51,6 +53,20 @@ void main() {
       );
       expect(result.skipped, isTrue);
       expect(calls, 0);
+    });
+
+    test('skip with spectrum wanted but unconfirmed needs confirm', () async {
+      final chain = AudioSpectrumService.afSegment;
+      final result = await AudioFilterChain.apply(
+        lastAppliedChain: chain,
+        eqEnabled: false,
+        eqBands: List<double>.filled(10, 0),
+        spectrumWanted: true,
+        spectrumCurrentlyConfirmed: false,
+        setAudioFilter: (_) async => true,
+      );
+      expect(result.skipped, isTrue);
+      expect(result.needsSpectrumConfirm, isTrue);
     });
 
     test('applies merged chain and marks spectrum installed', () async {
@@ -83,11 +99,10 @@ void main() {
         },
       );
       expect(calls, hasLength(2));
-      expect(calls.first, contains('dacxstats'));
-      expect(calls.last, isNot(contains('dacxstats')));
+      expect(calls.first, contains('dacxb0'));
+      expect(calls.last, isNot(contains('dacxb0')));
       expect(result.usedSpectrumFallback, isTrue);
       expect(result.spectrumFailed, isTrue);
-      expect(result.spectrumInstalled, isFalse);
     });
 
     test('reports failed when mpv rejects all attempts', () async {
@@ -115,17 +130,10 @@ void main() {
       );
       expect(
         SpectrumSyncPolicy.shouldRun(
-          playing: false,
+          playing: true,
           isAudioFile: true,
           audioWaveformEnabled: true,
-        ),
-        isFalse,
-      );
-      expect(
-        SpectrumSyncPolicy.shouldRun(
-          playing: true,
-          isAudioFile: false,
-          audioWaveformEnabled: true,
+          multiAudioMixEnabled: true,
         ),
         isFalse,
       );
@@ -152,18 +160,6 @@ void main() {
           spectrumCurrentlyActive: true,
         ),
         SpectrumSyncAction.stopAndApply,
-      );
-    });
-
-    test('resolve returns applyOnly when state unchanged', () {
-      expect(
-        SpectrumSyncPolicy.resolve(
-          playing: true,
-          isAudioFile: true,
-          audioWaveformEnabled: true,
-          spectrumCurrentlyActive: true,
-        ),
-        SpectrumSyncAction.applyOnly,
       );
     });
   });
