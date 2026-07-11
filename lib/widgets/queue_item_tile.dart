@@ -12,6 +12,7 @@ class QueueItemTile extends StatelessWidget {
     required this.colorScheme,
     required this.onActivate,
     required this.onRemove,
+    this.reorderLabel,
     this.focusNode,
   });
 
@@ -20,6 +21,7 @@ class QueueItemTile extends StatelessWidget {
   final bool isUrl;
   final String playLabel;
   final String removeLabel;
+  final String? reorderLabel;
   final ColorScheme colorScheme;
   final VoidCallback onActivate;
   final VoidCallback onRemove;
@@ -27,8 +29,12 @@ class QueueItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseLabel = isCurrent ? '$playLabel: $name' : name;
+    final label = reorderLabel == null
+        ? baseLabel
+        : '$baseLabel. $reorderLabel';
     return Semantics(
-      label: isCurrent ? '$playLabel: $name' : name,
+      label: label,
       selected: isCurrent,
       button: true,
       onTap: onActivate,
@@ -109,6 +115,19 @@ class QueueItemTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (reorderLabel != null)
+                      ExcludeSemantics(
+                        child: Tooltip(
+                          message: reorderLabel!,
+                          child: Icon(
+                            Icons.drag_handle,
+                            size: 18,
+                            color: colorScheme.onSurface.withValues(
+                              alpha: 0.40,
+                            ),
+                          ),
+                        ),
+                      ),
                     ExcludeFocus(
                       child: IconButton(
                         icon: const Icon(Icons.close, size: 16),

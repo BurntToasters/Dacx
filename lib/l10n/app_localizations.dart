@@ -193,7 +193,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsHardwareAccelerationRestartNote.
   ///
   /// In en, this message translates to:
-  /// **'Requires restart to take effect'**
+  /// **'Applies immediately to the player; a new file open picks up VideoController changes'**
   String get settingsHardwareAccelerationRestartNote;
 
   /// No description provided for @settingsPlaybackSpeed.
@@ -237,6 +237,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Real-time frequency bars while playing audio (Experimental)'**
   String get settingsAudioWaveformSubtitle;
+
+  /// No description provided for @settingsMultiAudioMixSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Play every audio track at once (Experimental; disables visualizer)'**
+  String get settingsMultiAudioMixSubtitle;
 
   /// No description provided for @osdSpectrumUnavailable.
   ///
@@ -1549,7 +1555,7 @@ abstract class AppLocalizations {
   /// No description provided for @tooltipOpenUrl.
   ///
   /// In en, this message translates to:
-  /// **'Open URL'**
+  /// **'Open URL (Ctrl/Cmd+U)'**
   String get tooltipOpenUrl;
 
   /// No description provided for @tooltipRecentFiles.
@@ -2013,6 +2019,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cycle playback speed'**
   String get shortcutCycleSpeed;
+
+  /// No description provided for @shortcutOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Open URL'**
+  String get shortcutOpenUrl;
 
   /// No description provided for @eqPresetFlat.
   ///

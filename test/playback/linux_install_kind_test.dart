@@ -56,6 +56,14 @@ void main() {
         ),
         LinuxInstallKind.debOrRpm,
       );
+      // Host path.normalize on Windows must not break Linux layout checks.
+      expect(
+        LinuxInstallDetector.detect(
+          environment: const {},
+          resolvedExecutable: r'\opt\dacx\dacx',
+        ),
+        LinuxInstallKind.debOrRpm,
+      );
     });
 
     test('other paths are portable', () {

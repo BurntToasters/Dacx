@@ -664,7 +664,7 @@ class _DacxAppState extends State<DacxApp>
         _cachedThemeInputs = inputs;
 
         return MaterialApp(
-          title: 'Dacx',
+          onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
           debugShowCheckedModeBanner: false,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,

@@ -28,13 +28,16 @@ abstract final class LinuxInstallDetector {
     }
     final exe = (resolvedExecutable ?? Platform.resolvedExecutable).trim();
     if (exe.isEmpty) return LinuxInstallKind.unknown;
-    final lower = exe.toLowerCase();
+    // Always use POSIX path rules — this detector is for Linux install layouts,
+    // and unit tests pass Linux paths on Windows/macOS hosts.
+    final posixPath = exe.replaceAll('\\', '/');
+    final lower = posixPath.toLowerCase();
     if (lower.endsWith('.appimage') || lower.contains('/appimagekit_')) {
       return LinuxInstallKind.appImage;
     }
     // Distro packages typically land under /usr, or /opt/<pkg> with a
     // /usr/bin wrapper (our deb/rpm install to /opt/dacx/dacx).
-    final normalized = p.normalize(exe);
+    final normalized = p.posix.normalize(posixPath);
     if (normalized.startsWith('/usr/') ||
         normalized.startsWith('/bin/') ||
         normalized.startsWith('/sbin/') ||

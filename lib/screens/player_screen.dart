@@ -759,8 +759,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     if (delta.playlistShuffle != null) {
-      _playlist.setShuffle(delta.playlistShuffle!);
-      unawaited(_mediaSession.updateShuffle(delta.playlistShuffle!));
+      _setShuffle(delta.playlistShuffle!);
     }
 
     if (delta.hwDec != null) {
@@ -990,6 +989,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
             );
           }),
     );
+  }
+
+  /// Keeps settings, playlist, and OS media-session shuffle in sync.
+  void _setShuffle(bool on) {
+    if (_settings.playlistShuffle != on) {
+      _settings.playlistShuffle = on;
+    }
+    _playlist.setShuffle(on);
+    unawaited(_mediaSession.updateShuffle(on));
   }
 
   double _dialogWidth(BuildContext context, double desired) {
@@ -1803,19 +1811,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context).snackDropPathInaccessible,
+              AppLocalizations.of(context).snackCouldNotReadDroppedFile,
             ),
           ),
         );
       }
       return;
-    }
-    if (batch.skippedCount > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).snackDropPathInaccessible),
-        ),
-      );
     }
     _log(
       'drop_file_received',
@@ -1951,6 +1952,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           settings: _settings,
           debugLog: widget.debugLog,
           updateService: _updateService,
+          onEditKeybinds: () => unawaited(_showKeybindsDialog()),
         ),
         opaque: false,
         transitionsBuilder: (context, animation, _, child) {
@@ -2025,6 +2027,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case PlayerShortcutAction.openFile:
         _log('shortcut_open_file', category: DebugLogCategory.ui);
         _openFile();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.openUrl:
+        _log('shortcut_open_url', category: DebugLogCategory.ui);
+        unawaited(_openUrl());
         return KeyEventResult.handled;
       case PlayerShortcutAction.reopenLast:
         _log('shortcut_reopen_last', category: DebugLogCategory.ui);
@@ -2623,10 +2629,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                             tooltip: l10n.tooltipShuffle,
                             onPressed: () {
-                              final next = !_playlist.shuffle;
-                              _settings.playlistShuffle = next;
-                              _playlist.setShuffle(next);
-                              unawaited(_mediaSession.updateShuffle(next));
+                              _setShuffle(!_playlist.shuffle);
                             },
                           ),
                         if (items.isNotEmpty)
@@ -2654,36 +2657,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               ),
                             ),
                           )
-                        : ReorderableListView.builder(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            itemCount: items.length,
-                            onReorderItem: (oldIndex, newIndex) {
-                              _playlist.moveItem(oldIndex, newIndex);
-                            },
-                            itemBuilder: (context, index) {
-                              final isCurrent = index == _playlist.index;
-                              final source = items[index];
-                              final name = source.displayName;
+                        : Semantics(
+                            label: l10n.queueReorderSemantic,
+                            child: ReorderableListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: items.length,
+                              onReorderItem: (oldIndex, newIndex) {
+                                _playlist.moveItem(oldIndex, newIndex);
+                              },
+                              itemBuilder: (context, index) {
+                                final isCurrent = index == _playlist.index;
+                                final source = items[index];
+                                final name = source.displayName;
 
-                              return QueueItemTile(
-                                key: ValueKey('queue-$index-${source.value}'),
-                                name: name,
-                                isCurrent: isCurrent,
-                                isUrl: source.isUrl,
-                                playLabel: l10n.actionPlay,
-                                removeLabel: l10n.actionRemove,
-                                colorScheme: colorScheme,
-                                onActivate: () {
-                                  _playlist.jumpTo(index);
-                                  unawaited(
-                                    _loadSource(source, syncPlaylist: false),
-                                  );
-                                },
-                                onRemove: () {
-                                  unawaited(_removeQueueItem(index));
-                                },
-                              );
-                            },
+                                return QueueItemTile(
+                                  key: ValueKey('queue-$index-${source.value}'),
+                                  name: name,
+                                  isCurrent: isCurrent,
+                                  isUrl: source.isUrl,
+                                  playLabel: l10n.actionPlay,
+                                  removeLabel: l10n.actionRemove,
+                                  reorderLabel: l10n.queueReorderSemantic,
+                                  colorScheme: colorScheme,
+                                  onActivate: () {
+                                    _playlist.jumpTo(index);
+                                    unawaited(
+                                      _loadSource(source, syncPlaylist: false),
+                                    );
+                                  },
+                                  onRemove: () {
+                                    unawaited(_removeQueueItem(index));
+                                  },
+                                );
+                              },
+                            ),
                           ),
                   ),
                   const Divider(height: 1),
@@ -2811,6 +2818,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         onPressed: () => unawaited(_openPlaylistPicker()),
                         icon: const Icon(Icons.queue_music),
                         label: Text(l10n.buttonOpenPlaylist),
+                      ),
+                      FilledButton.tonalIcon(
+                        key: const Key('open-url-empty-button'),
+                        onPressed: () => unawaited(_openUrl()),
+                        icon: const Icon(Icons.link),
+                        label: Text(l10n.buttonOpenUrl),
                       ),
                       FilledButton.tonalIcon(
                         key: const Key('reopen-last-empty-button'),
@@ -2968,54 +2981,60 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         return Padding(
           padding: EdgeInsets.only(bottom: visualizerHeight),
-          child: Center(
-            child: _buildCenterPanel(
-              maxWidth: 700,
-              children: [
-                if (showAlbumArt)
-                  _buildAlbumArtSurface(size: albumArtSize)
-                else
-                  _buildCenterIconSurface(
-                    icon: Icons.album,
-                    size: 54,
-                    color: colorScheme.primary.withValues(alpha: 0.88),
+          child: Semantics(
+            label: AppLocalizations.of(context).audioPlaybackLabel,
+            child: Center(
+              child: _buildCenterPanel(
+                maxWidth: 700,
+                children: [
+                  if (showAlbumArt)
+                    _buildAlbumArtSurface(size: albumArtSize)
+                  else
+                    _buildCenterIconSurface(
+                      icon: Icons.album,
+                      size: 54,
+                      color: colorScheme.primary.withValues(alpha: 0.88),
+                    ),
+                  const SizedBox(height: 24),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: colorScheme.onSurface.withValues(
+                              alpha: 0.88,
+                            ),
+                            fontWeight: FontWeight.w500,
+                            height: 1.2,
+                          ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.88),
-                      fontWeight: FontWeight.w500,
+                  if (artist != null && artist.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      artist,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: colorScheme.onSurface.withValues(alpha: 0.72),
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Text(
+                    AppLocalizations.of(context).labelAudioPlayback,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.62),
                       height: 1.2,
                     ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (artist != null && artist.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    artist,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.72),
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
-                const SizedBox(height: 10),
-                Text(
-                  AppLocalizations.of(context).labelAudioPlayback,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.62),
-                    height: 1.2,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -3473,10 +3492,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case MediaSessionDispatchKind.setShuffle:
         final on = dispatch.shuffle;
         if (on != null) {
-          _deferMediaSessionSetting(() {
-            _settings.playlistShuffle = on;
-            _playlist.setShuffle(on);
-          });
+          _deferMediaSessionSetting(() => _setShuffle(on));
         }
       case MediaSessionDispatchKind.setVolume:
         final pct = dispatch.volumePercent;
@@ -4042,29 +4058,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 }());
                               },
                             ),
-                          if (!_player.isAudioFile &&
-                              (_player.currentSource?.isFile ?? false))
-                            switchItem(
-                              icon: Icons.image_search,
-                              label: l10n.menuSeekThumbnails,
-                              value: _settings.seekPreviewEnabled,
-                              onChanged: (v) {
-                                _settings.seekPreviewEnabled = v;
-                                setSheetState(() {});
-                                unawaited(
-                                  _seekPreviewService.setEnabled(v).then((_) {
-                                    final source = _player.currentSource;
-                                    if (v && source != null && source.isFile) {
-                                      return _seekPreviewService.setSource(
-                                        source.value,
-                                      );
-                                    }
-                                    return null;
-                                  }),
-                                );
-                                if (mounted) setState(() {});
-                              },
-                            ),
                           item(
                             icon: Icons.keyboard,
                             label: l10n.dialogKeyboardShortcutsTitle,
@@ -4088,8 +4081,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             label: l10n.menuShuffleQueue,
                             value: _settings.playlistShuffle,
                             onChanged: (v) {
-                              _settings.playlistShuffle = v;
-                              _playlist.setShuffle(v);
+                              _setShuffle(v);
                               setSheetState(() {});
                             },
                           ),
@@ -4549,7 +4541,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           subtitle: Text(
                             accels.isEmpty
                                 ? AppLocalizations.of(ctx).keybindsNone
-                                : accels.join(', '),
+                                : accels
+                                      .map(
+                                        (a) =>
+                                            PlayerShortcutsService.formatAcceleratorForDisplay(
+                                              a,
+                                              useMacSymbols: Platform.isMacOS,
+                                            ),
+                                      )
+                                      .join(', '),
                             style: Theme.of(ctx).textTheme.bodySmall,
                           ),
                           trailing: Wrap(

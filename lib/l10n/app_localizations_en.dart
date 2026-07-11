@@ -58,7 +58,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHardwareAccelerationRestartNote =>
-      'Requires restart to take effect';
+      'Applies immediately to the player; a new file open picks up VideoController changes';
 
   @override
   String get settingsPlaybackSpeed => 'Playback speed';
@@ -84,6 +84,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsAudioWaveformSubtitle =>
       'Real-time frequency bars while playing audio (Experimental)';
+
+  @override
+  String get settingsMultiAudioMixSubtitle =>
+      'Play every audio track at once (Experimental; disables visualizer)';
 
   @override
   String get osdSpectrumUnavailable =>
@@ -831,7 +835,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipOpenFolder => 'Open folder';
 
   @override
-  String get tooltipOpenUrl => 'Open URL';
+  String get tooltipOpenUrl => 'Open URL (Ctrl/Cmd+U)';
 
   @override
   String get tooltipRecentFiles => 'Recent files';
@@ -1093,6 +1097,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutCycleSpeed => 'Cycle playback speed';
+
+  @override
+  String get shortcutOpenUrl => 'Open URL';
 
   @override
   String get eqPresetFlat => 'Flat';
