@@ -255,7 +255,7 @@ final class MediaSessionBridge {
       guard let evt = event as? MPChangePlaybackRateCommandEvent else {
         return .commandFailed
       }
-      self?.invokeCommand("rate", value: evt.playbackRate)
+      self?.invokeCommand("rate", value: Double(evt.playbackRate))
       return .success
     }
   }

@@ -253,9 +253,9 @@ void RegisterWindowMethodsChannel(flutter::BinaryMessenger* messenger,
           if (const auto* value =
                   std::get_if<double>(call.arguments())) {
             progress = *value;
-          } else if (const auto* value =
+          } else if (const auto* intValue =
                          std::get_if<int32_t>(call.arguments())) {
-            progress = static_cast<double>(*value);
+            progress = static_cast<double>(*intValue);
           }
           SetTaskbarProgress(window->GetHandle(), progress);
           result->Success(flutter::EncodableValue(true));
