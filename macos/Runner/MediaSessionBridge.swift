@@ -165,7 +165,10 @@ final class MediaSessionBridge {
   }
 
   private func loadRemoteArtworkAsync(_ uri: String) {
-    guard let url = URL(string: uri) else { return }
+    guard let url = URL(string: uri),
+          let scheme = url.scheme?.lowercased(),
+          scheme == "http" || scheme == "https",
+          isPublicRemoteArtworkHost(url.host) else { return }
     let token: UInt64 = stateQueue.sync {
       artworkRequestId = artworkRequestId &+ 1
       artworkTask?.cancel()
@@ -252,7 +255,30 @@ final class MediaSessionBridge {
 }
 
 private func isLocalArtwork(_ uri: String) -> Bool {
-  return !(uri.hasPrefix("http://") || uri.hasPrefix("https://"))
+  let lower = uri.lowercased()
+  return !(lower.hasPrefix("http://") || lower.hasPrefix("https://"))
+}
+
+/// Rejects loopback / private / link-local / .local hosts for remote artwork.
+private func isPublicRemoteArtworkHost(_ rawHost: String?) -> Bool {
+  guard let raw = rawHost?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !raw.isEmpty else { return false }
+  let host = raw.lowercased()
+  if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+    return false
+  }
+  if host.hasSuffix(".local") { return false }
+  if host.hasPrefix("10.") { return false }
+  if host.hasPrefix("192.168.") { return false }
+  if host.hasPrefix("169.254.") { return false }
+  // 172.16.0.0 – 172.31.255.255
+  if host.hasPrefix("172.") {
+    let parts = host.split(separator: ".")
+    if parts.count >= 2, let second = Int(parts[1]), (16...31).contains(second) {
+      return false
+    }
+  }
+  return true
 }
 
 private func loadLocalArtwork(_ uri: String) -> NSImage? {

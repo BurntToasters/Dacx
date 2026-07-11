@@ -20,6 +20,17 @@ void main() {
       expect(PlayableSource.isSupportedUrl('/tmp/file.mp3'), isFalse);
     });
 
+    test('rejects URLs with embedded credentials', () {
+      expect(
+        PlayableSource.isSupportedUrl('http://user:pass@host/stream.mp3'),
+        isFalse,
+      );
+      expect(
+        PlayableSource.isSupportedUrl('https://user:pass@example.com/a.m3u8'),
+        isFalse,
+      );
+    });
+
     test('fromStored restores URLs and files', () {
       final url = PlayableSource.fromStored('https://example.com/live.m3u8');
       final file = PlayableSource.fromStored('/tmp/song.flac');
@@ -31,8 +42,7 @@ void main() {
     });
 
     test('detects and redacts non-display-safe URL parts', () {
-      const signed =
-          'https://user:pass@example.com/live.m3u8?token=secret#fragment';
+      const signed = 'https://example.com/live.m3u8?token=secret#fragment';
 
       expect(
         PlayableSource.isDisplaySafeUrl('https://example.com/live.m3u8'),
@@ -43,6 +53,11 @@ void main() {
         PlayableSource.displaySafeUrl(signed),
         'https://example.com/live.m3u8?<redacted>#<redacted>',
       );
+      // Credentialed URLs are unsupported; displaySafeUrl leaves them unchanged.
+      const withCreds =
+          'https://user:pass@example.com/live.m3u8?token=secret#fragment';
+      expect(PlayableSource.isDisplaySafeUrl(withCreds), isFalse);
+      expect(PlayableSource.displaySafeUrl(withCreds), withCreds);
     });
 
     test('extension getter extracts from files and URLs', () {

@@ -36,5 +36,17 @@ void main() {
       );
       expect(channel.name, InstanceModeService.windowMethodChannelName);
     });
+
+    test('checkForUpdatesMethod name is frozen', () {
+      expect(InstanceModeService.checkForUpdatesMethod, 'checkForUpdates');
+    });
+
+    test('macOS menu method names are frozen', () {
+      expect(InstanceModeService.openPreferencesMethod, 'openPreferences');
+      expect(InstanceModeService.openFileMethod, 'openFile');
+      expect(InstanceModeService.openUrlMethod, 'openUrl');
+      expect(InstanceModeService.openRecentMethod, 'openRecent');
+      expect(InstanceModeService.getRecentFilesMethod, 'getRecentFiles');
+    });
   });
 }

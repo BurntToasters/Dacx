@@ -107,8 +107,10 @@ class PlayerShortcutsService {
   /// Resolves a key event into an action.
   ///
   /// Default behavior preserves the original built-in mapping. When
-  /// [customBindings] is provided (action name -> accelerator strings) it
-  /// overrides defaults entirely (only listed actions are matched).
+  /// [customBindings] is provided (action name -> accelerator strings), those
+  /// bindings are checked first and **overlay** the defaults: unlisted actions
+  /// still use built-in accelerators. A custom accelerator that collides with
+  /// a default wins (custom match is preferred).
   static PlayerShortcutAction? resolve({
     required KeyEvent event,
     required bool hasMedia,
@@ -142,7 +144,7 @@ class PlayerShortcutsService {
         }
         return action;
       }
-      return null;
+      // Fall through so unbound actions keep their defaults.
     }
 
     return _defaultResolve(

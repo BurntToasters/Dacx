@@ -109,6 +109,35 @@
 				</array>
 			</dict>
 		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.text</string>
+				<string>public.content</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Dacx Playlist</string>
+			<key>UTTypeIconFile</key>
+			<string>dacx_music_icon.icns</string>
+			<key>UTTypeIdentifier</key>
+			<string>run.rosie.dacx.playlist</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>m3u</string>
+					<string>pls</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>audio/x-mpegurl</string>
+					<string>audio/mpegurl</string>
+					<string>audio/x-scpls</string>
+					<string>application/pls+xml</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
@@ -138,6 +167,21 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>run.rosie.dacx.video</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Dacx Playlist</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>dacx_music_icon</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>run.rosie.dacx.playlist</string>
+				<string>public.m3u-playlist</string>
 			</array>
 		</dict>
 		<dict>

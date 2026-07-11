@@ -8,6 +8,25 @@ class InstanceModeService {
   static const String _flagFileName = 'allow_multi_instance';
   static const String newInstanceFlag = '--new-instance';
   static const windowMethodChannelName = 'run.rosie.dacx/window/methods';
+
+  /// Native → Flutter: macOS application menu “Check for Updates…”.
+  static const checkForUpdatesMethod = 'checkForUpdates';
+
+  /// Native → Flutter: macOS Preferences… (⌘,).
+  static const openPreferencesMethod = 'openPreferences';
+
+  /// Native → Flutter: macOS File → Open….
+  static const openFileMethod = 'openFile';
+
+  /// Native → Flutter: macOS File → Open URL….
+  static const openUrlMethod = 'openUrl';
+
+  /// Native → Flutter: macOS File → Open Recent item (path argument).
+  static const openRecentMethod = 'openRecent';
+
+  /// Native → Flutter: request recent paths to rebuild Open Recent submenu.
+  static const getRecentFilesMethod = 'getRecentFiles';
+
   static const MethodChannel _windowMethodChannel = MethodChannel(
     windowMethodChannelName,
   );

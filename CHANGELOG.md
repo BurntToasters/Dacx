@@ -17,6 +17,28 @@
 The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 ⚠️ Arm64 Linux and Windows Binaries are *NOT* available at the moment. Its something I may get around to in the future but its not a priority.
 
+## Changes in `v0.11.0-beta.1:`
+* **Version:** Changed version to `v0.11.0` due to more major improvements signifying a major v bump.
+* **macOS:** Application menu Check for Updates…; Preferences… (⌘,) opens Settings; File menu Open / Open URL / Open Recent; `.m3u`/`.pls` Launch Services types.
+* **Windows:** Jump Lists from recents; taskbar playback progress; `.m3u`/`.pls` Open With ProgIDs.
+* **Linux:** Idle/screensaver inhibit while playing; MPRIS `desktopEntry` matches packaged `.desktop` (Flatpak vs deb/rpm); playlist MIME types; Flatpak ScreenSaver talk-name.
+* **Queue persistence:** Restores the last session queue (paths + index), prunes missing files on launch, and keeps shuffle via existing preference.
+* **Playlists:** Open/import `.m3u` / `.pls` (file picker, empty-state button, and drag-drop expansion). HLS `.m3u8` remains a stream for mpv.
+* **Linux updates:** Package-aware guidance (Flatpak / AppImage / deb·rpm / portable) in Settings and update UI.
+* **Flatpak empty state:** Picker-first copy when sandboxed; one-time tip for Reopen Last / Ctrl+R.
+* **Seek thumbnails:** De-beta’d menu label (still opt-in; uses extra memory).
+* **Audio visualizer:** Rebuilt as real multiband lavfi analysis (4 frequency bands → 32 bars), crash-safe filter lifecycle, mutual exclusion with multi-audio mix, capability probe with OSD, lighter ValueNotifier paint path. Still experimental and off by default.
+* **Playback / queue:** Single-file Open / Open With / URL loads sync into the play queue so prev/next and completion advance stay coherent; Open With on the same path restarts when already playing; queue drag-reorder + shuffle control on the drawer chrome.
+* **Shortcuts:** Custom keybinds overlay defaults instead of replacing the entire map.
+* **Open URL:** Available without enabling Experimental Features.
+* **External tracks:** Load external audio / subtitle from the more menu.
+* **Media session:** Passes title/artist/album from tags and exports embedded album art for OS Now Playing (re-pushed after album-art track select).
+* **Settings:** Screenshot folder + format; seek-thumbnail toggle; Flatpak sandbox hint; experimental stored-prefs warning.
+* **Transport:** Clickable mute on the volume icon.
+* **Security / hygiene:** Reject UNC/unsafe open paths (IPC + DnD + validation); refuse URLs with embedded credentials; macOS update zip containment; Now Playing remote artwork host hardening; destructive `npm run b`/`r` require `DACX_ALLOW_DESTRUCTIVE=1`; CI `next-0.10.1` aligned; frozen update/bookmarks channels; CONTRIBUTING coverage docs corrected.
+* **Codebase:** `PlayerAudioSession` extracts EQ/spectrum filter orchestration from `PlayerScreen`.
+* **Settings:** Expanded folder-scan extensions (ts/m2ts/mpg/…).
+
 ## Changes in `v0.10.1-beta.1:`
 * **Audio Visualizer:** Added a new audio-reactive bar visualizer for audio playback.
 * **Window Transparency/Blurring:** More work has been done on this experimental feature! 

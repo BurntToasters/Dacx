@@ -33,7 +33,18 @@
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="VOq-y0-SEH"/>
-                            <menuItem title="Preferences…" keyEquivalent="," id="BOF-NM-1cW"/>
+                            <menuItem title="Check for Updates…" id="cFu-pd-aTe">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="checkForUpdates:" target="Voe-Tx-rLC" id="cFu-Ac-tIon"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="cFu-Sp-aTe"/>
+                            <menuItem title="Preferences…" keyEquivalent="," id="BOF-NM-1cW">
+                                <connections>
+                                    <action selector="openPreferences:" target="Voe-Tx-rLC" id="Prf-Ac-tIon"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="wFC-TO-SCJ"/>
                             <menuItem title="Services" id="NMo-om-nkz">
                                 <modifierMask key="keyEquivalentModifierMask"/>
@@ -62,6 +73,32 @@
                                 <connections>
                                     <action selector="terminate:" target="-1" id="Te7-pn-YzF"/>
                                 </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="File" id="Fil-eM-nu0">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="File" id="Fil-eM-nu1">
+                        <items>
+                            <menuItem title="Open…" keyEquivalent="o" id="Fil-Op-en0">
+                                <connections>
+                                    <action selector="openMediaFile:" target="Voe-Tx-rLC" id="Fil-Op-Ac0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open URL…" keyEquivalent="u" id="Fil-Op-Url">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES" shift="YES"/>
+                                <connections>
+                                    <action selector="openMediaUrl:" target="Voe-Tx-rLC" id="Fil-Url-Ac0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open Recent" id="Fil-Rc-nt0">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Open Recent" id="Fil-Rc-nt1">
+                                    <items>
+                                        <menuItem title="No Recent Files" enabled="NO" id="Fil-Rc-Emp"/>
+                                    </items>
+                                </menu>
                             </menuItem>
                         </items>
                     </menu>

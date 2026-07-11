@@ -367,6 +367,33 @@ void main() {
       // Empty map is treated as "no custom bindings" → defaults apply
       expect(action, PlayerShortcutAction.playPause);
     });
+
+    test('partial custom bindings still allow default Space playPause', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.space),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'screenshot': ['Ctrl+P'],
+        },
+      );
+      expect(action, PlayerShortcutAction.playPause);
+    });
+
+    test('custom binding collision with default prefers custom', () {
+      // Default M is toggleMute; custom maps M to screenshot.
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyM),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'screenshot': ['M'],
+        },
+      );
+      expect(action, PlayerShortcutAction.screenshot);
+    });
   });
 
   group('shortcutActionLabel', () {

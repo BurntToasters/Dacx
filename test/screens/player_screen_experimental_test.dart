@@ -61,7 +61,7 @@ void main() {
   }
 
   group('PlayerScreen experimental UI gating', () {
-    testWidgets('hides Open URL when experimental features are disabled', (
+    testWidgets('shows Open URL when experimental features are disabled', (
       tester,
     ) async {
       final settings = await settingsWith({
@@ -74,7 +74,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Open URL'), findsNothing);
+      expect(showUrl, isTrue);
+      expect(find.byTooltip('Open URL'), findsOneWidget);
     });
 
     testWidgets('shows Open URL when experimental features are enabled', (
@@ -90,6 +91,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(showUrl, isTrue);
       expect(find.byTooltip('Open URL'), findsOneWidget);
     });
 

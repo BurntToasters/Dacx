@@ -5,6 +5,7 @@ import 'package:anni_mpris_service/anni_mpris_service.dart';
 import 'package:flutter/services.dart';
 
 import 'debug_log_service.dart';
+import 'idle_inhibit_service.dart';
 
 /// Cross-platform media-session bridge.
 ///
@@ -236,7 +237,7 @@ class _MprisAdapter extends MPRISService {
     : super(
         'dacx',
         identity: 'DACX',
-        desktopEntry: 'run.rosie.dacx',
+        desktopEntry: IdleInhibitService.mprisDesktopEntry(),
         emitSeekedSignal: true,
         canPlay: true,
         canPause: true,

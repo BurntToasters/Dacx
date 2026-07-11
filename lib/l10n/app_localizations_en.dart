@@ -83,7 +83,62 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAudioWaveformSubtitle =>
-      'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)';
+      'Real-time frequency bars while playing audio (Experimental)';
+
+  @override
+  String get osdSpectrumUnavailable =>
+      'Audio visualizer unavailable on this system';
+
+  @override
+  String get osdSpectrumDisabledForMix =>
+      'Visualizer paused while mixing audio tracks';
+
+  @override
+  String get settingsSeekPreview => 'Seek thumbnails';
+
+  @override
+  String get settingsSeekPreviewSubtitle =>
+      'Preview frames while scrubbing (uses extra memory)';
+
+  @override
+  String get settingsExperimentalStoredPrefsHint =>
+      'Stored experimental options (visualizer, mix, blur) turn back on when you re-enable this';
+
+  @override
+  String get snackDropPathInaccessible =>
+      'Some dropped files are outside the sandbox or inaccessible';
+
+  @override
+  String get snackScreenshotDirInaccessible =>
+      'Screenshot folder is not writable';
+
+  @override
+  String get tooltipMute => 'Mute';
+
+  @override
+  String get tooltipUnmute => 'Unmute';
+
+  @override
+  String get tooltipShuffle => 'Shuffle queue';
+
+  @override
+  String get queueReorderSemantic => 'Reorder';
+
+  @override
+  String get mediaInfoArtist => 'Artist';
+
+  @override
+  String get mediaInfoAlbum => 'Album';
+
+  @override
+  String get mediaInfoTitle => 'Title';
+
+  @override
+  String get audioPlaybackLabel => 'Audio playback';
+
+  @override
+  String get flatpakSandboxHint =>
+      'Flatpak can only open files from Music, Videos, Downloads, and Pictures unless you use the file picker.';
 
   @override
   String get settingsAllowMultipleWindowsSubtitle =>
@@ -419,13 +474,64 @@ class AppLocalizationsEn extends AppLocalizations {
   String get emptyStateMessage => 'Drop a file here or click Open';
 
   @override
+  String get emptyStateFlatpakMessage =>
+      'Use Open File or Open Folder — drag-and-drop only works for Music, Videos, Downloads, and Pictures';
+
+  @override
+  String get emptyStateTipReopenLast =>
+      'Tip: Reopen Last (or Ctrl+R) restores your previous file';
+
+  @override
+  String get actionDismissTip => 'Got it';
+
+  @override
+  String get dropOverlayHint => 'Drop media files to play or enqueue';
+
+  @override
+  String get keyCaptureWaiting => 'Waiting…';
+
+  @override
   String get buttonOpenFile => 'Open File';
 
   @override
   String get buttonOpenFolder => 'Open Folder';
 
   @override
+  String get buttonOpenPlaylist => 'Open Playlist';
+
+  @override
   String get buttonOpenUrl => 'Open URL';
+
+  @override
+  String get snackPlaylistEmptyOrInvalid =>
+      'Playlist is empty or could not be read';
+
+  @override
+  String get snackPlaylistImportFailed => 'Could not import playlist';
+
+  @override
+  String get linuxUpdateGuidanceFlatpak =>
+      'Update with Flatpak (flatpak update) or reinstall from the release page.';
+
+  @override
+  String get linuxUpdateGuidanceAppImage =>
+      'Download the new AppImage from the release page and replace this file.';
+
+  @override
+  String get linuxUpdateGuidanceDebRpm =>
+      'Install the new package (.deb / .rpm) from the release page.';
+
+  @override
+  String get linuxUpdateGuidancePortable =>
+      'Download the latest Linux build from the release page and replace this install.';
+
+  @override
+  String get linuxUpdateGuidanceGeneric =>
+      'Download the latest Linux build from the release page.';
+
+  @override
+  String get settingsLinuxUpdateHint =>
+      'Linux self-update is not built in — use your package type’s update path.';
 
   @override
   String get buttonReopenLast => 'Reopen Last';
@@ -519,11 +625,53 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuTakeScreenshot => 'Take screenshot';
 
   @override
+  String get menuLoadExternalAudio => 'Load external audio…';
+
+  @override
+  String get menuLoadExternalSubtitle => 'Load external subtitle…';
+
+  @override
   String get menuMixAllAudioTracks => 'Mix all audio tracks';
 
   @override
-  String get menuSeekThumbnailsBeta =>
-      'Seek thumbnails (beta: uses more resources)';
+  String get osdExternalAudioLoaded => 'External audio loaded';
+
+  @override
+  String get osdExternalAudioFailed => 'Could not load external audio';
+
+  @override
+  String get osdExternalSubtitleLoaded => 'External subtitle loaded';
+
+  @override
+  String get osdExternalSubtitleFailed => 'Could not load external subtitle';
+
+  @override
+  String get settingsScreenshotDir => 'Screenshot folder';
+
+  @override
+  String get settingsScreenshotDirSubtitle =>
+      'Where video screenshots are saved';
+
+  @override
+  String get settingsScreenshotFormat => 'Screenshot format';
+
+  @override
+  String get settingsScreenshotFormatPng => 'PNG';
+
+  @override
+  String get settingsScreenshotFormatJpg => 'JPEG';
+
+  @override
+  String get settingsChooseScreenshotDir => 'Choose folder…';
+
+  @override
+  String get settingsResetScreenshotDir => 'Use default (Pictures/DACX)';
+
+  @override
+  String get menuSeekThumbnails => 'Seek thumbnails (uses more resources)';
+
+  @override
+  String get menuSeekThumbnailsBeta => 'Seek thumbnails (uses more resources)';
 
   @override
   String get menuQueueEmpty => 'Queue (empty)';
@@ -772,6 +920,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateOutcomeUnsupportedPlatform =>
       'Self-update is not supported on this platform.';
+
+  @override
+  String updateOutcomeUnsupportedPlatformLinux(String guidance) {
+    return 'Self-update is not available on Linux. $guidance';
+  }
 
   @override
   String get updateOutcomeMissingAsset =>

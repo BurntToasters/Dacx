@@ -1,46 +1,43 @@
-import 'dart:async';
-
 import 'package:dacx/screens/player_screen.dart';
 import 'package:dacx/services/audio_spectrum_service.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/settings_service.dart';
 import 'package:dacx/services/update_service.dart';
 import 'package:dacx/widgets/audio_spectrum_visualizer.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('visualizer coverage smoke', () {
-    test('audio spectrum filter segment is labeled for metadata lookup', () {
-      expect(AudioSpectrumService.afSegment, contains('@dacxstats:'));
+    test('audio spectrum filter segments are labeled for metadata lookup', () {
+      expect(AudioSpectrumService.afSegment, contains('@dacxb0:'));
+      expect(AudioSpectrumService.afSegment, contains('@dacxb3:'));
       expect(AudioSpectrumService.afSegment, contains('astats='));
       expect(AudioSpectrumService.afSegment, contains('metadata=1'));
-      expect(
-        AudioSpectrumService.afSegment,
-        contains('measure_perchannel=RMS_level'),
-      );
+      expect(AudioSpectrumService.afSegments, hasLength(4));
     });
 
     testWidgets('audio spectrum visualizer builds', (tester) async {
-      final stream = StreamController<List<double>>.broadcast();
-      addTearDown(stream.close);
+      final bands = ValueNotifier<List<double>>(List<double>.filled(32, 0.0));
 
       await tester.pumpWidget(
         MaterialApp(
           home: SizedBox(
             height: 40,
+            width: 200,
             child: AudioSpectrumVisualizer(
               isPlaying: false,
-              position: Duration.zero,
-              duration: const Duration(seconds: 1),
-              spectrumStream: stream.stream,
+              bandsListenable: bands,
             ),
           ),
         ),
       );
 
       expect(find.byType(AudioSpectrumVisualizer), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      bands.dispose();
     });
 
     test('player screen constructor smoke', () async {

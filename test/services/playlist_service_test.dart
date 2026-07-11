@@ -61,6 +61,35 @@ void main() {
       expect(s.length, PlaylistService.maxQueueItems);
     });
 
+    test('playNextSource caps at maxQueueItems', () {
+      final s = PlaylistService();
+      s.replace(
+        List.generate(PlaylistService.maxQueueItems, (i) => '/t$i.mp3'),
+        startIndex: 0,
+      );
+      expect(s.length, PlaylistService.maxQueueItems);
+      s.playNextSource(PlayableSource.file('/next.mp3'));
+      expect(s.length, PlaylistService.maxQueueItems);
+      expect(s.items[1].value, '/next.mp3');
+      expect(s.items.map((e) => e.value), isNot(contains('/t999.mp3')));
+    });
+
+    test('setPlayingSource jumps or replaces without exceeding cap', () {
+      final s = PlaylistService();
+      s.replace(
+        List.generate(PlaylistService.maxQueueItems, (i) => '/t$i.mp3'),
+        startIndex: 0,
+      );
+      s.setPlayingSource(PlayableSource.file('/t5.mp3'));
+      expect(s.index, 5);
+      expect(s.length, PlaylistService.maxQueueItems);
+
+      s.setPlayingSource(PlayableSource.file('/brand-new.mp3'));
+      expect(s.length, 1);
+      expect(s.current?.value, '/brand-new.mp3');
+      expect(s.length, lessThanOrEqualTo(PlaylistService.maxQueueItems));
+    });
+
     test('playNext inserts after current', () {
       final s = PlaylistService();
       s.replace(['a', 'b', 'c'], startIndex: 0);
@@ -140,6 +169,17 @@ void main() {
       expect(s.index, 0);
       s.jumpTo(-1);
       expect(s.index, 0);
+    });
+
+    test('moveItem reorders for onReorderItem-adjusted indices', () {
+      final s = PlaylistService();
+      s.replace(['a', 'b', 'c'], startIndex: 0);
+      s.moveItem(0, 1); // a after b → [b, a, c]
+      expect(s.items.map((e) => e.value).toList(), ['b', 'a', 'c']);
+      expect(s.index, 1);
+      s.moveItem(2, 0); // c to front → [c, b, a]
+      expect(s.items.map((e) => e.value).toList(), ['c', 'b', 'a']);
+      expect(s.index, 2);
     });
   });
 

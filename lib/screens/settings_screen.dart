@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +13,7 @@ import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/debug_log_panel.dart';
+import '../widgets/manual_update_check.dart';
 import '../widgets/update_progress_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -114,6 +116,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           _helpFaqTile(),
                           _supportProjectTile(),
+                          if (Platform.isLinux &&
+                              (Platform.environment['FLATPAK_ID'] ?? '')
+                                  .isNotEmpty)
+                            ListTile(
+                              leading: const Icon(Icons.info_outline),
+                              title: Text(l10n.flatpakSandboxHint),
+                              dense: true,
+                            ),
                           const Divider(),
                           _sectionHeader(l10n.settingsSectionPlayback),
                           _speedTile(),
@@ -141,6 +151,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             subtitle: Text(l10n.settingsOsdSubtitle),
                             value: _s.osdEnabled,
                             onChanged: (v) => setState(() => _s.osdEnabled = v),
+                          ),
+                          _screenshotDirTile(),
+                          _screenshotFormatTile(),
+                          SwitchListTile(
+                            title: Text(l10n.settingsSeekPreview),
+                            subtitle: Text(l10n.settingsSeekPreviewSubtitle),
+                            value: _s.seekPreviewEnabled,
+                            onChanged: (v) =>
+                                setState(() => _s.seekPreviewEnabled = v),
                           ),
                           SwitchListTile(
                             title: Text(l10n.settingsMediaSession),
@@ -357,6 +376,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _log(
             'loop_mode_changed',
             detailsBuilder: () => {'value': s.first.name},
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _screenshotDirTile() {
+    final l10n = AppLocalizations.of(context);
+    final dir = _s.screenshotDir;
+    return ListTile(
+      title: Text(l10n.settingsScreenshotDir),
+      subtitle: Text(
+        dir ?? l10n.settingsScreenshotDirSubtitle,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () async {
+              final picked = await FilePicker.getDirectoryPath(
+                dialogTitle: l10n.settingsChooseScreenshotDir,
+              );
+              if (picked == null || !mounted) return;
+              setState(() {
+                _s.screenshotDir = picked;
+                _log(
+                  'screenshot_dir_changed',
+                  detailsBuilder: () => {'value': picked},
+                );
+              });
+            },
+            child: Text(l10n.settingsChooseScreenshotDir),
+          ),
+          TextButton(
+            onPressed: dir == null
+                ? null
+                : () => setState(() {
+                    _s.screenshotDir = null;
+                    _log('screenshot_dir_reset');
+                  }),
+            child: Text(l10n.settingsResetScreenshotDir),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _screenshotFormatTile() {
+    final l10n = AppLocalizations.of(context);
+    return ListTile(
+      title: Text(l10n.settingsScreenshotFormat),
+      trailing: SegmentedButton<String>(
+        segments: [
+          ButtonSegment(
+            value: 'png',
+            label: Text(l10n.settingsScreenshotFormatPng),
+          ),
+          ButtonSegment(
+            value: 'jpg',
+            label: Text(l10n.settingsScreenshotFormatJpg),
+          ),
+        ],
+        selected: {_s.screenshotFormat},
+        onSelectionChanged: (s) => setState(() {
+          _s.screenshotFormat = s.first;
+          _log(
+            'screenshot_format_changed',
+            detailsBuilder: () => {'value': s.first},
           );
         }),
       ),
@@ -655,7 +744,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SwitchListTile(
       secondary: _experimentalWarningIcon(),
       title: Text(l10n.settingsExperimentalEnable),
-      subtitle: Text(l10n.settingsExperimentalUnstable),
+      subtitle: Text(
+        '${l10n.settingsExperimentalUnstable}\n${l10n.settingsExperimentalStoredPrefsHint}',
+      ),
+      isThreeLine: true,
       value: _s.experimentalFeaturesEnabled,
       onChanged: (v) {
         setState(() {
@@ -774,97 +866,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _checkForUpdatesTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
-      title: Text(l10n.settingsCheckForUpdates),
-      trailing: _checkingUpdate
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : FilledButton.tonal(
-              onPressed: _doCheckForUpdate,
-              child: Text(l10n.settingsCheckNow),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          title: Text(l10n.settingsCheckForUpdates),
+          trailing: _checkingUpdate
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : FilledButton.tonal(
+                  onPressed: _doCheckForUpdate,
+                  child: Text(l10n.settingsCheckNow),
+                ),
+        ),
+        if (Platform.isLinux)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              '${l10n.settingsLinuxUpdateHint} ${linuxUpdateGuidance(l10n)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.64),
+              ),
             ),
+          ),
+      ],
     );
   }
 
   Future<void> _doCheckForUpdate() async {
-    _log('manual_update_check_requested', category: DebugLogCategory.update);
     setState(() => _checkingUpdate = true);
     try {
-      final update = await _updateService.checkForUpdate(
-        channel: _s.updateChannel,
-      );
-      if (!mounted) return;
-      if (!_updateService.lastCheckSucceeded) {
-        _log(
-          'manual_update_check_failed',
-          category: DebugLogCategory.update,
-          severity: DebugSeverity.warn,
-        );
-        final l10n = AppLocalizations.of(context);
-        String message;
-        if (_updateService.lastCheckRateLimited) {
-          message = l10n.snackUpdateRateLimited;
-        } else if (_updateService.lastCheckNetworkError) {
-          message = l10n.snackUpdateNetworkError;
-        } else {
-          message = l10n.snackUpdateCheckFailed;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-        return;
-      }
-      if (update != null) {
-        _log(
-          'manual_update_available',
-          category: DebugLogCategory.update,
-          detailsBuilder: () => {'version': update.version},
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUpdateAvailable(update.version),
-            ),
-            action: SnackBarAction(
-              label: updateActionLabel(AppLocalizations.of(context)),
-              onPressed: () => triggerUpdateAction(
-                context: context,
-                info: update,
-                updateService: _updateService,
-                channelName: _s.updateChannel.name,
-                debugLog: widget.debugLog,
-              ),
-            ),
-          ),
-        );
-      } else {
-        _log('manual_update_not_available', category: DebugLogCategory.update);
-        final l10n = AppLocalizations.of(context);
-        final isBeta =
-            _updateService.lastEffectiveChannel == UpdateChannel.beta;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isBeta ? l10n.snackUpdateLatestBeta : l10n.snackUpdateLatest,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      _log(
-        'manual_update_check_failed',
-        category: DebugLogCategory.update,
-        message: e.toString(),
-        severity: DebugSeverity.error,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).snackUpdateCheckFailed),
-        ),
+      await runManualUpdateCheck(
+        context: context,
+        updateService: _updateService,
+        settings: _s,
+        debugLog: widget.debugLog,
+        onLog: (event, {message, severity}) {
+          _log(
+            event,
+            category: DebugLogCategory.update,
+            message: message,
+            severity: severity ?? DebugSeverity.info,
+          );
+        },
       );
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);

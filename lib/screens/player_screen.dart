@@ -17,6 +17,7 @@ import '../services/player_shortcuts_service.dart';
 import '../services/instance_mode_service.dart';
 import '../services/settings_service.dart';
 import '../services/hardware_acceleration_service.dart';
+import '../services/idle_inhibit_service.dart';
 import '../services/debug_log_service.dart';
 import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
@@ -26,25 +27,28 @@ import '../services/open_file_bridge.dart';
 import '../services/seek_preview_service.dart';
 import '../services/audio_spectrum_service.dart';
 import '../services/self_update_service.dart';
+import '../services/windows_shell_service.dart';
 import '../models/chapter_info.dart';
 import '../models/playable_source.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/glass_decorations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
-import '../playback/audio_filter_chain.dart';
 import '../playback/chapter_list_loader.dart';
 import '../playback/media_folder_scanner.dart';
 import '../playback/playback_controller.dart';
 import '../playback/playback_mix_policy.dart';
 import '../playback/media_session_command_dispatch.dart';
 import '../playback/player_path_utils.dart';
+import '../playback/player_audio_session.dart';
 import '../playback/player_controller.dart';
 import '../playback/player_settings_sync.dart';
 import '../playback/player_ui_policies.dart';
 import '../playback/chapter_navigation_policy.dart';
 import '../playback/drop_path_batch_policy.dart';
 import '../playback/enqueue_policy.dart';
+import '../playback/linux_install_kind.dart';
+import '../playback/m3u_playlist.dart';
 import '../playback/resume_playback_policy.dart';
 import '../playback/screenshot_path_policy.dart';
 import '../playback/source_load_post_open_policy.dart';
@@ -61,6 +65,7 @@ import '../playback/update_launch_policy.dart';
 import '../playback/subscription_bag.dart';
 import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/manual_update_check.dart';
 import '../widgets/media_info_dialog.dart';
 import '../widgets/open_url_dialog.dart';
 import '../widgets/osd_overlay.dart';
@@ -133,6 +138,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   VideoController? _videoController;
   late final SeekPreviewService _seekPreviewService;
   late final AudioSpectrumService _audioSpectrum;
+  late final PlayerAudioSession _audioSession;
   late final PlaybackController _playback;
   final _subscriptions = SubscriptionBag();
   UpdateService get _updateService => widget.updateService;
@@ -153,6 +159,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final MediaSessionService _mediaSession;
   late final PlaylistService _playlist;
   late final OpenFileBridge _openFileBridge;
+  final _idleInhibit = IdleInhibitService();
 
   // Compact mini-player mode (PiP-style on desktop).
   bool _compactMode = false;
@@ -165,6 +172,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _resumeSaveTimer;
 
   String? _activeBookmarkToken;
+  String? _mediaDisplayTitle;
+  String? _mediaDisplayArtist;
 
   void _log(
     String event, {
@@ -231,10 +240,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _playerService = widget.playerService ?? PlayerService();
     _seekPreviewService = SeekPreviewService();
     _audioSpectrum = AudioSpectrumService(playerService: _playerService);
+    _audioSession = PlayerAudioSession(
+      playerService: _playerService,
+      settings: _settings,
+      player: _player,
+      spectrum: _audioSpectrum,
+    );
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isDisposed) return;
       _settings.pruneRecentFiles(notifyListeners: false);
+      unawaited(_syncWindowsJumpList());
     });
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
@@ -275,6 +291,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }),
     );
     _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
+    _playlist.addListener(_onPlaylistChanged);
     _player.volume = _settings.volume;
     _settingsSyncState = PlayerSettingsSyncState(
       lastSpeed: _settings.speed,
@@ -322,6 +339,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (_settings.mediaSessionEnabled) {
           _maybeUpdateMediaSessionPosition(pos);
         }
+        _maybeUpdateTaskbarProgress(pos);
       }),
       _playerService.durationStream.listen((dur) {
         if (!mounted || _isDisposed) return;
@@ -329,12 +347,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (dur.inMilliseconds > 0 && _settings.mediaSessionEnabled) {
           final source = _player.currentSource;
           if (source != null) {
-            unawaited(
-              _mediaSession.updateMetadata(
-                title: source.displayName,
-                duration: dur,
-              ),
-            );
+            unawaited(_pushMediaSessionMetadata(source, duration: dur));
           }
         }
         if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
@@ -348,6 +361,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (!mounted || _isDisposed) return;
         setState(() => _player.isPlaying = playing);
         _syncSpectrumService(playing);
+        unawaited(_idleInhibit.setPlaying(playing));
+        if (!playing) {
+          unawaited(WindowsShellService.clearTaskbarProgress());
+        }
         if (_settings.mediaSessionEnabled) {
           _maybeUpdateMediaSessionPosition(_player.position);
         }
@@ -405,13 +422,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
         if (albumArtTrack != null) {
           unawaited(
-            _playerService.setVideoTrack(albumArtTrack).catchError((Object e) {
-              _log(
-                'album_art_track_select_failed',
-                message: e.toString(),
-                severity: DebugSeverity.warn,
-              );
-            }),
+            _playerService
+                .setVideoTrack(albumArtTrack)
+                .then((_) async {
+                  // Let the album-art track settle before exporting for OS chrome.
+                  await Future<void>.delayed(const Duration(milliseconds: 120));
+                  if (!mounted || _isDisposed) return;
+                  final source = _player.currentSource;
+                  if (source != null && _settings.mediaSessionEnabled) {
+                    unawaited(_pushMediaSessionMetadata(source));
+                  }
+                })
+                .catchError((Object e) {
+                  _log(
+                    'album_art_track_select_failed',
+                    message: e.toString(),
+                    severity: DebugSeverity.warn,
+                  );
+                }),
           );
         }
       }),
@@ -498,6 +526,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Listen for settings changes (speed, loop, always-on-top).
     _settings.addListener(_onSettingsChanged);
     _initializePlatformFileOpenBridge();
+    _initializeMacAppMenuBridge();
 
     _checkForUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -559,16 +588,78 @@ class _PlayerScreenState extends State<PlayerScreen> {
         unawaited(_loadSource(pendingLoad));
       });
     }
+
+    final shouldRestoreQueue =
+        widget.initialFile == null &&
+        (widget.initialPlaylistSources == null ||
+            widget.initialPlaylistSources!.isEmpty) &&
+        (widget.initialDropPaths == null || widget.initialDropPaths!.isEmpty) &&
+        widget.initialPendingLoad == null &&
+        widget.initialLoadedSource == null;
+    if (shouldRestoreQueue) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_restorePersistedQueue());
+      });
+    }
+  }
+
+  void _onPlaylistChanged() {
+    if (_isDisposed) return;
+    _settings.savePlaylistQueue(_playlist.items, _playlist.index);
+  }
+
+  Future<void> _restorePersistedQueue() async {
+    if (_isDisposed || !mounted) return;
+    final snap = _settings.readPlaylistQueue();
+    if (snap.isEmpty) return;
+    final sources = <PlayableSource>[];
+    for (final raw in snap.items) {
+      final source = PlayableSource.fromStored(raw);
+      if (source != null) sources.add(source);
+    }
+    if (sources.isEmpty) {
+      _settings.clearPlaylistQueue();
+      return;
+    }
+    _playlist.replaceSources(sources, startIndex: snap.index);
+    final removed = await _playlist.removeMissingFiles();
+    if (_isDisposed || !mounted) return;
+    if (_playlist.isEmpty) {
+      _settings.clearPlaylistQueue();
+      return;
+    }
+    _settings.savePlaylistQueue(_playlist.items, _playlist.index);
+    if (removed > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context).snackQueueRemovedMissing(removed),
+          ),
+        ),
+      );
+    }
+    final current = _playlist.current;
+    if (current != null && _player.currentSource == null) {
+      unawaited(_loadSource(current, syncPlaylist: false));
+    }
   }
 
   @override
   void dispose() {
     _isDisposed = true;
+    if (Platform.isMacOS) {
+      const MethodChannel(
+        InstanceModeService.windowMethodChannelName,
+      ).setMethodCallHandler(null);
+    }
     _osdHideTimer?.cancel();
     _resumeSaveTimer?.cancel();
     _persistResumePosition();
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
+    _playlist.removeListener(_onPlaylistChanged);
+    _settings.savePlaylistQueue(_playlist.items, _playlist.index);
+    _settings.flushPlaylistQueue();
     _openFileBridge.dispose();
     _subscriptions.cancelAll();
     _playback.dispose();
@@ -576,6 +667,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _releaseActiveBookmark();
     unawaited(_mediaSession.dispose());
     _playlist.dispose();
+    unawaited(_idleInhibit.dispose());
     unawaited(_seekPreviewService.dispose());
     _audioSpectrum.dispose();
     unawaited(_playerService.dispose());
@@ -689,6 +781,53 @@ class _PlayerScreenState extends State<PlayerScreen> {
     unawaited(_openFileBridge.bootstrap(subscriptions: _subscriptions));
   }
 
+  /// macOS application menu → Flutter (Preferences, updates, File menu).
+  void _initializeMacAppMenuBridge() {
+    if (!Platform.isMacOS) return;
+    const channel = MethodChannel(InstanceModeService.windowMethodChannelName);
+    channel.setMethodCallHandler((call) async {
+      if (!mounted || _isDisposed) return null;
+      switch (call.method) {
+        case InstanceModeService.checkForUpdatesMethod:
+          await runManualUpdateCheck(
+            context: context,
+            updateService: _updateService,
+            settings: _settings,
+            debugLog: widget.debugLog,
+            onLog: (event, {message, severity}) {
+              _log(
+                event,
+                category: DebugLogCategory.update,
+                message: message,
+                severity: severity ?? DebugSeverity.info,
+              );
+            },
+          );
+          return null;
+        case InstanceModeService.openPreferencesMethod:
+          _openSettings();
+          return null;
+        case InstanceModeService.openFileMethod:
+          unawaited(_openFile());
+          return null;
+        case InstanceModeService.openUrlMethod:
+          unawaited(_openUrl());
+          return null;
+        case InstanceModeService.openRecentMethod:
+          final path = call.arguments;
+          if (path is String && path.trim().isNotEmpty) {
+            _loadRecentFile(path.trim());
+          }
+          return null;
+        case InstanceModeService.getRecentFilesMethod:
+          _settings.pruneRecentFiles(notifyListeners: false);
+          return _settings.recentFiles;
+        default:
+          return null;
+      }
+    });
+  }
+
   Future<void> _openRequestedFile(
     String filePath, {
     bool forcePlay = false,
@@ -712,14 +851,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (trimmed.isEmpty) return;
     if (_currentFile == trimmed) {
       _log(
-        'open_requested_same_file_ignored',
-        detailsBuilder: () => {'path': trimmed},
+        'open_requested_same_file',
+        detailsBuilder: () => {
+          'path': trimmed,
+          'force_play': forcePlay,
+          'is_playing': _player.isPlaying,
+        },
       );
-      if (SourceOpenPolicy.shouldForcePlaySameFile(
+      if (SourceOpenPolicy.shouldResumeSameFile(
         forcePlay: forcePlay,
         isPlaying: _player.isPlaying,
       )) {
         unawaited(_playerService.playPause().catchError((_) {}));
+        return;
+      }
+      if (SourceOpenPolicy.shouldRestartSameFile(
+        forcePlay: forcePlay,
+        isPlaying: _player.isPlaying,
+      )) {
+        await _loadFile(trimmed, forcePlay: true);
+        return;
       }
       return;
     }
@@ -953,7 +1104,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
 
       await _captureBookmarkFor(path.trim());
-      await _loadFile(path);
+      await _openPathOrPlaylist(path.trim());
     } on PlatformException catch (e) {
       _log(
         'file_picker_platform_exception',
@@ -1091,12 +1242,101 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadFile(String filePath, {bool forcePlay = false}) {
-    return _loadSource(PlayableSource.file(filePath), forcePlay: forcePlay);
+    return _openPathOrPlaylist(filePath, forcePlay: forcePlay);
   }
 
-  Future<void> _loadSource(PlayableSource source, {bool forcePlay = false}) {
+  Future<void> _openPathOrPlaylist(
+    String filePath, {
+    bool forcePlay = false,
+  }) async {
+    final trimmed = filePath.trim();
+    if (M3uPlaylist.isPlaylistPath(trimmed)) {
+      await _importPlaylistFile(trimmed, playNow: true);
+      return;
+    }
+    await _loadSource(PlayableSource.file(trimmed), forcePlay: forcePlay);
+  }
+
+  Future<void> _openPlaylistPicker({bool playNow = true}) async {
+    _log('playlist_picker_open_requested');
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: M3uPlaylist.extensions.toList(),
+        lockParentWindow: true,
+        initialDirectory: _settings.lastOpenDirectory,
+      );
+      final path = file?.path?.trim();
+      if (path == null || path.isEmpty) return;
+      await _captureBookmarkFor(path);
+      await _importPlaylistFile(path, playNow: playNow);
+    } on PlatformException catch (e) {
+      _log(
+        'playlist_picker_platform_exception',
+        message: e.message ?? e.code,
+        severity: DebugSeverity.error,
+      );
+    }
+  }
+
+  Future<void> _importPlaylistFile(
+    String playlistPath, {
+    required bool playNow,
+  }) async {
+    try {
+      final sources = await M3uPlaylist.parseFile(playlistPath);
+      if (sources.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      _rememberLastOpenDirectory(playlistPath);
+      _rememberRecentAndJumpList(playlistPath);
+      _enqueueSources(sources, playNow: playNow);
+      _log(
+        'playlist_imported',
+        detailsBuilder: () => {
+          'path': playlistPath,
+          'count': sources.length,
+          'play_now': playNow,
+        },
+      );
+    } catch (e) {
+      _log(
+        'playlist_import_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackPlaylistImportFailed,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadSource(
+    PlayableSource source, {
+    bool forcePlay = false,
+    bool syncPlaylist = true,
+  }) {
     return _playback.loadQueue.enqueue(
-      () => _loadSourceInternal(source, forcePlay: forcePlay),
+      () => _loadSourceInternal(
+        source,
+        forcePlay: forcePlay,
+        syncPlaylist: syncPlaylist,
+      ),
       onError: (Object e, StackTrace st) {
         _log(
           'load_queue_failed',
@@ -1107,11 +1347,102 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  Future<void> _pushMediaSessionMetadata(
+    PlayableSource source, {
+    Duration? duration,
+  }) async {
+    if (!_settings.mediaSessionEnabled || _isDisposed) return;
+    String? artist;
+    String? album;
+    String? metaTitle;
+    try {
+      artist = await _playerService.getProperty('metadata/by-key/artist');
+      album = await _playerService.getProperty('metadata/by-key/album');
+      metaTitle = await _playerService.getProperty('metadata/by-key/title');
+    } catch (_) {
+      // Metadata is best-effort; title falls back to display name.
+    }
+    String? artUri;
+    if (_player.hasAlbumArtTrack) {
+      artUri = await _exportAlbumArtForMediaSession();
+    }
+    final title = (metaTitle != null && metaTitle.trim().isNotEmpty)
+        ? metaTitle.trim()
+        : source.displayName;
+    if (mounted) {
+      setState(() {
+        _mediaDisplayTitle = title;
+        _mediaDisplayArtist = (artist != null && artist.trim().isNotEmpty)
+            ? artist.trim()
+            : null;
+      });
+    }
+    await _mediaSession.updateMetadata(
+      title: title,
+      artist: (artist != null && artist.trim().isNotEmpty)
+          ? artist.trim()
+          : null,
+      album: (album != null && album.trim().isNotEmpty) ? album.trim() : null,
+      duration: duration ?? _player.duration,
+      artUri: artUri,
+    );
+  }
+
+  Future<String?> _exportAlbumArtForMediaSession() async {
+    try {
+      final bytes = await _playerService.screenshot(format: 'image/jpeg');
+      if (bytes == null || bytes.isEmpty) return null;
+      final dir = Directory(
+        p.join(Directory.systemTemp.path, 'dacx-media-session'),
+      );
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+      }
+      final file = File(p.join(dir.path, 'artwork.jpg'));
+      await file.writeAsBytes(bytes, flush: true);
+      return file.uri.toString();
+    } catch (e) {
+      _log(
+        'media_session_art_export_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+      return null;
+    }
+  }
+
   void _maybeUpdateMediaSessionPosition(Duration pos) {
     if (!_playback.mediaSessionThrottle.shouldSend(DateTime.now())) {
       return;
     }
     unawaited(_mediaSession.updatePosition(pos, playing: _player.isPlaying));
+  }
+
+  DateTime? _lastTaskbarProgressAt;
+
+  void _maybeUpdateTaskbarProgress(Duration pos) {
+    if (!Platform.isWindows || !_player.isPlaying) return;
+    final dur = _player.duration;
+    if (dur.inMilliseconds <= 0) return;
+    final now = DateTime.now();
+    final last = _lastTaskbarProgressAt;
+    if (last != null &&
+        now.difference(last) < const Duration(milliseconds: 500)) {
+      return;
+    }
+    _lastTaskbarProgressAt = now;
+    final progress = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+    unawaited(WindowsShellService.setTaskbarProgress(progress));
+  }
+
+  Future<void> _syncWindowsJumpList() async {
+    if (!Platform.isWindows) return;
+    await WindowsShellService.updateJumpList(_settings.recentFiles);
+  }
+
+  void _rememberRecentAndJumpList(String path) {
+    _settings.addRecentFile(path);
+    unawaited(_syncWindowsJumpList());
   }
 
   Future<void> _refreshChaptersIfNeeded() async {
@@ -1129,6 +1460,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _loadSourceInternal(
     PlayableSource source, {
     bool forcePlay = false,
+    bool syncPlaylist = true,
   }) async {
     if (_isDisposed) return;
     final requestedValue = source.value.trim();
@@ -1136,6 +1468,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? PlayableSource.url(requestedValue)
         : PlayableSource.file(await _resolveSandboxedPath(requestedValue));
     final normalizedValue = normalizedSource.value;
+
+    if (syncPlaylist) {
+      _playlist.setPlayingSource(normalizedSource);
+    }
 
     final validation = SourceLoadValidationPolicy.validateNormalizedOpen(
       source: source,
@@ -1149,6 +1485,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         detailsBuilder: () => switch (validation.failure) {
           SourceLoadValidationFailure.invalidUrl => {'url': requestedValue},
           SourceLoadValidationFailure.missingFile => {'path': normalizedValue},
+          SourceLoadValidationFailure.unsafePath => {'path': requestedValue},
           _ => {'path': requestedValue, 'source': source.value},
         },
       );
@@ -1222,6 +1559,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             : DebugSeverity.error,
       );
       if (!failureReaction.shouldUpdateUi) return;
+      if (!mounted) return;
       setState(_player.clearSourceOnLoadFailure);
       unawaited(_seekPreviewService.setSource(null));
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1270,7 +1608,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     try {
       if (followUp.shouldPersistRecent) {
-        _settings.addRecentFile(normalizedValue);
+        _rememberRecentAndJumpList(normalizedValue);
       }
       if (followUp.shouldRememberOpenDirectory) {
         _rememberLastOpenDirectory(normalizedValue);
@@ -1308,12 +1646,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       unawaited(_maybeApplyResume(normalizedValue));
     }
     if (followUp.shouldUpdateMediaSessionMetadata) {
-      unawaited(
-        _mediaSession.updateMetadata(
-          title: normalizedSource.displayName,
-          duration: _player.duration,
-        ),
-      );
+      unawaited(_pushMediaSessionMetadata(normalizedSource));
     }
   }
 
@@ -1329,6 +1662,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (result.audioOnlyChanged) {
       setState(() {});
+      _syncSpectrumService(_player.isPlaying);
     }
     if (result.refreshChapters) {
       unawaited(_refreshChaptersIfNeeded());
@@ -1358,12 +1692,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context).snackCouldNotReadDroppedFile,
+              AppLocalizations.of(context).snackDropPathInaccessible,
             ),
           ),
         );
       }
       return;
+    }
+    if (batch.skippedCount > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).snackDropPathInaccessible),
+        ),
+      );
     }
     _log(
       'drop_file_received',
@@ -1385,13 +1726,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       );
     }
-    switch (DropFilePolicy.action(validPathCount: batch.paths.length)) {
+    unawaited(_applyDroppedPathsExpanded(batch.paths));
+  }
+
+  Future<void> _applyDroppedPathsExpanded(List<String> paths) async {
+    final media = <PlayableSource>[];
+    for (final path in paths) {
+      if (M3uPlaylist.isPlaylistPath(path)) {
+        try {
+          media.addAll(await M3uPlaylist.parseFile(path));
+        } catch (e) {
+          _log(
+            'drop_playlist_parse_failed',
+            message: e.toString(),
+            detailsBuilder: () => {'path': path},
+            severity: DebugSeverity.warn,
+          );
+        }
+        continue;
+      }
+      media.add(PlayableSource.file(path));
+    }
+    if (media.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    switch (DropFilePolicy.action(validPathCount: media.length)) {
       case DropFileAction.none:
         return;
       case DropFileAction.loadSingle:
-        unawaited(_loadFile(batch.paths.first));
+        final only = media.first;
+        if (only.isFile) {
+          unawaited(_loadFile(only.value));
+        } else {
+          unawaited(_loadSource(only));
+        }
       case DropFileAction.enqueuePlayNow:
-        _enqueue(batch.paths, playNow: true);
+        _enqueueSources(media, playNow: true);
     }
   }
 
@@ -1853,10 +2232,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           height: 40,
                                           child: AudioSpectrumVisualizer(
                                             isPlaying: _player.isPlaying,
-                                            position: _player.position,
-                                            duration: _player.duration,
-                                            spectrumStream:
-                                                _audioSpectrum.spectrumStream,
+                                            bandsListenable:
+                                                _audioSpectrum.bandsNotifier,
                                           ),
                                         ),
                                       if (_compactMode)
@@ -1902,7 +2279,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             ),
                                             const SizedBox(height: 16),
                                             Text(
-                                              'Drop media files to play or enqueue',
+                                              AppLocalizations.of(
+                                                context,
+                                              ).dropOverlayHint,
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .titleMedium
@@ -2071,6 +2450,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onPrevious: () => unawaited(_advancePlaylist(-1)),
             onNext: () => unawaited(_advancePlaylist(1)),
             onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
+            onToggleMute: _toggleMute,
           ),
         ],
       ),
@@ -2115,6 +2495,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                         if (items.isNotEmpty)
                           IconButton(
+                            icon: Icon(
+                              _playlist.shuffle
+                                  ? Icons.shuffle_on
+                                  : Icons.shuffle,
+                            ),
+                            tooltip: l10n.tooltipShuffle,
+                            onPressed: () {
+                              _playlist.setShuffle(!_playlist.shuffle);
+                            },
+                          ),
+                        if (items.isNotEmpty)
+                          IconButton(
                             icon: const Icon(Icons.clear_all),
                             tooltip: l10n.actionClear,
                             onPressed: () {
@@ -2138,15 +2530,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               ),
                             ),
                           )
-                        : ListView.builder(
+                        : ReorderableListView.builder(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             itemCount: items.length,
+                            onReorderItem: (oldIndex, newIndex) {
+                              _playlist.moveItem(oldIndex, newIndex);
+                            },
                             itemBuilder: (context, index) {
                               final isCurrent = index == _playlist.index;
                               final source = items[index];
                               final name = source.displayName;
 
                               return QueueItemTile(
+                                key: ValueKey('queue-$index-${source.value}'),
                                 name: name,
                                 isCurrent: isCurrent,
                                 isUrl: source.isUrl,
@@ -2155,7 +2551,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 colorScheme: colorScheme,
                                 onActivate: () {
                                   _playlist.jumpTo(index);
-                                  unawaited(_loadSource(source));
+                                  unawaited(
+                                    _loadSource(source, syncPlaylist: false),
+                                  );
                                 },
                                 onRemove: () {
                                   unawaited(_removeQueueItem(index));
@@ -2186,6 +2584,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           icon: const Icon(Icons.create_new_folder),
                           label: Text(l10n.buttonOpenFolder),
                         ),
+                        FilledButton.tonalIcon(
+                          key: const Key('queue-open-playlist-button'),
+                          onPressed: () => unawaited(
+                            _openPlaylistPicker(playNow: _playlist.isEmpty),
+                          ),
+                          icon: const Icon(Icons.queue_music),
+                          label: Text(l10n.buttonOpenPlaylist),
+                        ),
                         if (items.isNotEmpty)
                           FilledButton.tonalIcon(
                             key: const Key('queue-remove-missing-button'),
@@ -2209,6 +2615,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _buildDropZone() {
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
+    final flatpak = LinuxInstallDetector.isFlatpak;
 
     return Center(
       child: _buildCenterPanel(
@@ -2221,12 +2628,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            l10n.emptyStateMessage,
+            flatpak ? l10n.emptyStateFlatpakMessage : l10n.emptyStateMessage,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: colorScheme.onSurface.withValues(alpha: 0.74),
             ),
             textAlign: TextAlign.center,
           ),
+          if (!_settings.emptyStateTipDismissed) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.emptyStateTipReopenLast,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurface.withValues(alpha: 0.58),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            TextButton(
+              key: const Key('empty-state-tip-dismiss'),
+              onPressed: () => setState(() {
+                _settings.emptyStateTipDismissed = true;
+              }),
+              child: Text(l10n.actionDismissTip),
+            ),
+          ],
           const SizedBox(height: 24),
           Wrap(
             spacing: 12,
@@ -2244,7 +2668,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 icon: const Icon(Icons.create_new_folder),
                 label: Text(l10n.buttonOpenFolder),
               ),
-              if (_settings.experimentalFeaturesEnabled)
+              FilledButton.tonalIcon(
+                key: const Key('open-playlist-empty-button'),
+                onPressed: () => unawaited(_openPlaylistPicker()),
+                icon: const Icon(Icons.queue_music),
+                label: Text(l10n.buttonOpenPlaylist),
+              ),
+              if (PlayerUiPolicies.showOpenUrlButton(_settings))
                 FilledButton.tonalIcon(
                   key: const Key('open-url-empty-button'),
                   onPressed: () => unawaited(_openUrl()),
@@ -2387,6 +2817,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         : (source.isFile
               ? p.basenameWithoutExtension(source.value)
               : source.displayName);
+    final title = (_mediaDisplayTitle != null && _mediaDisplayTitle!.isNotEmpty)
+        ? _mediaDisplayTitle!
+        : fileName;
+    final artist = _mediaDisplayArtist;
     final colorScheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2415,7 +2849,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    fileName,
+                    title,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: colorScheme.onSurface.withValues(alpha: 0.88),
                       fontWeight: FontWeight.w500,
@@ -2426,6 +2860,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (artist != null && artist.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    artist,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.72),
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Text(
                   AppLocalizations.of(context).labelAudioPlayback,
@@ -2640,6 +3086,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
           details: {'dir': dir},
           severity: DebugSeverity.warn,
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.snackScreenshotDirInaccessible)),
+          );
+        }
+        _showOsdMessage(l10n.osdScreenshotSaveFailed);
+        return;
       }
       final base = ScreenshotPathPolicy.baseNameForSource(
         isFile: source.isFile,
@@ -2691,27 +3144,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Builds and applies the combined af chain: EQ + spectrum analysis.
   Future<void> _applyMergedAudioFilters() async {
-    final spectrumWanted =
-        _settings.audioWaveformEnabled &&
-        _player.isAudioFile &&
-        _audioSpectrum.isActive;
-    final result = await AudioFilterChain.apply(
-      lastAppliedChain: _player.lastAppliedAfChain,
-      eqEnabled: _settings.eqEnabled,
-      eqBands: _settings.eqBands,
-      spectrumWanted: spectrumWanted,
-      setAudioFilter: _playerService.setAudioFilter,
-    );
-    if (result.skipped) return;
-
-    _player.lastAppliedAfChain = result.appliedChain;
-
-    if (result.spectrumInstalled) {
-      _audioSpectrum.confirmFilterInstalled();
-    } else if (result.spectrumFailed) {
-      _audioSpectrum.confirmFilterFailed();
+    final result = await _audioSession.applyMergedAudioFilters();
+    if (result.spectrumFailed && result.usedSpectrumFallback && mounted) {
+      _showOsdMessage(AppLocalizations.of(context).osdSpectrumUnavailable);
     }
-
+    if (_audioSpectrum.capabilityFailed &&
+        _settings.audioWaveformEnabled &&
+        mounted) {
+      _showOsdMessage(AppLocalizations.of(context).osdSpectrumUnavailable);
+      await _audioSession.disableSpectrumDueToCapabilityFailure();
+    }
     if (result.failed) {
       _log(
         'audio_filter_apply_failed',
@@ -2722,26 +3164,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Start or stop spectrum polling based on playing state + settings.
-  /// Always applies the merged af chain once at the end.
   void _syncSpectrumService(bool playing) {
-    final action = SpectrumSyncPolicy.resolve(
-      playing: playing,
-      isAudioFile: _player.isAudioFile,
-      audioWaveformEnabled: _settings.audioWaveformEnabled,
-      spectrumCurrentlyActive: _audioSpectrum.isActive,
-    );
-    switch (action) {
-      case SpectrumSyncAction.startAndApply:
-        unawaited(
-          _audioSpectrum.start().then((_) => _applyMergedAudioFilters()),
-        );
-      case SpectrumSyncAction.stopAndApply:
-        unawaited(
-          _audioSpectrum.stop().then((_) => _applyMergedAudioFilters()),
-        );
-      case SpectrumSyncAction.applyOnly:
-        unawaited(_applyMergedAudioFilters());
-    }
+    _audioSession.syncSpectrum(playing);
   }
 
   void _toggleEqualizer() {
@@ -2847,7 +3271,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _mixReloadInFlight = true;
     try {
       final savedPos = _player.position;
-      await _loadSource(source);
+      await _loadSource(source, syncPlaylist: false);
       if (savedPos > Duration.zero) {
         await Future<void>.delayed(_mixReloadDelay);
         if (mounted && _player.position < _resumeStartThreshold) {
@@ -3025,7 +3449,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (next == null) return;
     final l10n = AppLocalizations.of(context);
     _showOsdMessage(delta > 0 ? l10n.osdNextInQueue : l10n.osdPreviousInQueue);
-    await _loadSource(next);
+    await _loadSource(next, syncPlaylist: false);
   }
 
   void _enqueue(List<String> paths, {bool playNow = false}) {
@@ -3055,7 +3479,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
         }
         final first = _playlist.current;
-        if (first != null) unawaited(_loadSource(first));
+        if (first != null) {
+          unawaited(_loadSource(first, syncPlaylist: false));
+        }
       case EnqueueMode.append:
         final dropped = _playlist.addAllSources(sources);
         _showOsdMessage(
@@ -3088,7 +3514,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else if (before != null && _playlist.current != before) {
       final next = _playlist.current;
       if (next != null) {
-        unawaited(_loadSource(next));
+        unawaited(_loadSource(next, syncPlaylist: false));
       }
     }
     ScaffoldMessenger.of(context).showSnackBar(
@@ -3109,7 +3535,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _stopPlaybackAndResetUi();
       return;
     }
-    await _loadSource(next);
+    await _loadSource(next, syncPlaylist: false);
   }
 
   // ── Compact / mini-player mode ────────────────────────────
@@ -3386,6 +3812,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               label: l10n.dialogSubtitleTrackTitle,
                               action: 'subtitle',
                             ),
+                          if (_currentFile != null)
+                            item(
+                              icon: Icons.audio_file,
+                              label: l10n.menuLoadExternalAudio,
+                              action: 'external_audio',
+                            ),
+                          if (_currentFile != null)
+                            item(
+                              icon: Icons.subtitles_outlined,
+                              label: l10n.menuLoadExternalSubtitle,
+                              action: 'external_subtitle',
+                            ),
                           if (hasChapters)
                             item(
                               icon: Icons.menu_book,
@@ -3397,7 +3835,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             label: l10n.dialogEqualizerTitle,
                             action: 'equalizer',
                           ),
-                          if (_currentFile != null && !_player.isAudioFile)
+                          if (_currentFile != null)
                             item(
                               icon: Icons.photo_camera,
                               label: l10n.menuTakeScreenshot,
@@ -3413,10 +3851,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               onChanged: (v) {
                                 _settings.multiAudioMix = v;
                                 setSheetState(() {});
+                                if (v && _settings.audioWaveformEnabled) {
+                                  _showOsdMessage(
+                                    l10n.osdSpectrumDisabledForMix,
+                                  );
+                                  _syncSpectrumService(_player.isPlaying);
+                                }
                                 unawaited(() async {
                                   await _applyMultiAudioMix(announce: true);
                                   if (_currentFile != null) {
                                     await _reloadCurrentForMixChange();
+                                  }
+                                  if (!v) {
+                                    _syncSpectrumService(_player.isPlaying);
                                   }
                                 }());
                               },
@@ -3425,7 +3872,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               (_player.currentSource?.isFile ?? false))
                             switchItem(
                               icon: Icons.image_search,
-                              label: l10n.menuSeekThumbnailsBeta,
+                              label: l10n.menuSeekThumbnails,
                               value: _settings.seekPreviewEnabled,
                               onChanged: (v) {
                                 _settings.seekPreviewEnabled = v;
@@ -3511,6 +3958,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'subtitle':
         unawaited(_showSubtitleTracksDialog());
         break;
+      case 'external_audio':
+        unawaited(_pickExternalAudio());
+        break;
+      case 'external_subtitle':
+        unawaited(_pickExternalSubtitle());
+        break;
       case 'chapters':
         unawaited(_showChaptersDialog());
         break;
@@ -3535,6 +3988,78 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'compact':
         unawaited(_toggleCompactMode());
         break;
+    }
+  }
+
+  Future<void> _pickExternalAudio() async {
+    final l10n = AppLocalizations.of(context);
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: PlayerPathUtils.audioExtensions.toList()..sort(),
+        lockParentWindow: true,
+        initialDirectory: _settings.lastOpenDirectory,
+      );
+      final path = file?.path?.trim();
+      if (path == null || path.isEmpty) return;
+      final ok = await _playerService.addExternalAudio(path);
+      if (!mounted) return;
+      _showOsdMessage(
+        ok ? l10n.osdExternalAudioLoaded : l10n.osdExternalAudioFailed,
+      );
+      if (ok) {
+        _cacheTracksForCurrentLoad(_playerService.currentTracks);
+        setState(() {});
+      }
+    } catch (e) {
+      _log(
+        'external_audio_pick_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+      if (mounted) {
+        _showOsdMessage(l10n.osdExternalAudioFailed);
+      }
+    }
+  }
+
+  Future<void> _pickExternalSubtitle() async {
+    final l10n = AppLocalizations.of(context);
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const [
+          'srt',
+          'ass',
+          'ssa',
+          'vtt',
+          'sub',
+          'idx',
+          'sup',
+        ],
+        lockParentWindow: true,
+        initialDirectory: _settings.lastOpenDirectory,
+      );
+      final path = file?.path?.trim();
+      if (path == null || path.isEmpty) return;
+      final ok = await _playerService.addExternalSubtitle(path);
+      if (!mounted) return;
+      _showOsdMessage(
+        ok ? l10n.osdExternalSubtitleLoaded : l10n.osdExternalSubtitleFailed,
+      );
+      if (ok) {
+        _cacheTracksForCurrentLoad(_playerService.currentTracks);
+        setState(() {});
+      }
+    } catch (e) {
+      _log(
+        'external_subtitle_pick_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+      if (mounted) {
+        _showOsdMessage(l10n.osdExternalSubtitleFailed);
+      }
     }
   }
 
@@ -3937,7 +4462,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   padding: const EdgeInsets.all(20),
                   alignment: Alignment.center,
                   child: Text(
-                    captured ?? 'Waiting…',
+                    captured ?? l10n.keyCaptureWaiting,
                     style: Theme.of(ctx).textTheme.titleMedium,
                   ),
                 ),

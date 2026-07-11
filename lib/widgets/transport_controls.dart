@@ -26,6 +26,7 @@ class TransportControls extends StatelessWidget {
   final VoidCallback? onNext;
   final VoidCallback? onToggleQueue;
   final VoidCallback? onMoreActions;
+  final VoidCallback? onToggleMute;
 
   const TransportControls({
     super.key,
@@ -49,6 +50,7 @@ class TransportControls extends StatelessWidget {
     this.onNext,
     this.onToggleQueue,
     this.onMoreActions,
+    this.onToggleMute,
   });
 
   void _cycleLoopMode() {
@@ -196,9 +198,22 @@ class TransportControls extends StatelessWidget {
                   label: volume == 0
                       ? l10n.volumeMuted
                       : l10n.volumePercent(volume.round()),
-                  child: Icon(
-                    volume == 0 ? Icons.volume_off : Icons.volume_up,
-                    size: 20,
+                  button: onToggleMute != null,
+                  child: IconButton(
+                    icon: Icon(
+                      volume == 0 ? Icons.volume_off : Icons.volume_up,
+                      size: 20,
+                    ),
+                    tooltip: volume == 0
+                        ? l10n.tooltipUnmute
+                        : l10n.tooltipMute,
+                    onPressed: onToggleMute,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ),
                 if (showVolumeSlider)

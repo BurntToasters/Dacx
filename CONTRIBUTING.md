@@ -18,7 +18,7 @@ Run every project Flutter or Dart command through FVM: `fvm flutter ...` or
 npm run test:all
 ```
 
-This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage (55% floor), and a build smoke. CI runs a subset plus multi-OS build smoke on `main` and `beta` only.
+This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **55%**. Required sources (`player_screen`, spectrum) must appear in the lcov report but are excluded from the scoped gate. CI runs a subset plus multi-OS build smoke on `main`, `beta`, and `next-0.10.1` (and `v*` tags).
 
 Before packaging a release, `release:prepare` runs `npm run licenses` to refresh
 `build/THIRD_PARTY_NOTICES.txt` (copied into installers by `package-release.js`).

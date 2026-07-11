@@ -346,4 +346,106 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
+
+  /// Application menu → Flutter Settings-equivalent update check.
+  @IBAction func checkForUpdates(_ sender: Any?) {
+    invokeFlutterMethod("checkForUpdates")
+  }
+
+  /// Application menu → Flutter Settings (Preferences… / ⌘,).
+  @IBAction func openPreferences(_ sender: Any?) {
+    invokeFlutterMethod("openPreferences")
+  }
+
+  /// File → Open….
+  @IBAction func openMediaFile(_ sender: Any?) {
+    invokeFlutterMethod("openFile")
+  }
+
+  /// File → Open URL….
+  @IBAction func openMediaUrl(_ sender: Any?) {
+    invokeFlutterMethod("openUrl")
+  }
+
+  /// File → Open Recent item (representedObject is the path string).
+  @IBAction func openRecentFile(_ sender: Any?) {
+    guard let item = sender as? NSMenuItem,
+          let path = item.representedObject as? String,
+          !path.isEmpty else { return }
+    invokeFlutterMethod("openRecent", arguments: path)
+  }
+
+  private func invokeFlutterMethod(_ method: String, arguments: Any? = nil) {
+    guard let channel = preferredWindowMethodChannel() else {
+      os_log("%{public}@: no Flutter window channel ready",
+             log: dacxLog, type: .error, method)
+      return
+    }
+    channel.invokeMethod(method, arguments: arguments)
+  }
+
+  private func preferredWindowMethodChannel() -> FlutterMethodChannel? {
+    let preferredWindow = (NSApp.keyWindow as? MainFlutterWindow)
+        ?? (NSApp.mainWindow as? MainFlutterWindow)
+        ?? (mainFlutterWindow as? MainFlutterWindow)
+    if let win = preferredWindow,
+       let reg = registrations[ObjectIdentifier(win)] {
+      return reg.windowMethodChannel
+    }
+    return registrations.values.first?.windowMethodChannel
+  }
+
+  /// Rebuilds File → Open Recent from Flutter's recent_files list.
+  func refreshOpenRecentMenu() {
+    guard let recentMenu = openRecentSubmenu() else { return }
+    recentMenu.removeAllItems()
+    guard let channel = preferredWindowMethodChannel() else {
+      recentMenu.addItem(disabledRecentPlaceholder())
+      return
+    }
+    channel.invokeMethod("getRecentFiles", arguments: nil) { [weak self] result in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        recentMenu.removeAllItems()
+        let paths = (result as? [Any])?.compactMap { $0 as? String } ?? []
+        if paths.isEmpty {
+          recentMenu.addItem(self.disabledRecentPlaceholder())
+          return
+        }
+        for path in paths.prefix(12) {
+          let title = (path as NSString).lastPathComponent
+          let item = NSMenuItem(
+            title: title.isEmpty ? path : title,
+            action: #selector(self.openRecentFile(_:)),
+            keyEquivalent: ""
+          )
+          item.target = self
+          item.representedObject = path
+          recentMenu.addItem(item)
+        }
+      }
+    }
+  }
+
+  private func openRecentSubmenu() -> NSMenu? {
+    guard let mainMenu = NSApp.mainMenu else { return nil }
+    for root in mainMenu.items {
+      guard let submenu = root.submenu, submenu.title == "File" else { continue }
+      for item in submenu.items where item.title == "Open Recent" {
+        return item.submenu
+      }
+    }
+    return nil
+  }
+
+  private func disabledRecentPlaceholder() -> NSMenuItem {
+    let item = NSMenuItem(title: "No Recent Files", action: nil, keyEquivalent: "")
+    item.isEnabled = false
+    return item
+  }
+
+  override func applicationDidBecomeActive(_ notification: Notification) {
+    super.applicationDidBecomeActive(notification)
+    refreshOpenRecentMenu()
+  }
 }

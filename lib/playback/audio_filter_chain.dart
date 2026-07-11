@@ -10,6 +10,7 @@ class AudioFilterApplyResult {
     required this.spectrumFailed,
     required this.usedSpectrumFallback,
     required this.failed,
+    this.needsSpectrumConfirm = false,
   });
 
   /// Chain last written to mpv (`''` when cleared).
@@ -24,6 +25,9 @@ class AudioFilterApplyResult {
 
   /// True when mpv rejected the chain and no fallback could be applied.
   final bool failed;
+
+  /// True when spectrum is wanted but not yet confirmed (skip without confirm).
+  final bool needsSpectrumConfirm;
 }
 
 /// Builds and applies EQ + spectrum `af` chains for mpv.
@@ -39,7 +43,7 @@ abstract final class AudioFilterChain {
       if (eqChain.isNotEmpty) segments.add(eqChain);
     }
     if (spectrumWanted) {
-      segments.add(AudioSpectrumService.afSegment);
+      segments.addAll(AudioSpectrumService.afSegments);
     }
     return segments;
   }
@@ -56,6 +60,9 @@ abstract final class AudioFilterChain {
     ).join(',');
   }
 
+  static bool _chainContainsSpectrum(String chain) =>
+      chain.contains('dacxb0') || chain.contains('dacxstats');
+
   /// Applies [eqEnabled]/[eqBands]/[spectrumWanted] to mpv via [setAudioFilter].
   ///
   /// When the spectrum segment causes rejection, retries once without it so EQ
@@ -66,6 +73,7 @@ abstract final class AudioFilterChain {
     required List<double> eqBands,
     required bool spectrumWanted,
     required Future<bool> Function(String filter) setAudioFilter,
+    bool spectrumCurrentlyConfirmed = false,
   }) async {
     final segments = buildSegments(
       eqEnabled: eqEnabled,
@@ -74,13 +82,16 @@ abstract final class AudioFilterChain {
     );
     final merged = segments.join(',');
     if (lastAppliedChain == merged) {
+      final needsConfirm =
+          spectrumWanted && !spectrumCurrentlyConfirmed && merged.isNotEmpty;
       return AudioFilterApplyResult(
         appliedChain: merged,
         skipped: true,
-        spectrumInstalled: false,
+        spectrumInstalled: spectrumWanted && spectrumCurrentlyConfirmed,
         spectrumFailed: false,
         usedSpectrumFallback: false,
         failed: false,
+        needsSpectrumConfirm: needsConfirm,
       );
     }
 
@@ -93,22 +104,47 @@ abstract final class AudioFilterChain {
         spectrumFailed: false,
         usedSpectrumFallback: false,
         failed: false,
+        needsSpectrumConfirm: spectrumWanted,
       );
     }
 
-    if (spectrumWanted && segments.length > 1) {
-      final fallbackSegments = List<String>.from(segments)..removeLast();
+    if (spectrumWanted) {
+      final fallbackSegments = buildSegments(
+        eqEnabled: eqEnabled,
+        eqBands: eqBands,
+        spectrumWanted: false,
+      );
       final fallback = fallbackSegments.join(',');
-      final fallbackOk = await setAudioFilter(fallback);
-      if (fallbackOk) {
-        return AudioFilterApplyResult(
-          appliedChain: fallback,
-          skipped: false,
-          spectrumInstalled: false,
-          spectrumFailed: true,
-          usedSpectrumFallback: true,
-          failed: false,
+      // Only retry if fallback differs from the failed merge.
+      if (fallback != merged) {
+        final fallbackOk = await setAudioFilter(
+          fallback.isEmpty ? '' : fallback,
         );
+        if (fallbackOk) {
+          return AudioFilterApplyResult(
+            appliedChain: fallback,
+            skipped: false,
+            spectrumInstalled: false,
+            spectrumFailed: true,
+            usedSpectrumFallback: true,
+            failed: false,
+            needsSpectrumConfirm: false,
+          );
+        }
+      } else if (_chainContainsSpectrum(merged)) {
+        // spectrum-only chain failed — clear af
+        final cleared = await setAudioFilter('');
+        if (cleared) {
+          return AudioFilterApplyResult(
+            appliedChain: '',
+            skipped: false,
+            spectrumInstalled: false,
+            spectrumFailed: true,
+            usedSpectrumFallback: true,
+            failed: false,
+            needsSpectrumConfirm: false,
+          );
+        }
       }
     }
 
@@ -119,6 +155,7 @@ abstract final class AudioFilterChain {
       spectrumFailed: spectrumWanted,
       usedSpectrumFallback: false,
       failed: true,
+      needsSpectrumConfirm: false,
     );
   }
 }
@@ -131,7 +168,11 @@ abstract final class SpectrumSyncPolicy {
     required bool playing,
     required bool isAudioFile,
     required bool audioWaveformEnabled,
+    bool multiAudioMixEnabled = false,
   }) {
+    // lavfi-complex mix and spectrum af share the audio filter graph and
+    // conflict; refuse spectrum while mix is on.
+    if (multiAudioMixEnabled) return false;
     return playing && isAudioFile && audioWaveformEnabled;
   }
 
@@ -140,11 +181,13 @@ abstract final class SpectrumSyncPolicy {
     required bool isAudioFile,
     required bool audioWaveformEnabled,
     required bool spectrumCurrentlyActive,
+    bool multiAudioMixEnabled = false,
   }) {
     final wantsSpectrum = SpectrumSyncPolicy.shouldRun(
       playing: playing,
       isAudioFile: isAudioFile,
       audioWaveformEnabled: audioWaveformEnabled,
+      multiAudioMixEnabled: multiAudioMixEnabled,
     );
     if (wantsSpectrum && !spectrumCurrentlyActive) {
       return SpectrumSyncAction.startAndApply;

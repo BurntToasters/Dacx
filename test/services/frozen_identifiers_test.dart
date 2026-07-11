@@ -9,8 +9,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dacx/services/bookmark_service.dart';
 import 'package:dacx/services/instance_mode_service.dart';
 import 'package:dacx/services/open_file_bridge.dart';
+import 'package:dacx/services/self_update_service.dart';
 import 'package:dacx/services/settings_service.dart';
 
 void main() {
@@ -48,6 +50,20 @@ void main() {
         InstanceModeService.windowMethodChannelName,
         'run.rosie.dacx/window/methods',
       );
+    });
+
+    test('mac update method channel name is unchanged', () {
+      // Touching this requires updating:
+      //   - macos/Runner (update XPC / Flutter channel wiring)
+      //   - lib/services/self_update_service.dart
+      expect(SelfUpdateService.macUpdateChannelName, 'run.rosie.dacx/update');
+    });
+
+    test('bookmarks method channel name is unchanged', () {
+      // Touching this requires updating:
+      //   - macos/Runner (bookmark bridge)
+      //   - lib/services/bookmark_service.dart
+      expect(BookmarkService.methodChannelName, 'run.rosie.dacx/bookmarks');
     });
   });
 

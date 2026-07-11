@@ -57,7 +57,12 @@ const VIDEO_EXTENSIONS = [
   "flv",
   "m4v",
 ];
-const SUPPORTED_MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
+const PLAYLIST_EXTENSIONS = ["m3u", "pls"];
+const SUPPORTED_MEDIA_EXTENSIONS = [
+  ...AUDIO_EXTENSIONS,
+  ...VIDEO_EXTENSIONS,
+  ...PLAYLIST_EXTENSIONS,
+];
 const MUSIC_FILE_ICON_SOURCE_PNG = path.join(root, "assets", "dacx_music_icon.png");
 const WINDOWS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.ico";
 const MACOS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.icns";
@@ -497,6 +502,38 @@ function renderWixV4FileAssociationComponent(audioIconFileName) {
     lines.push("        </RegistryKey>");
   }
 
+  lines.push(
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist">',
+  );
+  lines.push(
+    '          <RegistryValue Type="string" Value="Dacx Playlist" />',
+  );
+  lines.push("        </RegistryKey>");
+  lines.push(
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist\\\\DefaultIcon">',
+  );
+  lines.push(
+    `          <RegistryValue Type="string" Value="${audioIconValue}" />`,
+  );
+  lines.push("        </RegistryKey>");
+  lines.push(
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist\\\\shell\\\\open\\\\command">',
+  );
+  lines.push(
+    '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+  );
+  lines.push("        </RegistryKey>");
+
+  for (const ext of PLAYLIST_EXTENSIONS) {
+    lines.push(
+      `        <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
+    );
+    lines.push(
+      '          <RegistryValue Name="Dacx.Playlist" Type="string" Value="" />',
+    );
+    lines.push("        </RegistryKey>");
+  }
+
   lines.push("      </Component>");
   return lines.join("\n");
 }
@@ -556,6 +593,38 @@ function renderWixV3FileAssociationComponent(audioIconFileName) {
     );
     lines.push(
       '              <RegistryValue Name="Dacx.Video" Type="string" Value="" />',
+    );
+    lines.push("            </RegistryKey>");
+  }
+
+  lines.push(
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Playlist">',
+  );
+  lines.push(
+    '              <RegistryValue Type="string" Value="Dacx Playlist" />',
+  );
+  lines.push("            </RegistryKey>");
+  lines.push(
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Playlist\\DefaultIcon">',
+  );
+  lines.push(
+    `              <RegistryValue Type="string" Value="${audioIconValue}" />`,
+  );
+  lines.push("            </RegistryKey>");
+  lines.push(
+    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Playlist\\shell\\open\\command">',
+  );
+  lines.push(
+    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+  );
+  lines.push("            </RegistryKey>");
+
+  for (const ext of PLAYLIST_EXTENSIONS) {
+    lines.push(
+      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
+    );
+    lines.push(
+      '              <RegistryValue Name="Dacx.Playlist" Type="string" Value="" />',
     );
     lines.push("            </RegistryKey>");
   }

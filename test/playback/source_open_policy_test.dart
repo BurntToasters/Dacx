@@ -47,28 +47,75 @@ void main() {
     });
   });
 
-  group('SourceOpenPolicy.shouldForcePlaySameFile', () {
-    test('forces play only when requested and currently paused', () {
+  group('SourceOpenPolicy.shouldResumeSameFile', () {
+    test('resumes only when forcePlay and currently paused', () {
       expect(
-        SourceOpenPolicy.shouldForcePlaySameFile(
+        SourceOpenPolicy.shouldResumeSameFile(
           forcePlay: true,
           isPlaying: false,
         ),
         isTrue,
       );
       expect(
-        SourceOpenPolicy.shouldForcePlaySameFile(
-          forcePlay: true,
-          isPlaying: true,
-        ),
+        SourceOpenPolicy.shouldResumeSameFile(forcePlay: true, isPlaying: true),
         isFalse,
       );
       expect(
-        SourceOpenPolicy.shouldForcePlaySameFile(
+        SourceOpenPolicy.shouldResumeSameFile(
           forcePlay: false,
           isPlaying: false,
         ),
         isFalse,
+      );
+    });
+  });
+
+  group('SourceOpenPolicy.shouldRestartSameFile', () {
+    test('restarts only when forcePlay and currently playing', () {
+      expect(
+        SourceOpenPolicy.shouldRestartSameFile(
+          forcePlay: true,
+          isPlaying: true,
+        ),
+        isTrue,
+      );
+      expect(
+        SourceOpenPolicy.shouldRestartSameFile(
+          forcePlay: true,
+          isPlaying: false,
+        ),
+        isFalse,
+      );
+      expect(
+        SourceOpenPolicy.shouldRestartSameFile(
+          forcePlay: false,
+          isPlaying: true,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('SourceOpenPolicy.shouldForcePlaySameFile (deprecated)', () {
+    test('matches shouldResumeSameFile', () {
+      // ignore: deprecated_member_use_from_same_package
+      expect(
+        SourceOpenPolicy.shouldForcePlaySameFile(
+          forcePlay: true,
+          isPlaying: false,
+        ),
+        SourceOpenPolicy.shouldResumeSameFile(
+          forcePlay: true,
+          isPlaying: false,
+        ),
+      );
+      // ignore: deprecated_member_use_from_same_package
+      expect(
+        SourceOpenPolicy.shouldForcePlaySameFile(
+          forcePlay: true,
+          isPlaying: true,
+        ),
+        SourceOpenPolicy.shouldResumeSameFile(forcePlay: true, isPlaying: true),
       );
     });
   });
