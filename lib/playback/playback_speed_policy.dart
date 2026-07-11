@@ -26,7 +26,8 @@ abstract final class PlaybackSpeedPolicy {
     return '$nearest×';
   }
 
-  static double nearestPreset(double current) => presets[_nearestIndex(current)];
+  static double nearestPreset(double current) =>
+      presets[_nearestIndex(current)];
 
   static int _nearestIndex(double current) {
     var best = 0;

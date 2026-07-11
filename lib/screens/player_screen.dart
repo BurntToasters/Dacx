@@ -1355,9 +1355,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (path == null || path.trim().isEmpty) return;
       _rememberLastOpenDirectory(path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.snackPlaylistExportSaved)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportSaved)));
       _log(
         'playlist_exported',
         detailsBuilder: () => {
@@ -1372,9 +1372,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.snackPlaylistExportFailed)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportFailed)));
       }
     } catch (e) {
       _log(
@@ -1383,9 +1383,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.snackPlaylistExportFailed)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportFailed)));
       }
     }
   }
