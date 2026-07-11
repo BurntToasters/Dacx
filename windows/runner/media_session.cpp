@@ -281,8 +281,8 @@ class MediaSession {
     if (rateIt != m.end()) {
       if (auto pr = std::get_if<double>(&rateIt->second)) {
         if (*pr > 0) last_rate_ = *pr;
-      } else if (auto pr = std::get_if<int32_t>(&rateIt->second)) {
-        if (*pr > 0) last_rate_ = static_cast<double>(*pr);
+      } else if (auto rateInt = std::get_if<int32_t>(&rateIt->second)) {
+        if (*rateInt > 0) last_rate_ = static_cast<double>(*rateInt);
       }
     }
 
