@@ -136,6 +136,30 @@ abstract class AppLocalizations {
   /// **'Always on top'**
   String get settingsAlwaysOnTop;
 
+  /// No description provided for @settingsMinimizeToTray.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize to system tray'**
+  String get settingsMinimizeToTray;
+
+  /// No description provided for @settingsMinimizeToTraySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Close button hides Dacx instead of quitting. Use Quit from the tray menu to exit.'**
+  String get settingsMinimizeToTraySubtitle;
+
+  /// No description provided for @trayShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Dacx'**
+  String get trayShow;
+
+  /// No description provided for @trayQuit.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit'**
+  String get trayQuit;
+
   /// No description provided for @settingsRememberWindow.
   ///
   /// In en, this message translates to:
@@ -517,7 +541,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsExperimentalUnstable.
   ///
   /// In en, this message translates to:
-  /// **'Experimental features are very unstable.'**
+  /// **'Work-in-progress features — may be incomplete or change.'**
   String get settingsExperimentalUnstable;
 
   /// No description provided for @settingsRecentFiles.
@@ -937,13 +961,13 @@ abstract class AppLocalizations {
   /// No description provided for @linuxUpdateGuidanceFlatpak.
   ///
   /// In en, this message translates to:
-  /// **'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not on Flathub yet.'**
+  /// **'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not published on Flathub.'**
   String get linuxUpdateGuidanceFlatpak;
 
   /// No description provided for @linuxUpdateGuidanceAppImage.
   ///
   /// In en, this message translates to:
-  /// **'Download the new AppImage from the release page and replace this file.'**
+  /// **'Recommended: manage this AppImage with AppManager (github.com/kem-a/AppManager) for desktop install + updates. Or download the new AppImage from the release page and replace this file.'**
   String get linuxUpdateGuidanceAppImage;
 
   /// No description provided for @linuxUpdateGuidanceDebRpm.
@@ -1167,6 +1191,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Mix all audio tracks'**
   String get menuMixAllAudioTracks;
+
+  /// No description provided for @menuSleepTimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer'**
+  String get menuSleepTimer;
+
+  /// No description provided for @menuSleepTimerOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get menuSleepTimerOff;
+
+  /// No description provided for @menuSleepTimerMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} minutes'**
+  String menuSleepTimerMinutes(int minutes);
+
+  /// No description provided for @snackSleepTimerSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer set.'**
+  String get snackSleepTimerSet;
+
+  /// No description provided for @snackSleepTimerCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer cancelled.'**
+  String get snackSleepTimerCancelled;
+
+  /// No description provided for @snackSleepTimerFired.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer ended — playback stopped.'**
+  String get snackSleepTimerFired;
 
   /// No description provided for @osdExternalAudioLoaded.
   ///

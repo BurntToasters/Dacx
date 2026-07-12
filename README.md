@@ -63,7 +63,7 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
 - Compact mode and always-on-top window.
 - System media-session integration: lock-screen / Now Playing / SMTC / MPRIS controls, artwork, rate, and scrubbing.
 - File associations + custom document icon on Windows, macOS, and Linux.
-- Built-in update checker: in-app self-update on **Windows (MSI)** and **macOS** (`/Applications`); Linux uses package-aware guidance (no in-app installer).
+- Built-in update checker: in-app self-update on **Windows (MSI)** and **macOS** (`/Applications`). On **Linux**, prefer the **AppImage** managed with [AppManager](https://github.com/kem-a/AppManager) for install + updates (no in-app Linux installer).
 - Notarized & signed DMG/ZIP for macOS; Windows/Linux packages carry **GPG** detached signatures. Windows MSI is not Authenticode-signed by default (SmartScreen may warn); optional Authenticode is a release-machine concern (see `SECURITY.md`).
 
 ## Support contract (v1 readiness)
@@ -71,7 +71,9 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
 - **UI language:** English only (`lib/l10n`).
 - **macOS:** 15 (Sequoia) or newer.
 - **CPU arch:** Windows/Linux ship **x64** only (arm64 not a priority).
-- **Flatpak:** Sideloaded `.flatpak` from GitHub Releases — experimental; not on Flathub.
+- **Linux (recommended):** [AppImage](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.AppImage) + [AppManager](https://github.com/kem-a/AppManager) for desktop install and updates. deb/rpm/Flatpak/tar remain available; Flatpak is GitHub-sideload only (not Flathub — see [`docs/FLATHUB.md`](docs/FLATHUB.md)).
+- **Experimental Features:** Long-lived opt-in lane (off by default) for unfinished / in-progress ideas (visualizer, multi-audio mix, Linux compositor blur, …). Features may graduate to stable settings (like Win/mac blur) or stay experimental indefinitely — not a blocker for `1.0`.
+- **Windows portable ZIP:** No longer shipped; use the MSI.
 
 ## Development
 

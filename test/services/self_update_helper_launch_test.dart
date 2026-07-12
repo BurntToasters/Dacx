@@ -15,13 +15,32 @@ void main() {
         sha256:
             'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
         thumbprint: 'ABCD1234',
+        exePath: r'C:\Program Files\Dacx\dacx.exe',
+        relaunch: true,
       );
 
       expect(cmd, contains(r'"C:\Program Files\Dacx\dacx-update-helper.exe"'));
       expect(cmd, contains('--pid 4242'));
       expect(cmd, contains('--sha256 deadbeef'));
       expect(cmd, contains('--thumbprint "ABCD1234"'));
+      expect(cmd, contains(r'--exe "C:\Program Files\Dacx\dacx.exe"'));
+      expect(cmd, contains('--relaunch 1'));
       expect(cmd, contains('Dacx-Windows-x64.msi'));
+    });
+
+    test('omits --exe when path is empty but still requests relaunch', () {
+      final cmd = SelfUpdateService.buildWindowsUpdateHelperCommandLine(
+        helperPath: r'C:\Dacx\dacx-update-helper.exe',
+        dacxPid: 1,
+        msiPath: r'C:\a.msi',
+        sha256:
+            'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+        thumbprint: '',
+        exePath: '',
+        relaunch: false,
+      );
+      expect(cmd, isNot(contains('--exe')));
+      expect(cmd, contains('--relaunch 0'));
     });
 
     test('WMI bootstrap embeds helper command and escapes quotes', () {

@@ -30,6 +30,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAlwaysOnTop => 'Always on top';
 
   @override
+  String get settingsMinimizeToTray => 'Minimize to system tray';
+
+  @override
+  String get settingsMinimizeToTraySubtitle =>
+      'Close button hides Dacx instead of quitting. Use Quit from the tray menu to exit.';
+
+  @override
+  String get trayShow => 'Show Dacx';
+
+  @override
+  String get trayQuit => 'Quit';
+
+  @override
   String get settingsRememberWindow => 'Remember window size & position';
 
   @override
@@ -247,7 +260,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsExperimentalUnstable =>
-      'Experimental features are very unstable.';
+      'Work-in-progress features — may be incomplete or change.';
 
   @override
   String get settingsRecentFiles => 'Recent files';
@@ -503,11 +516,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get linuxUpdateGuidanceFlatpak =>
-      'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not on Flathub yet.';
+      'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not published on Flathub.';
 
   @override
   String get linuxUpdateGuidanceAppImage =>
-      'Download the new AppImage from the release page and replace this file.';
+      'Recommended: manage this AppImage with AppManager (github.com/kem-a/AppManager) for desktop install + updates. Or download the new AppImage from the release page and replace this file.';
 
   @override
   String get linuxUpdateGuidanceDebRpm =>
@@ -624,6 +637,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get menuMixAllAudioTracks => 'Mix all audio tracks';
+
+  @override
+  String get menuSleepTimer => 'Sleep timer';
+
+  @override
+  String get menuSleepTimerOff => 'Off';
+
+  @override
+  String menuSleepTimerMinutes(int minutes) {
+    return '$minutes minutes';
+  }
+
+  @override
+  String get snackSleepTimerSet => 'Sleep timer set.';
+
+  @override
+  String get snackSleepTimerCancelled => 'Sleep timer cancelled.';
+
+  @override
+  String get snackSleepTimerFired => 'Sleep timer ended — playback stopped.';
 
   @override
   String get osdExternalAudioLoaded => 'External audio loaded';

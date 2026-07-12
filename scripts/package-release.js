@@ -9,8 +9,7 @@
  * Platforms: win, mac, linux
  *
  * Windows produces:
- *   release/Dacx-Windows-x64.zip    (portable zip)
- *   release/Dacx-Windows-x64.msi    (WiX Toolset installer)
+ *   release/Dacx-Windows-x64.msi    (WiX Toolset installer; portable ZIP discontinued)
  *
  * macOS produces:
  *   release/Dacx-macOS.zip           (codesigned zip — from mac-codesign.sh or fallback)
@@ -335,49 +334,6 @@ function getWixMajorVersion(wixPath) {
   }
 }
 
-function resolveWixV3ToolPaths() {
-  const envBin = process.env.WIX_V3_BIN;
-  if (envBin) {
-    const envCandle = path.join(envBin, "candle.exe");
-    const envLight = path.join(envBin, "light.exe");
-    if (fs.existsSync(envCandle) && fs.existsSync(envLight)) {
-      return { candlePath: envCandle, lightPath: envLight };
-    }
-  }
-
-  const pathCandle = resolveCommandFromPath("candle");
-  const pathLight = resolveCommandFromPath("light");
-  if (pathCandle && pathLight) {
-    return { candlePath: pathCandle, lightPath: pathLight };
-  }
-
-  const programFilesX86 = process.env["ProgramFiles(x86)"];
-  const programFiles = process.env.ProgramFiles;
-
-  const directBinCandidates = [
-    programFilesX86 ? path.join(programFilesX86, "WiX Toolset v3.14", "bin") : null,
-    programFilesX86 ? path.join(programFilesX86, "WiX Toolset v3.11", "bin") : null,
-    programFiles ? path.join(programFiles, "WiX Toolset v3.14", "bin") : null,
-    programFiles ? path.join(programFiles, "WiX Toolset v3.11", "bin") : null,
-  ];
-
-  const scannedBins = [
-    ...findWindowsDirByPrefix(programFilesX86, /^WiX Toolset v3/i),
-    ...findWindowsDirByPrefix(programFiles, /^WiX Toolset v3/i),
-  ].map((dir) => path.join(dir, "bin"));
-
-  const bins = [...directBinCandidates, ...scannedBins].filter(Boolean);
-  for (const binDir of bins) {
-    const candlePath = path.join(binDir, "candle.exe");
-    const lightPath = path.join(binDir, "light.exe");
-    if (fs.existsSync(candlePath) && fs.existsSync(lightPath)) {
-      return { candlePath, lightPath };
-    }
-  }
-
-  return null;
-}
-
 function toWindowsPath(inputPath) {
   return path.resolve(inputPath).replace(/\//g, "\\");
 }
@@ -555,101 +511,6 @@ function renderWixV4FileAssociationComponent(audioIconFileName) {
   return lines.join("\n");
 }
 
-function renderWixV3FileAssociationComponent(audioIconFileName) {
-  const audioIconValue = audioIconFileName
-    ? `[INSTALLFOLDER]${audioIconFileName},0`
-    : "[INSTALLFOLDER]dacx.exe,0";
-  const lines = [
-    '          <Component Id="CMP_FILE_ASSOC" Guid="*" Win64="yes">',
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio">',
-    '              <RegistryValue Type="string" Value="Dacx Audio File" KeyPath="yes" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio\\DefaultIcon">',
-    `              <RegistryValue Type="string" Value="${audioIconValue}" />`,
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio\\shell\\open\\command">',
-    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video">',
-    '              <RegistryValue Type="string" Value="Dacx Video File" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video\\DefaultIcon">',
-    '              <RegistryValue Type="string" Value="[INSTALLFOLDER]dacx.exe,0" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video\\shell\\open\\command">',
-    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe\\shell\\open\\command">',
-      '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-    "            </RegistryKey>",
-  ];
-
-  for (const ext of SUPPORTED_MEDIA_EXTENSIONS) {
-    lines.push(
-      '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe\\SupportedTypes">',
-    );
-    lines.push(
-      `              <RegistryValue Name=".${ext}" Type="string" Value="" />`,
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  for (const ext of AUDIO_EXTENSIONS) {
-    lines.push(
-      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
-    );
-    lines.push(
-      '              <RegistryValue Name="Dacx.Audio" Type="string" Value="" />',
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  for (const ext of VIDEO_EXTENSIONS) {
-    lines.push(
-      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
-    );
-    lines.push(
-      '              <RegistryValue Name="Dacx.Video" Type="string" Value="" />',
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  lines.push(
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Playlist">',
-  );
-  lines.push(
-    '              <RegistryValue Type="string" Value="Dacx Playlist" />',
-  );
-  lines.push("            </RegistryKey>");
-  lines.push(
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Playlist\\DefaultIcon">',
-  );
-  lines.push(
-    `              <RegistryValue Type="string" Value="${audioIconValue}" />`,
-  );
-  lines.push("            </RegistryKey>");
-  lines.push(
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Playlist\\shell\\open\\command">',
-  );
-  lines.push(
-    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-  );
-  lines.push("            </RegistryKey>");
-
-  for (const ext of PLAYLIST_EXTENSIONS) {
-    lines.push(
-      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
-    );
-    lines.push(
-      '              <RegistryValue Name="Dacx.Playlist" Type="string" Value="" />',
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  lines.push("          </Component>");
-  return lines.join("\n");
-}
-
 const DACX_APP_USER_MODEL_ID = "run.rosie.dacx";
 
 function renderWixStartMenuShortcutTree({ indent, includeIcon }) {
@@ -757,75 +618,27 @@ function packageWindows() {
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
   installLegalFilesInDir(buildDir);
 
-  // Defensive sweep: if a previous run was hard-killed between writing the
-  // portable marker and its `finally` cleanup, the leftover file would be
-  // harvested by WiX into the MSI. Remove it before MSI build runs.
-  const portableMarkerPath = path.join(buildDir, "portable.txt");
-  removeIfExists(portableMarkerPath);
+  // Ensure a leftover portable.txt from older packaging never lands in the MSI.
+  removeIfExists(path.join(buildDir, "portable.txt"));
 
-  // 1. MSI installer (WiX Toolset) — must run before the portable marker is
-  // dropped, so the MSI does not register the marker file and try to gate
-  // itself out of the self-updater after installation.
+  // MSI only — Windows portable ZIP is no longer shipped (unsupported).
   buildWindowsMsiInstaller(buildDir, audioIconFileName);
-
-  // 2. Portable zip — drop the `portable.txt` marker so the running app can
-  // detect it is the portable build and skip the MSI-based self-updater.
-  // (Path declared above so the pre-MSI sweep can reuse it.)
-  fs.writeFileSync(
-    portableMarkerPath,
-    "This file marks the Dacx portable build. Do not delete — its presence\r\n" +
-      "tells the app to skip the MSI-based self-updater and direct the user to\r\n" +
-      "the release page instead.\r\n",
-  );
-
-  const zipName = "Dacx-Windows-x64.zip";
-  const zipPath = path.join(releaseDir, zipName);
-  removeIfExists(zipPath);
-  try {
-    if (hasCommand("7z")) {
-      run(`7z a -tzip -mx=9 "${zipPath}" *`, { cwd: buildDir });
-    } else {
-      const psSourceDir = escapePowerShellSingleQuoted(buildDir);
-      const psZipPath = escapePowerShellSingleQuoted(zipPath);
-      run(
-        `powershell -NoProfile -Command "` +
-          `$src='${psSourceDir}'; ` +
-          `$dst='${psZipPath}'; ` +
-          `if (Test-Path $dst) { Remove-Item -Force $dst }; ` +
-          `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
-          `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
-          `$src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)` +
-          `"`,
-      );
-    }
-  } finally {
-    removeIfExists(portableMarkerPath);
-  }
-  console.log(`  ✓ ${zipName}`);
+  console.log("  ✓ Dacx-Windows-x64.msi (portable ZIP not packaged)");
 }
 
 function buildWindowsMsiInstaller(buildDir, audioIconFileName) {
-  // Prefer WiX v4+ (wix build), fall back to WiX v3 (candle + light).
+  // WiX v4+ only (release VMs use the .NET global `wix` tool).
   const wixV4Path = resolveWixV4PlusTool();
   if (wixV4Path) {
     buildWindowsMsiInstallerV4(buildDir, wixV4Path, audioIconFileName);
     return;
   }
 
-  const wixV3Paths = resolveWixV3ToolPaths();
-  if (wixV3Paths) {
-    buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName);
-    return;
-  }
-
-  console.error("WiX tools were not found.");
+  console.error("WiX v4+ tools were not found (WiX v3 fallback removed).");
   console.error("Install WiX v7 (.NET global tool):");
   console.error("  dotnet tool install -g wix --version 7.0.0");
   console.error("  wix eula accept wix7");
   console.error("Or set WIX_BIN to the directory containing wix.exe.");
-  console.error("Alternatively, install WiX v3.14 (candle/light):");
-  console.error("  https://github.com/wixtoolset/wix3/releases");
-  console.error("Or set WIX_V3_BIN to the directory containing candle.exe and light.exe.");
   process.exit(1);
 }
 
@@ -860,29 +673,6 @@ function buildWindowsMsiInstallerV4(buildDir, wixPath, audioIconFileName) {
     removeIfExists(stale);
   }
 
-  signWindowsArtifact(outPath);
-  console.log(`  ✓ ${outName}`);
-}
-
-function buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName) {
-  const outName = "Dacx-Windows-x64.msi";
-  const outPath = path.join(releaseDir, outName);
-  removeIfExists(outPath);
-
-  const installerDir = path.join(root, "build", "win-installer");
-  fs.mkdirSync(installerDir, { recursive: true });
-  const wxsPath = path.join(installerDir, "dacx-installer.wxs");
-  const wixobjPath = path.join(installerDir, "dacx-installer.wixobj");
-
-  writeWindowsWixSource(buildDir, wxsPath, audioIconFileName);
-
-  run(`"${wixV3Paths.candlePath}" -nologo -arch x64 -out "${wixobjPath}" "${wxsPath}"`);
-  run(`"${wixV3Paths.lightPath}" -nologo -spdb -out "${outPath}" "${wixobjPath}"`);
-
-  if (!fs.existsSync(outPath)) {
-    console.error(`WiX did not produce expected output: ${outPath}`);
-    process.exit(1);
-  }
   signWindowsArtifact(outPath);
   console.log(`  ✓ ${outName}`);
 }
@@ -1033,161 +823,6 @@ ${renderDirectoryContents(rootNode, "        ").join("\n")}
     <StandardDirectory Id="ProgramMenuFolder">
 ${renderWixStartMenuShortcutTree({ indent: "      ", includeIcon: hasAppIcon })}
     </StandardDirectory>
-  </Fragment>
-
-  <Fragment>
-    <DirectoryRef Id="INSTALLFOLDER">
-${renderWixApplicationSearchRegistrationComponent({ indent: "      " })}
-    </DirectoryRef>
-  </Fragment>
-</Wix>
-`;
-
-  fs.writeFileSync(wxsPath, wixSource);
-}
-
-function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
-  const files = listFilesRecursive(buildDir)
-    .map((absolutePath) => {
-      const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
-      const relDir = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
-      return { absolutePath, rel, relDir };
-    })
-    .sort((a, b) => a.rel.localeCompare(b.rel));
-
-  const relDirs = new Set([""]);
-  for (const file of files) {
-    const parts = file.relDir ? file.relDir.split("/") : [];
-    let acc = "";
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part;
-      relDirs.add(acc);
-    }
-  }
-
-  const dirIdByRel = new Map([["", "INSTALLFOLDER"]]);
-  let dirCounter = 1;
-  for (const relDir of Array.from(relDirs).sort((a, b) => a.localeCompare(b))) {
-    if (!relDir) continue;
-    dirIdByRel.set(relDir, `DIR_${String(dirCounter).padStart(4, "0")}`);
-    dirCounter += 1;
-  }
-
-  const rootNode = {
-    name: "",
-    relDir: "",
-    id: "INSTALLFOLDER",
-    children: new Map(),
-  };
-  for (const relDir of Array.from(relDirs).sort((a, b) => a.localeCompare(b))) {
-    if (!relDir) continue;
-    const parts = relDir.split("/");
-    let node = rootNode;
-    let acc = "";
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part;
-      if (!node.children.has(part)) {
-        node.children.set(part, {
-          name: part,
-          relDir: acc,
-          id: dirIdByRel.get(acc),
-          children: new Map(),
-        });
-      }
-      node = node.children.get(part);
-    }
-  }
-
-  const componentsByDir = new Map();
-  const fileComponentIds = [];
-  files.forEach((file, index) => {
-    const idx = String(index + 1).padStart(4, "0");
-    const componentId = `CMP_FILE_${idx}`;
-    const fileId = `FIL_${idx}`;
-    fileComponentIds.push(componentId);
-
-    const componentLines = [
-      `<Component Id="${componentId}" Guid="*" Win64="yes">`,
-      `  <File Id="${fileId}" Source="${escapeXmlAttr(toWindowsPath(file.absolutePath))}" KeyPath="yes" />`,
-      `</Component>`,
-    ];
-
-    const list = componentsByDir.get(file.relDir) || [];
-    list.push(componentLines);
-    componentsByDir.set(file.relDir, list);
-  });
-
-  function renderDirectoryContents(node, indent) {
-    const lines = [];
-
-    const components = componentsByDir.get(node.relDir) || [];
-    for (const block of components) {
-      for (const line of block) {
-        lines.push(`${indent}${line}`);
-      }
-    }
-
-    const children = Array.from(node.children.values()).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-    for (const child of children) {
-      lines.push(
-        `${indent}<Directory Id="${child.id}" Name="${escapeXmlAttr(child.name)}">`,
-      );
-      lines.push(...renderDirectoryContents(child, `${indent}  `));
-      lines.push(`${indent}</Directory>`);
-    }
-
-    return lines;
-  }
-
-  const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
-  const hasAppIcon = fs.existsSync(appIconPath);
-  const msiVersion = toMsiVersion(VERSION);
-  const iconBlock = hasAppIcon
-    ? [
-        `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
-        `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
-      ].join("\n")
-    : "";
-
-  const componentRefs = [
-    ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
-    '      <ComponentRef Id="CMP_FILE_ASSOC" />',
-    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
-    '      <ComponentRef Id="CMP_APP_SEARCH_REGISTRATION" />',
-  ].join("\n");
-
-  const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product
-    Id="*"
-    Name="Dacx"
-    Language="1033"
-    Version="${msiVersion}"
-    Manufacturer="run.rosie"
-    UpgradeCode="{D8D4A9F8-084A-4A7C-9713-3BC4F78E2A93}">
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-    <MediaTemplate EmbedCab="yes" />
-${iconBlock}
-    <Feature Id="ProductFeature" Title="Dacx" Level="1">
-${componentRefs}
-    </Feature>
-  </Product>
-
-  <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="Dacx">
-${renderWixV3FileAssociationComponent(audioIconFileName)}
-${renderDirectoryContents(rootNode, "          ").join("\n")}
-        </Directory>
-      </Directory>
-      <Directory Id="ProgramMenuFolder">
-${renderWixStartMenuShortcutTree({ indent: "        ", includeIcon: hasAppIcon })}
-      </Directory>
-    </Directory>
   </Fragment>
 
   <Fragment>

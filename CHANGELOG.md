@@ -5,11 +5,11 @@
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-arm64.AppImage) --> |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-arm64.deb) --> |
-| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-aarch64.rpm) --> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-aarch64.flatpak) --> |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.3/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-arm64.AppImage) --> |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-arm64.deb) --> |
+| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-aarch64.rpm) --> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-aarch64.flatpak) --> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.4/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -18,8 +18,16 @@
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
+## Changes in `v0.11.0-beta.4:`
+- **Ver:** Bumped version to `v0.11.0-beta.4`.
+- **Updater:** After a successful MSI self-update, `dacx-update-helper.exe` relaunches Dacx (update & restart), matching the macOS updater.
+- **NEW - Sleep timer:** ⋯ more menu presets (15 / 30 / 45 / 60 minutes) stop playback when the timer fires.
+- **NEW - Minimize to tray:** Optional Appearance setting; close hides to tray, tray Show / Quit restore or exit.
+- **PKG:** Windows portable ZIP is no longer packaged (MSI only). WiX v3 fallback removed (WiX v4+ / v7 required).
+- **Misc:** Documented Flatpak as GitHub-sideload-only (no Flathub plans); Linux install guidance prefers AppImage + [AppManager](https://github.com/kem-a/AppManager); Experimental Features kept as a long-lived WIP lane past `1.0`; dropped unused `release:guard` script.
+
 ## Changes in `v0.11.0-beta.3:`
-* **Testing:** This update is purely to test the new windows updater helper.
+- **Testing:** This update is purely to test the new windows updater helper.
 
 ## Changes in `v0.11.0-beta.2:`
 
@@ -27,7 +35,7 @@
 - **Shortcuts:** Escape goes back from Settings, closes the play queue drawer before exiting fullscreen (and reconciles OS/title-bar fullscreen via WindowListener), and cancels keybind capture instead of binding Escape.
 - **UI:** Removed the empty-state Open URL button — Open URL stays in the ⋯ more menu (and macOS File → Open URL) plus `Ctrl/Cmd+U`.
 - **UI:** Unsupported extensions and Flatpak-inaccessible drops now show clear snackbars; failed external audio/subtitle loads surface a snackbar in addition to the OSD tip.
-- **Security:** Windows self-update now launches a native `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk `apply-update.ps1` / `spawn-watchdog.ps1`) so the helper survives the app Job Object, re-checks SHA-256 (and optional Authenticode), then elevates `msiexec`. Trust stays Ed25519-first.
+- **Security:** Windows self-update now launches a native `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk `apply-update.ps1` / `spawn-watchdog.ps1`) so the helper survives the app Job Object, re-checks SHA-256 (and optional Authenticode), then elevates `msiexec`. After a successful install the helper relaunches Dacx (update & restart). Trust stays Ed25519-first.
 - **Testing:** Expanded the headless `PlayerScreen` harness and Windows self-update tests around Escape reconcile, snacks, session restore, external tracks, and the native helper launch path.
 - **Misc:** Updated `docs/QA.md`, `SECURITY.md`, and the README Windows signing notes for the helper binary.
 

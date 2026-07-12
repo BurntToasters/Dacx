@@ -678,6 +678,8 @@ class SelfUpdateService {
         msiPath: msiPath.path,
         sha256: actualHash,
         thumbprint: signerThumbprint,
+        exePath: Platform.resolvedExecutable,
+        relaunch: true,
       );
       final encoded = encodePowerShellCommand(
         buildWindowsHelperWmiBootstrapScript(helperCmd),
@@ -942,10 +944,16 @@ class SelfUpdateService {
     required String msiPath,
     required String sha256,
     required String thumbprint,
+    String? exePath,
+    bool relaunch = true,
   }) {
     String quote(String value) => '"${value.replaceAll('"', r'\"')}"';
+    final exe = (exePath == null || exePath.isEmpty)
+        ? ''
+        : ' --exe ${quote(exePath)}';
     return '${quote(helperPath)} --pid $dacxPid --msi ${quote(msiPath)} '
-        '--sha256 $sha256 --thumbprint ${quote(thumbprint)}';
+        '--sha256 $sha256 --thumbprint ${quote(thumbprint)}'
+        '$exe --relaunch ${relaunch ? 1 : 0}';
   }
 
   /// Tiny WMI bootstrap so the helper escapes Dacx's Job Object.

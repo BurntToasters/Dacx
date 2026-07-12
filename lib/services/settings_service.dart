@@ -163,6 +163,7 @@ class SettingsService extends ChangeNotifier {
   static const _kTheme = 'appearance_theme';
   static const _kAccent = 'appearance_accent';
   static const _kAlwaysOnTop = 'appearance_always_on_top';
+  static const _kMinimizeToTray = 'appearance_minimize_to_tray';
   static const _kRememberWindow = 'appearance_remember_window';
   static const _kWindowWidth = 'window_width';
   static const _kWindowHeight = 'window_height';
@@ -211,6 +212,7 @@ class SettingsService extends ChangeNotifier {
     _kTheme,
     _kAccent,
     _kAlwaysOnTop,
+    _kMinimizeToTray,
     _kRememberWindow,
     _kWindowWidth,
     _kWindowHeight,
@@ -352,6 +354,13 @@ class SettingsService extends ChangeNotifier {
   bool get alwaysOnTop => _prefs.getBool(_kAlwaysOnTop) ?? false;
   set alwaysOnTop(bool v) {
     _prefs.setBool(_kAlwaysOnTop, v);
+    notifyListeners();
+  }
+
+  /// When true, closing the window hides to the system tray instead of quitting.
+  bool get minimizeToTray => _prefs.getBool(_kMinimizeToTray) ?? false;
+  set minimizeToTray(bool v) {
+    _prefs.setBool(_kMinimizeToTray, v);
     notifyListeners();
   }
 

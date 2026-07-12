@@ -182,6 +182,7 @@ void main() {
       expect(service.themeMode, ThemeMode.dark);
       expect(service.accentColor, AccentColor.blueGrey);
       expect(service.alwaysOnTop, isFalse);
+      expect(service.minimizeToTray, isFalse);
       expect(service.rememberWindow, isTrue);
       expect(service.windowSize, isNull);
       expect(service.windowPosition, isNull);
@@ -209,6 +210,7 @@ void main() {
       service.themeMode = ThemeMode.system;
       service.accentColor = AccentColor.teal;
       service.alwaysOnTop = true;
+      service.minimizeToTray = true;
       service.rememberWindow = false;
       service.saveWindowSize(const Size(1280, 720));
       service.saveWindowPosition(const Offset(55, 77));
@@ -229,6 +231,7 @@ void main() {
       expect(service.themeMode, ThemeMode.system);
       expect(service.accentColor, AccentColor.teal);
       expect(service.alwaysOnTop, isTrue);
+      expect(service.minimizeToTray, isTrue);
       expect(service.rememberWindow, isFalse);
       expect(service.windowSize, const Size(1280, 720));
       expect(service.windowPosition, const Offset(55, 77));
