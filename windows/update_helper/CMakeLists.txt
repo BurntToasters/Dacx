@@ -16,5 +16,11 @@ target_link_libraries(dacx-update-helper PRIVATE
   advapi32.lib
 )
 
-install(TARGETS dacx-update-helper RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
-  COMPONENT Runtime)
+# Land next to dacx.exe (Flutter's installable app dir). Relying on install(TARGETS)
+# alone left the helper in update_helper/Release while packaging reads runner/Release.
+set_target_properties(dacx-update-helper PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:${BINARY_NAME}>"
+)
+
+# Ensure `flutter build windows` always builds the helper with the app.
+add_dependencies(${BINARY_NAME} dacx-update-helper)
