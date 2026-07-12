@@ -1,7 +1,7 @@
 name: dacx
 description: "Quick, lightweight cross-platform media player."
 publish_to: 'none'
-version: 0.11.0-beta.2+1100
+version: 0.11.0-beta.3+1100
 
 environment:
   sdk: ^3.10.7

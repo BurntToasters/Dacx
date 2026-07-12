@@ -87,6 +87,7 @@
     <mediatype>application/pls+xml</mediatype>
   </provides>
   <releases>
+    <release version="0.11.0-beta.3" date="2026-07-12"/>
     <release version="0.11.0-beta.2" date="2026-07-12"/>
     <release version="0.11.0-beta.1" date="2026-07-11"/>
     <release version="0.10.1-beta.1" date="2026-07-10"/>
