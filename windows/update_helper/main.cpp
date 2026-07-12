@@ -5,7 +5,9 @@
 //
 // Usage:
 //   dacx-update-helper.exe --pid <dacxPid> --msi <path> --sha256 <64hex>
-//                          [--thumbprint <hex>]
+//                          [--thumbprint <hex>] [--exe <dacx.exe>] [--relaunch 0|1]
+//
+// After a successful msiexec, relaunches Dacx (default) like the macOS updater.
 //
 // Exit codes (aligned with the former PowerShell watchdog):
 //   0    success
@@ -334,11 +336,53 @@ int LaunchMsiexec(const std::wstring& msi_path) {
   return static_cast<int>(code);
 }
 
+bool MsiexecSucceeded(int code) {
+  // 0 = success; 3010 = success, reboot required (we still relaunch the app).
+  return code == 0 || code == 3010;
+}
+
+std::wstring DefaultExeBesideHelper() {
+  wchar_t module[MAX_PATH];
+  const DWORD n = GetModuleFileNameW(nullptr, module, MAX_PATH);
+  if (n == 0 || n >= MAX_PATH) return {};
+  std::wstring path(module, n);
+  const size_t slash = path.find_last_of(L"\\/");
+  if (slash == std::wstring::npos) return {};
+  return path.substr(0, slash + 1) + L"dacx.exe";
+}
+
+void RelaunchDacx(const std::wstring& exe_path) {
+  if (exe_path.empty()) {
+    LogLine(L"relaunch skipped: empty exe path");
+    return;
+  }
+  if (GetFileAttributesW(exe_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    LogLine(L"relaunch target missing: " + exe_path);
+    return;
+  }
+
+  SHELLEXECUTEINFOW sei{};
+  sei.cbSize = sizeof(sei);
+  sei.fMask = SEE_MASK_FLAG_NO_UI;
+  sei.lpVerb = L"open";
+  sei.lpFile = exe_path.c_str();
+  sei.nShow = SW_SHOWNORMAL;
+
+  if (!ShellExecuteExW(&sei)) {
+    LogLine(L"relaunch failed err=" + std::to_wstring(GetLastError()) +
+            L" path=" + exe_path);
+    return;
+  }
+  LogLine(L"relaunched " + exe_path);
+}
+
 struct Args {
   DWORD pid = 0;
   std::wstring msi;
   std::wstring sha256;
   std::wstring thumbprint;
+  std::wstring exe;
+  bool relaunch = true;
 };
 
 bool ParseArgs(int argc, wchar_t** argv, Args* out) {
@@ -357,6 +401,10 @@ bool ParseArgs(int argc, wchar_t** argv, Args* out) {
       }
     } else if (key == L"--thumbprint") {
       out->thumbprint = NormalizeThumbprint(value);
+    } else if (key == L"--exe") {
+      out->exe = value;
+    } else if (key == L"--relaunch") {
+      out->relaunch = value != L"0" && value != L"false" && value != L"False";
     } else {
       return false;
     }
@@ -378,7 +426,8 @@ int Run(int argc, wchar_t** argv) {
   }
 
   LogLine(L"started pid=" + std::to_wstring(args.pid) + L" msi=" + args.msi +
-          L" thumb=" + args.thumbprint + L" sha=" + args.sha256);
+          L" thumb=" + args.thumbprint + L" sha=" + args.sha256 +
+          L" relaunch=" + (args.relaunch ? L"1" : L"0"));
 
   const int wait_rc = WaitForPid(args.pid);
   if (wait_rc != 0) return wait_rc;
@@ -402,7 +451,13 @@ int Run(int argc, wchar_t** argv) {
   }
 
   LogLine(L"launching msiexec");
-  return LaunchMsiexec(args.msi);
+  const int msi_rc = LaunchMsiexec(args.msi);
+  if (args.relaunch && MsiexecSucceeded(msi_rc)) {
+    std::wstring exe = args.exe;
+    if (exe.empty()) exe = DefaultExeBesideHelper();
+    RelaunchDacx(exe);
+  }
+  return msi_rc;
 }
 
 }  // namespace

@@ -44,12 +44,4 @@ abstract final class SourceOpenPolicy {
   }) {
     return forcePlay && isPlaying;
   }
-
-  @Deprecated('Use shouldResumeSameFile / shouldRestartSameFile')
-  static bool shouldForcePlaySameFile({
-    required bool forcePlay,
-    required bool isPlaying,
-  }) {
-    return shouldResumeSameFile(forcePlay: forcePlay, isPlaying: isPlaying);
-  }
 }

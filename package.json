@@ -1,6 +1,6 @@
 {
   "name": "dacx",
-  "version": "0.11.0-beta.3",
+  "version": "0.11.0-beta.4",
   "private": true,
   "description": "Fast, lightweight cross-platform music and video player for Windows, macOS, and Linux.",
   "license": "GPL-3.0-only",
@@ -77,7 +77,6 @@
     "win-compiler:arm64": "powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command \"& 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\Launch-VsDevShell.ps1' -SkipAutomaticLocation -Arch arm64 -HostArch amd64\"",
     "flatpak:bundle": "node scripts/flatpak-bundle.js",
     "release:warn": "node scripts/release-warning.js",
-    "release:guard": "node scripts/check-release-guard.js",
     "release:prepare": "npm run setup:flutter && npm run release:warn && npm run sync-version && fvm flutter pub get && node scripts/update-metainfo.js && npm run licenses && npm run dist:clean && npm run test:all",
     "release:package:win": "node scripts/package-release.js win",
     "release:package:mac": "node scripts/package-release.js mac",

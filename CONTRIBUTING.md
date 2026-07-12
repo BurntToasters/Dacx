@@ -22,6 +22,8 @@ This runs version sync, static checks, hygiene, analyze, format, unit tests, cov
 
 Before a stable cut, run the manual checklist in [docs/QA.md](docs/QA.md).
 
+`release:prepare` intentionally does **not** run a clean-tree / branch guard — maintainers release from the branch they are on after `release:warn`. Keep the working tree intentional; do not assume an automated guard.
+
 Before packaging a release, `release:prepare` runs `npm run licenses` to refresh
 `build/THIRD_PARTY_NOTICES.txt` (copied into installers by `package-release.js`).
 

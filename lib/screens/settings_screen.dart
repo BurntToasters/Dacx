@@ -210,6 +210,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   );
                                 }),
                               ),
+                              if (Platform.isWindows ||
+                                  Platform.isMacOS ||
+                                  Platform.isLinux)
+                                SwitchListTile(
+                                  title: Text(l10n.settingsMinimizeToTray),
+                                  subtitle: Text(
+                                    l10n.settingsMinimizeToTraySubtitle,
+                                  ),
+                                  value: _s.minimizeToTray,
+                                  onChanged: (v) => setState(() {
+                                    _s.minimizeToTray = v;
+                                    _log(
+                                      'minimize_to_tray_changed',
+                                      detailsBuilder: () => {'value': v},
+                                    );
+                                  }),
+                                ),
                               SwitchListTile(
                                 title: Text(l10n.settingsRememberWindow),
                                 value: _s.rememberWindow,

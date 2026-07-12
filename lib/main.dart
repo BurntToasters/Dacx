@@ -18,6 +18,7 @@ import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/macos_install_location_service.dart';
 import 'services/settings_service.dart';
+import 'services/tray_service.dart';
 import 'services/trusted_http.dart';
 import 'services/update_service.dart';
 import 'theme/window_visuals.dart';
@@ -304,6 +305,8 @@ class _DacxAppState extends State<DacxApp>
   Timer? _geometrySaveDebounce;
   _ThemeBundle? _cachedThemes;
   _ThemeInputs? _cachedThemeInputs;
+  late final TrayService _tray;
+  bool _trayLabelsSynced = false;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
     if (!settings.windowBlurEnabled) return false;
@@ -396,6 +399,7 @@ class _DacxAppState extends State<DacxApp>
   @override
   void initState() {
     super.initState();
+    _tray = TrayService(onQuit: _quitFromTray);
     widget.debugLog.logLazy(
       category: DebugLogCategory.system,
       event: 'app_init',
@@ -410,6 +414,7 @@ class _DacxAppState extends State<DacxApp>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_applyWindowVisualSettings());
       unawaited(_syncKeyboardState());
+      unawaited(_syncMinimizeToTray());
     });
   }
 
@@ -419,6 +424,7 @@ class _DacxAppState extends State<DacxApp>
     WidgetsBinding.instance.removeObserver(this);
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
+    unawaited(_tray.dispose());
     widget.settings.dispose();
     super.dispose();
   }
@@ -430,10 +436,80 @@ class _DacxAppState extends State<DacxApp>
       detailsBuilder: () => {
         'theme_mode': widget.settings.themeMode.name,
         'always_on_top': widget.settings.alwaysOnTop,
+        'minimize_to_tray': widget.settings.minimizeToTray,
         'experimental_features': widget.settings.experimentalFeaturesEnabled,
       },
     );
     unawaited(_applyWindowVisualSettings());
+    unawaited(_syncMinimizeToTray());
+  }
+
+  Future<void> _syncMinimizeToTray({AppLocalizations? l10n}) async {
+    if (!TrayService.isSupported) return;
+    final enabled = widget.settings.minimizeToTray;
+    try {
+      await windowManager.setPreventClose(enabled);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: setPreventClose failed: $e');
+      }
+    }
+    if (enabled) {
+      final showLabel = l10n?.trayShow ?? 'Show Dacx';
+      final quitLabel = l10n?.trayQuit ?? 'Quit';
+      await _tray.init(showLabel: showLabel, quitLabel: quitLabel);
+    } else {
+      final wasHidden = !(await windowManager.isVisible());
+      await _tray.dispose();
+      if (wasHidden) {
+        try {
+          await windowManager.show();
+          await windowManager.focus();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('Dacx: restore window after tray disable failed: $e');
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _quitFromTray() async {
+    try {
+      await windowManager.setPreventClose(false);
+    } catch (_) {}
+    await _tray.dispose();
+    try {
+      await windowManager.destroy();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: window destroy on tray quit failed: $e');
+      }
+      exit(0);
+    }
+  }
+
+  @override
+  void onWindowClose() {
+    unawaited(_handleWindowClose());
+  }
+
+  Future<void> _handleWindowClose() async {
+    if (widget.settings.minimizeToTray && TrayService.isSupported) {
+      await _tray.hideToTray();
+      return;
+    }
+    try {
+      await windowManager.setPreventClose(false);
+    } catch (_) {}
+    await _tray.dispose();
+    try {
+      await windowManager.destroy();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: window destroy on close failed: $e');
+      }
+    }
   }
 
   Future<void> _syncKeyboardState() async {
@@ -678,6 +754,13 @@ class _DacxAppState extends State<DacxApp>
           // never reveal the NSVisualEffectView / acrylic behind.
           // Pattern from macos_window_utils official example.
           builder: (context, child) {
+            if (!_trayLabelsSynced && TrayService.isSupported) {
+              _trayLabelsSynced = true;
+              final l10n = AppLocalizations.of(context);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                unawaited(_syncMinimizeToTray(l10n: l10n));
+              });
+            }
             Widget content = _MacInstallLocationWarning(
               debugLog: widget.debugLog,
               child: child ?? const SizedBox.shrink(),

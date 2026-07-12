@@ -1,6 +1,8 @@
 # Manual QA checklist (pre-stable)
 
-Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer **AppImage plus one deb/rpm** (deb/rpm update guidance differs from portable). Use a short local audio file, a video file, and an `.m3u` / `.pls` with 2+ entries.
+Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux**: prefer **AppImage** (ideally via [AppManager](https://github.com/kem-a/AppManager)) plus optionally one deb/rpm. Use a short local audio file, a video file, and an `.m3u` / `.pls` with 2+ entries.
+
+Tick items as you go before a stable cut. Fix failures as they surface rather than stacking features.
 
 ## Playback
 
@@ -12,6 +14,7 @@ Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer
 - [ ] Loop modes; queue prev/next wraps or stops as expected (tooltips: Shift+P / Shift+N)
 - [ ] Reopen Last restores the previous file (Ctrl/Cmd+R)
 - [ ] Load external audio / subtitle from the more menu when media is open
+- [ ] Sleep timer (⋯ menu): set 15/30/45/60 → playback stops when it fires; Off cancels
 
 ## Queue / playlists
 
@@ -27,7 +30,8 @@ Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer
 - [ ] Display does not sleep while video plays (idle inhibit) — leave playing ≥1–2 min
 - [ ] Windows: Jump List recents + taskbar progress while playing
 - [ ] macOS: File menu + Dock menu New Window / Open; Open Recent → Clear Menu
-- [ ] Linux deb/rpm: Settings → Check for Updates shows **deb/rpm** guidance (not “portable”)
+- [ ] Linux AppImage: Check for Updates mentions AppManager and/or replacing the AppImage; deb/rpm shows package guidance (not “portable”)
+- [ ] Minimize to tray (Appearance, off by default): close hides; tray Show restores; tray Quit exits
 
 ## Settings / updates
 
@@ -41,14 +45,16 @@ Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer
 - [ ] Turning **Experimental off** on Win/mac does **not** clear Appearance blur / opacity
 - [ ] Hardware decode change applies without requiring app restart (copy matches behavior)
 - [ ] Settings → Keyboard shortcuts opens the full editable F1 keybinds dialog
-- [ ] Experimental section: visualizer + multi-audio mix (and Linux blur) appear when master is on
+- [ ] Experimental section: visualizer + multi-audio mix (and Linux blur) appear when master is on (WIP lane — expected unstable)
 - [ ] Seek thumbnails toggle lives under Playback settings (not the more menu)
 - [ ] Check for Updates opens a sensible path (self-update on Win MSI / macOS Applications; Linux package guidance)
-- [ ] Windows MSI self-update: `dacx-update-helper.exe` sits next to `dacx.exe`; after Apply, no `apply-update.ps1` / `spawn-watchdog.ps1` under `%LOCALAPPDATA%\Dacx\updates`; `%LOCALAPPDATA%\Dacx\updates\helper.log` shows wait → sha256 → msiexec
-- [ ] Flatpak (if tested): empty-state copy mentions picker; update guidance mentions reinstalling the `.flatpak`, not Flathub `flatpak update`
+- [ ] Windows MSI self-update burn-in: `dacx-update-helper.exe` next to `dacx.exe`; after Apply, no `.ps1` under `%LOCALAPPDATA%\Dacx\updates`; `helper.log` shows wait → sha256 → msiexec → `relaunched …\dacx.exe`; app returns like macOS update & restart
+- [ ] Flatpak (if tested): empty-state copy mentions picker; update guidance mentions reinstalling the `.flatpak` (not Flathub / `flatpak update`)
 
 ## Trust smoke
 
 - [ ] Unsupported / unsafe paths (e.g. credential URLs) are refused with feedback
 - [ ] Screenshot save works when media is playing
 - [ ] Media Info shows title / artist / album when tags are present
+- [ ] macOS: updated app remains Developer ID signed / Gatekeeper-happy after self-update
+- [ ] Windows: MSI update trusts Ed25519 manifest (Authenticode not required)

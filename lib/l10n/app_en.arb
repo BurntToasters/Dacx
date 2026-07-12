@@ -12,6 +12,10 @@
   "settingsOnScreenDisplay": "On-screen display",
   "settingsMediaSession": "System media keys / Now Playing",
   "settingsAlwaysOnTop": "Always on top",
+  "settingsMinimizeToTray": "Minimize to system tray",
+  "settingsMinimizeToTraySubtitle": "Close button hides Dacx instead of quitting. Use Quit from the tray menu to exit.",
+  "trayShow": "Show Dacx",
+  "trayQuit": "Quit",
   "settingsRememberWindow": "Remember window size & position",
   "settingsAllowMultipleWindows": "Allow multiple windows",
   "settingsCheckForUpdatesOnLaunch": "Check for updates on launch",
@@ -84,7 +88,7 @@
   "settingsLinuxCompositorBlur": "Experimental Linux compositor blur",
   "settingsLinuxCompositorBlurSubtitle": "Enables transparent window path for compositors that support blur (for example KDE blur rules)",
   "settingsExperimentalEnable": "Enable Experimental Features",
-  "settingsExperimentalUnstable": "Experimental features are very unstable.",
+  "settingsExperimentalUnstable": "Work-in-progress features — may be incomplete or change.",
   "settingsRecentFiles": "Recent files",
   "settingsRecentFilesCount": "{count, plural, =0{0 files} =1{1 file} other{{count} files}}",
   "@settingsRecentFilesCount": {
@@ -195,8 +199,8 @@
   "snackPlaylistImportFailed": "Could not import playlist",
   "snackPlaylistExportSaved": "Playlist saved",
   "snackPlaylistExportFailed": "Could not save playlist",
-  "linuxUpdateGuidanceFlatpak": "Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not on Flathub yet.",
-  "linuxUpdateGuidanceAppImage": "Download the new AppImage from the release page and replace this file.",
+  "linuxUpdateGuidanceFlatpak": "Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not published on Flathub.",
+  "linuxUpdateGuidanceAppImage": "Recommended: manage this AppImage with AppManager (github.com/kem-a/AppManager) for desktop install + updates. Or download the new AppImage from the release page and replace this file.",
   "linuxUpdateGuidanceDebRpm": "Install the new package (.deb / .rpm) from the release page.",
   "linuxUpdateGuidancePortable": "Download the latest Linux build from the release page and replace this install.",
   "linuxUpdateGuidanceGeneric": "Download the latest Linux build from the release page.",
@@ -236,6 +240,17 @@
   "menuLoadExternalAudio": "Load external audio…",
   "menuLoadExternalSubtitle": "Load external subtitle…",
   "menuMixAllAudioTracks": "Mix all audio tracks",
+  "menuSleepTimer": "Sleep timer",
+  "menuSleepTimerOff": "Off",
+  "menuSleepTimerMinutes": "{minutes} minutes",
+  "@menuSleepTimerMinutes": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "snackSleepTimerSet": "Sleep timer set.",
+  "snackSleepTimerCancelled": "Sleep timer cancelled.",
+  "snackSleepTimerFired": "Sleep timer ended — playback stopped.",
   "osdExternalAudioLoaded": "External audio loaded",
   "osdExternalAudioFailed": "Could not load external audio",
   "osdExternalSubtitleLoaded": "External subtitle loaded",

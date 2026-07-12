@@ -16,25 +16,21 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
   final Color rimHighlightColor;
   final Color overlayTopColor;
   final Color overlayBottomColor;
-
-  /// Use [chromeTopColor] instead.
-  @Deprecated('Use chromeTopColor / chromeBottomColor')
-  final Color barColor;
-
-  /// Use [panelTopColor] instead.
-  @Deprecated('Use panelTopColor / panelBottomColor')
-  final Color contentColor;
-
-  /// Use [overlayTopColor] instead.
-  @Deprecated('Use overlayTopColor / overlayBottomColor')
-  final Color overlayColor;
-
-  /// Use [panelBorderColor] instead.
-  @Deprecated('Use panelBorderColor')
-  final Color borderColor;
   final Color dividerColor;
   final Color shadowColor;
   final Color dragOverlayColor;
+
+  /// Alias for [chromeTopColor] (older call sites).
+  Color get barColor => chromeTopColor;
+
+  /// Alias for [panelTopColor] (older call sites).
+  Color get contentColor => panelTopColor;
+
+  /// Alias for [overlayTopColor] (older call sites).
+  Color get overlayColor => overlayTopColor;
+
+  /// Alias for [panelBorderColor] (older call sites).
+  Color get borderColor => panelBorderColor;
 
   const WindowVisuals({
     required this.blurEnabled,
@@ -49,10 +45,6 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     required this.rimHighlightColor,
     required this.overlayTopColor,
     required this.overlayBottomColor,
-    required this.barColor,
-    required this.contentColor,
-    required this.overlayColor,
-    required this.borderColor,
     required this.dividerColor,
     required this.shadowColor,
     required this.dragOverlayColor,
@@ -94,10 +86,6 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
         rimHighlightColor: Colors.transparent,
         overlayTopColor: overlay,
         overlayBottomColor: overlay,
-        barColor: bar,
-        contentColor: content,
-        overlayColor: overlay,
-        borderColor: border,
         dividerColor: divider,
         shadowColor: shadow,
         dragOverlayColor: scheme.primary.withValues(alpha: 0.18),
@@ -118,79 +106,43 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     final panelAlpha = withUiOpacity(lerpDouble(0.88, 0.45, strength)!);
 
     final borderAlpha = lerpDouble(0.22, 0.34, strength)!;
-    final dividerAlpha = lerpDouble(0.16, 0.24, strength)!;
-    final shadowAlpha = lerpDouble(0.20, 0.32, strength)!;
-    final rimAlpha = lerpDouble(0.10, 0.18, strength)!;
+    final shadowAlpha = lerpDouble(0.18, 0.32, strength)!;
 
-    final isDark = scheme.brightness == Brightness.dark;
-    final surface = Color.lerp(scheme.surface, scheme.surfaceContainer, 0.35)!;
-    final lifted = Color.lerp(surface, scheme.surfaceContainerHighest, 0.62)!;
-    // Subtle accent wash so glass feels cohesive with theme seed.
-    final accentWash = Color.lerp(
-      surface,
-      scheme.primary,
-      isDark ? 0.10 : 0.07,
-    )!;
-    final glassBase = Color.lerp(surface, accentWash, 0.55)!;
+    final surface = scheme.surface;
+    final lifted = Color.lerp(surface, scheme.surfaceContainerHighest, 0.55)!;
+    final accentWash = Color.lerp(surface, scheme.primaryContainer, 0.18)!;
 
-    final windowTop = Color.lerp(
-      glassBase,
-      lifted,
-      0.22,
-    )!.withValues(alpha: shellAlpha);
-    final windowBottom = Color.lerp(
-      glassBase,
-      scheme.surface,
-      0.12,
-    )!.withValues(alpha: ((shellAlpha + 0.03).clamp(0.0, 1.0)).toDouble());
-
-    final chromeTop = Color.lerp(
-      glassBase,
-      lifted,
-      0.30,
-    )!.withValues(alpha: barAlpha);
-    final chromeBottom = Color.lerp(
-      glassBase,
-      surface,
-      0.18,
-    )!.withValues(alpha: (barAlpha * 0.88).clamp(0.0, 1.0));
-
-    final panelTop = Color.lerp(
-      lifted,
-      glassBase,
-      0.15,
-    )!.withValues(alpha: panelAlpha);
-    final panelBottom = Color.lerp(
-      glassBase,
-      surface,
-      0.25,
-    )!.withValues(alpha: panelDeepAlpha);
-    final panelBorder = Color.lerp(
-      scheme.outlineVariant,
-      scheme.primary,
-      0.35,
-    )!.withValues(alpha: borderAlpha);
-
-    final rimHighlight = (isDark ? Colors.white : scheme.primary).withValues(
-      alpha: rimAlpha,
+    final windowTop = Color.lerp(accentWash, lifted, 0.35)!.withValues(
+      alpha: shellAlpha,
     );
-
-    final overlayTop = Color.lerp(
-      lifted,
-      glassBase,
-      0.10,
-    )!.withValues(alpha: overlayAlpha);
-    final overlayBottom = Color.lerp(
-      glassBase,
-      surface,
-      0.15,
-    )!.withValues(alpha: (overlayAlpha * 0.92).clamp(0.0, 1.0));
-
-    final bar = chromeTop;
-    final content = panelTop;
-    final overlay = overlayTop;
-    final border = panelBorder;
-    final divider = scheme.outlineVariant.withValues(alpha: dividerAlpha);
+    final windowBottom = Color.lerp(surface, accentWash, 0.12)!.withValues(
+      alpha: shellAlpha * 0.92,
+    );
+    final chromeTop = Color.lerp(lifted, accentWash, 0.22)!.withValues(
+      alpha: barAlpha,
+    );
+    final chromeBottom = Color.lerp(surface, lifted, 0.40)!.withValues(
+      alpha: barAlpha * 0.95,
+    );
+    final panelTop = Color.lerp(lifted, surface, 0.15)!.withValues(
+      alpha: panelAlpha,
+    );
+    final panelBottom = Color.lerp(surface, lifted, 0.25)!.withValues(
+      alpha: panelDeepAlpha,
+    );
+    final overlayTop = Color.lerp(lifted, accentWash, 0.10)!.withValues(
+      alpha: overlayAlpha,
+    );
+    final overlayBottom = Color.lerp(surface, lifted, 0.20)!.withValues(
+      alpha: overlayAlpha * 0.96,
+    );
+    final panelBorder = scheme.outlineVariant.withValues(alpha: borderAlpha);
+    final rimHighlight = Colors.white.withValues(
+      alpha: lerpDouble(0.06, 0.14, strength)!,
+    );
+    final divider = scheme.outlineVariant.withValues(
+      alpha: lerpDouble(0.10, 0.18, strength)!,
+    );
 
     return WindowVisuals(
       blurEnabled: true,
@@ -205,10 +157,6 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
       rimHighlightColor: rimHighlight,
       overlayTopColor: overlayTop,
       overlayBottomColor: overlayBottom,
-      barColor: bar,
-      contentColor: content,
-      overlayColor: overlay,
-      borderColor: border,
       dividerColor: divider,
       shadowColor: scheme.shadow.withValues(alpha: shadowAlpha),
       dragOverlayColor: scheme.primary.withValues(
@@ -231,10 +179,6 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     Color? rimHighlightColor,
     Color? overlayTopColor,
     Color? overlayBottomColor,
-    Color? barColor,
-    Color? contentColor,
-    Color? overlayColor,
-    Color? borderColor,
     Color? dividerColor,
     Color? shadowColor,
     Color? dragOverlayColor,
@@ -252,10 +196,6 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
       rimHighlightColor: rimHighlightColor ?? this.rimHighlightColor,
       overlayTopColor: overlayTopColor ?? this.overlayTopColor,
       overlayBottomColor: overlayBottomColor ?? this.overlayBottomColor,
-      barColor: barColor ?? this.barColor,
-      contentColor: contentColor ?? this.contentColor,
-      overlayColor: overlayColor ?? this.overlayColor,
-      borderColor: borderColor ?? this.borderColor,
       dividerColor: dividerColor ?? this.dividerColor,
       shadowColor: shadowColor ?? this.shadowColor,
       dragOverlayColor: dragOverlayColor ?? this.dragOverlayColor,
@@ -302,10 +242,6 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
         other.overlayBottomColor,
         t,
       )!,
-      barColor: Color.lerp(barColor, other.barColor, t)!,
-      contentColor: Color.lerp(contentColor, other.contentColor, t)!,
-      overlayColor: Color.lerp(overlayColor, other.overlayColor, t)!,
-      borderColor: Color.lerp(borderColor, other.borderColor, t)!,
       dividerColor: Color.lerp(dividerColor, other.dividerColor, t)!,
       shadowColor: Color.lerp(shadowColor, other.shadowColor, t)!,
       dragOverlayColor: Color.lerp(

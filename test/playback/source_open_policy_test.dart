@@ -95,28 +95,4 @@ void main() {
       );
     });
   });
-
-  group('SourceOpenPolicy.shouldForcePlaySameFile (deprecated)', () {
-    test('matches shouldResumeSameFile', () {
-      // ignore: deprecated_member_use_from_same_package
-      expect(
-        SourceOpenPolicy.shouldForcePlaySameFile(
-          forcePlay: true,
-          isPlaying: false,
-        ),
-        SourceOpenPolicy.shouldResumeSameFile(
-          forcePlay: true,
-          isPlaying: false,
-        ),
-      );
-      // ignore: deprecated_member_use_from_same_package
-      expect(
-        SourceOpenPolicy.shouldForcePlaySameFile(
-          forcePlay: true,
-          isPlaying: true,
-        ),
-        SourceOpenPolicy.shouldResumeSameFile(forcePlay: true, isPlaying: true),
-      );
-    });
-  });
 }

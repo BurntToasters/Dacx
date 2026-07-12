@@ -43,6 +43,7 @@ import '../playback/media_session_command_dispatch.dart';
 import '../playback/player_path_utils.dart';
 import '../playback/player_audio_session.dart';
 import '../playback/player_controller.dart';
+import '../playback/sleep_timer_controller.dart';
 import '../playback/player_settings_sync.dart';
 import '../playback/player_ui_policies.dart';
 import '../playback/chapter_navigation_policy.dart';
@@ -142,6 +143,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final AudioSpectrumService _audioSpectrum;
   late final PlayerAudioSession _audioSession;
   late final PlaybackController _playback;
+  late final SleepTimerController _sleepTimer;
   final _subscriptions = SubscriptionBag();
   UpdateService get _updateService => widget.updateService;
 
@@ -248,6 +250,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       player: _player,
       spectrum: _audioSpectrum,
     );
+    _sleepTimer = SleepTimerController(onFire: _onSleepTimerFired);
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isDisposed) return;
@@ -668,6 +671,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _settings.flushPlaylistQueue();
     _openFileBridge.dispose();
     _subscriptions.cancelAll();
+    _sleepTimer.dispose();
     _playback.dispose();
     _player.dispose();
     _releaseActiveBookmark();
@@ -678,6 +682,44 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _audioSpectrum.dispose();
     unawaited(_playerService.dispose());
     super.dispose();
+  }
+
+  void _onSleepTimerFired() {
+    if (!mounted || _isDisposed) return;
+    unawaited(() async {
+      await _stopPlaybackAndResetUi();
+      if (!mounted || _isDisposed) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).snackSleepTimerFired),
+          duration: _snackbarShortDuration,
+        ),
+      );
+    }());
+  }
+
+  void _setSleepTimerMinutes(int? minutes) {
+    final l10n = AppLocalizations.of(context);
+    if (minutes == null) {
+      final wasActive = _sleepTimer.isActive;
+      _sleepTimer.cancel();
+      if (!wasActive || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.snackSleepTimerCancelled),
+          duration: _snackbarShortDuration,
+        ),
+      );
+      return;
+    }
+    _sleepTimer.startMinutes(minutes);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.snackSleepTimerSet),
+        duration: _snackbarShortDuration,
+      ),
+    );
   }
 
   void _releaseActiveBookmark() {
@@ -2001,7 +2043,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             fit: StackFit.expand,
             children: [
               ColoredBox(
-                color: visuals.overlayColor.withValues(alpha: maskOpacity),
+                color: visuals.overlayTopColor.withValues(alpha: maskOpacity),
               ),
               FadeTransition(
                 opacity: fade,
@@ -3968,6 +4010,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           isDark ? Colors.amber.shade200 : Colors.amber.shade700,
           0.22,
         )!;
+        var sleepExpanded = false;
+        final remaining = _sleepTimer.remaining;
+        final sleepLabel = remaining == null
+            ? l10n.menuSleepTimer
+            : '${l10n.menuSleepTimer} (${PlayerController.formatDuration(remaining)})';
         // Build the menu items as a compact, right-aligned vertical panel.
         Widget item({
           required IconData icon,
@@ -4107,6 +4154,55 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                               action: 'screenshot',
                             ),
                           const Divider(height: 1),
+                          InkWell(
+                            onTap: () => setSheetState(() {
+                              sleepExpanded = !sleepExpanded;
+                            }),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.bedtime_outlined,
+                                    size: 18,
+                                    color: cs.onSurface,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      sleepLabel,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                  Icon(
+                                    sleepExpanded
+                                        ? Icons.expand_less
+                                        : Icons.expand_more,
+                                    size: 18,
+                                    color: cs.onSurface,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (sleepExpanded) ...[
+                            item(
+                              icon: Icons.timer_off_outlined,
+                              label: l10n.menuSleepTimerOff,
+                              action: 'sleep_off',
+                            ),
+                            for (final minutes
+                                in SleepTimerController.presetMinutes)
+                              item(
+                                icon: Icons.timer_outlined,
+                                label: l10n.menuSleepTimerMinutes(minutes),
+                                action: 'sleep_$minutes',
+                              ),
+                          ],
+                          const Divider(height: 1),
                           if (hasAudioOptions &&
                               _settings.experimentalFeaturesEnabled)
                             switchItem(
@@ -4217,6 +4313,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         break;
       case 'screenshot':
         unawaited(_takeScreenshot());
+        break;
+      case 'sleep_off':
+        _setSleepTimerMinutes(null);
+        break;
+      case 'sleep_15':
+        _setSleepTimerMinutes(15);
+        break;
+      case 'sleep_30':
+        _setSleepTimerMinutes(30);
+        break;
+      case 'sleep_45':
+        _setSleepTimerMinutes(45);
+        break;
+      case 'sleep_60':
+        _setSleepTimerMinutes(60);
         break;
       case 'keybinds':
         unawaited(_showKeybindsDialog());
