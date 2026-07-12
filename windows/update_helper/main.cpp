@@ -24,8 +24,10 @@
 #ifndef _UNICODE
 #define _UNICODE
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
+#endif
+// NOMINMAX comes from target_compile_definitions in CMakeLists.txt (same as runner).
 
 #include <windows.h>
 #include <bcrypt.h>
