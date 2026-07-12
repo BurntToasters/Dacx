@@ -7,11 +7,9 @@ import 'package:flutter/foundation.dart';
 /// Extracted from [PlayerScreen] so timer math and fire behavior stay
 /// unit-testable without the full widget tree.
 class SleepTimerController extends ChangeNotifier {
-  SleepTimerController({
-    VoidCallback? onFire,
-    DateTime Function()? clock,
-  }) : _onFire = onFire,
-       _clock = clock ?? DateTime.now;
+  SleepTimerController({VoidCallback? onFire, DateTime Function()? clock})
+    : _onFire = onFire,
+      _clock = clock ?? DateTime.now;
 
   /// Supported preset lengths in minutes (excluding off/cancel).
   static const List<int> presetMinutes = [15, 30, 45, 60];
@@ -31,8 +29,7 @@ class SleepTimerController extends ChangeNotifier {
   bool get isActive => _endsAt != null;
 
   /// Time left until fire, or `null` when inactive.
-  Duration? get remaining =>
-      computeRemaining(endsAt: _endsAt, now: _clock());
+  Duration? get remaining => computeRemaining(endsAt: _endsAt, now: _clock());
 
   /// Pure remaining-time math (unit-testable without [Timer]).
   static Duration? computeRemaining({

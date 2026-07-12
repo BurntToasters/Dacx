@@ -112,30 +112,46 @@ class WindowVisuals extends ThemeExtension<WindowVisuals> {
     final lifted = Color.lerp(surface, scheme.surfaceContainerHighest, 0.55)!;
     final accentWash = Color.lerp(surface, scheme.primaryContainer, 0.18)!;
 
-    final windowTop = Color.lerp(accentWash, lifted, 0.35)!.withValues(
-      alpha: shellAlpha,
-    );
-    final windowBottom = Color.lerp(surface, accentWash, 0.12)!.withValues(
-      alpha: shellAlpha * 0.92,
-    );
-    final chromeTop = Color.lerp(lifted, accentWash, 0.22)!.withValues(
-      alpha: barAlpha,
-    );
-    final chromeBottom = Color.lerp(surface, lifted, 0.40)!.withValues(
-      alpha: barAlpha * 0.95,
-    );
-    final panelTop = Color.lerp(lifted, surface, 0.15)!.withValues(
-      alpha: panelAlpha,
-    );
-    final panelBottom = Color.lerp(surface, lifted, 0.25)!.withValues(
-      alpha: panelDeepAlpha,
-    );
-    final overlayTop = Color.lerp(lifted, accentWash, 0.10)!.withValues(
-      alpha: overlayAlpha,
-    );
-    final overlayBottom = Color.lerp(surface, lifted, 0.20)!.withValues(
-      alpha: overlayAlpha * 0.96,
-    );
+    final windowTop = Color.lerp(
+      accentWash,
+      lifted,
+      0.35,
+    )!.withValues(alpha: shellAlpha);
+    final windowBottom = Color.lerp(
+      surface,
+      accentWash,
+      0.12,
+    )!.withValues(alpha: shellAlpha * 0.92);
+    final chromeTop = Color.lerp(
+      lifted,
+      accentWash,
+      0.22,
+    )!.withValues(alpha: barAlpha);
+    final chromeBottom = Color.lerp(
+      surface,
+      lifted,
+      0.40,
+    )!.withValues(alpha: barAlpha * 0.95);
+    final panelTop = Color.lerp(
+      lifted,
+      surface,
+      0.15,
+    )!.withValues(alpha: panelAlpha);
+    final panelBottom = Color.lerp(
+      surface,
+      lifted,
+      0.25,
+    )!.withValues(alpha: panelDeepAlpha);
+    final overlayTop = Color.lerp(
+      lifted,
+      accentWash,
+      0.10,
+    )!.withValues(alpha: overlayAlpha);
+    final overlayBottom = Color.lerp(
+      surface,
+      lifted,
+      0.20,
+    )!.withValues(alpha: overlayAlpha * 0.96);
     final panelBorder = scheme.outlineVariant.withValues(alpha: borderAlpha);
     final rimHighlight = Colors.white.withValues(
       alpha: lerpDouble(0.06, 0.14, strength)!,
