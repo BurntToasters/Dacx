@@ -12,7 +12,7 @@
  *   release/Dacx-Windows-x64.msi    (WiX Toolset installer; portable ZIP discontinued)
  *
  * macOS produces:
- *   release/Dacx-macOS.zip           (codesigned zip — from mac-codesign.sh or fallback)
+ *   release/Dacx-macOS.zip           (codesigned zip; from mac-codesign.sh or fallback)
  *   release/Dacx-macOS.dmg           (disk image via hdiutil)
  *
  * Linux produces:
@@ -534,7 +534,7 @@ function renderWixStartMenuShortcutTree({ indent, includeIcon }) {
 }
 
 function renderWixApplicationSearchRegistrationComponent({ indent }) {
-  // App identity only — open command + SupportedTypes live in CMP_FILE_ASSOC
+  // App identity only; open command + SupportedTypes live in CMP_FILE_ASSOC
   // so we never write the same shell\open\command key twice (quoted vs not).
   return [
     `${indent}<Component Id="CMP_APP_SEARCH_REGISTRATION" Guid="*">`,
@@ -581,7 +581,7 @@ function toMsiVersion(version) {
 
   if (patch > 654) {
     throw new Error(
-      `Patch ${patch} exceeds 654 — MSI build field would overflow (max 65535).`,
+      `Patch ${patch} exceeds 654; MSI build field would overflow (max 65535).`,
     );
   }
 
@@ -592,7 +592,7 @@ function toMsiVersion(version) {
   const tagMatch = prerelease.match(/^beta\.(\d+)$/);
   if (!tagMatch) {
     throw new Error(
-      `Cannot encode prerelease "${prerelease}" — only beta.N is supported (e.g. beta.5).`,
+      `Cannot encode prerelease "${prerelease}"; only beta.N is supported (e.g. beta.5).`,
     );
   }
   const n = Number(tagMatch[1]);
@@ -621,7 +621,7 @@ function packageWindows() {
   // Ensure a leftover portable.txt from older packaging never lands in the MSI.
   removeIfExists(path.join(buildDir, "portable.txt"));
 
-  // MSI only — Windows portable ZIP is no longer shipped (unsupported).
+  // MSI only; Windows portable ZIP is no longer shipped (unsupported).
   buildWindowsMsiInstaller(buildDir, audioIconFileName);
   console.log("  ✓ Dacx-Windows-x64.msi (portable ZIP not packaged)");
 }
@@ -737,7 +737,7 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
     const fileId = `FIL_${idx}`;
     fileComponentIds.push(componentId);
 
-    // WiX v4+: no Win64="yes" — platform is inferred from -arch x64 at build time.
+    // WiX v4+: no Win64="yes"; platform is inferred from -arch x64 at build time.
     const componentLines = [
       `<Component Id="${componentId}" Guid="*">`,
       `  <File Id="${fileId}" Source="${escapeXmlAttr(toWindowsPath(file.absolutePath))}" KeyPath="yes" />`,
@@ -952,7 +952,7 @@ function findIcon() {
   }
 
   // If no icon found, warn and return null
-  console.warn("  ⚠ No icon.png found — .deb/.rpm/.AppImage will lack an icon.");
+  console.warn("  ⚠ No icon.png found; .deb/.rpm/.AppImage will lack an icon.");
   console.warn("    Place a 256x256+ PNG at assets/icon/icon.png");
   return null;
 }
@@ -980,7 +980,7 @@ function installHicolorIcons(shareRoot, fallbackIconFile) {
 
 function buildDeb(buildDir, desktopFile, iconFile) {
   if (!hasCommand("dpkg-deb")) {
-    console.warn("  ⚠ dpkg-deb not found — skipping .deb");
+    console.warn("  ⚠ dpkg-deb not found; skipping .deb");
     return;
   }
 
@@ -1047,7 +1047,7 @@ function buildDeb(buildDir, desktopFile, iconFile) {
 }
 
 function semverToRpmVersionRelease(semver) {
-  // Strip semver build metadata (after '+') — RPM disallows '+' in Version.
+  // Strip semver build metadata (after '+'); RPM disallows '+' in Version.
   const stripped = semver.split("+")[0];
   const dashIdx = stripped.indexOf("-");
   if (dashIdx < 0) {
@@ -1060,7 +1060,7 @@ function semverToRpmVersionRelease(semver) {
 
 function buildRpm(buildDir, desktopFile, iconFile) {
   if (!hasCommand("rpmbuild")) {
-    console.warn("  ⚠ rpmbuild not found — skipping .rpm");
+    console.warn("  ⚠ rpmbuild not found; skipping .rpm");
     return;
   }
 
@@ -1152,7 +1152,7 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
   const appimageToolCmd = envTool || toolName;
 
   if (!appimageToolCmd) {
-    console.warn("  ⚠ appimagetool not found — skipping .AppImage");
+    console.warn("  ⚠ appimagetool not found; skipping .AppImage");
     console.warn("    Install from: https://github.com/AppImage/appimagetool/releases");
     console.warn("    Or set APPIMAGETOOL=/path/to/appimagetool in .env");
     return;
@@ -1236,12 +1236,12 @@ exec "$HERE/opt/dacx/dacx" "$@"
 
 function buildFlatpak() {
   if (process.platform !== "linux") {
-    console.warn("  ⚠ Flatpak bundling requires a Linux host — skipping .flatpak");
+    console.warn("  ⚠ Flatpak bundling requires a Linux host; skipping .flatpak");
     return;
   }
 
   if (!hasCommand("flatpak-builder") || !hasCommand("flatpak")) {
-    console.warn("  ⚠ flatpak/flatpak-builder not found — skipping .flatpak");
+    console.warn("  ⚠ flatpak/flatpak-builder not found; skipping .flatpak");
     console.warn("    Install: sudo apt-get install -y flatpak flatpak-builder");
     console.warn("    Then re-run: npm run setup:linux");
     return;
@@ -1254,7 +1254,7 @@ function buildFlatpak() {
     run(`node "${path.join(root, "scripts", "flatpak-bundle.js")}"`);
   } catch {
     console.warn(
-      "  ⚠ Flatpak bundling failed — skipping .flatpak (other artifacts unaffected).",
+      "  ⚠ Flatpak bundling failed; skipping .flatpak (other artifacts unaffected).",
     );
   }
 }

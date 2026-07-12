@@ -70,8 +70,8 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
 - **UI language:** English only (`lib/l10n`).
 - **macOS:** 15 (Sequoia) or newer.
 - **CPU arch:** Windows/Linux ship **x64** only (arm64 not a priority).
-- **Linux (recommended):** [AppImage](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.AppImage) + [AppManager](https://github.com/kem-a/AppManager) for desktop install and updates. deb/rpm/Flatpak/tar remain available; Flatpak is GitHub-sideload only (not Flathub — see [`docs/FLATHUB.md`](docs/FLATHUB.md)).
-- **Experimental Features:** Long-lived opt-in lane (off by default) for unfinished / in-progress ideas (multi-audio mix, Linux compositor blur, …). Features may graduate to stable settings (like Win/mac blur) or stay experimental indefinitely — not a blocker for `1.0`.
+- **Linux (recommended):** [AppImage](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.AppImage) + [AppManager](https://github.com/kem-a/AppManager) for desktop install and updates. deb/rpm/Flatpak/tar remain available; Flatpak is GitHub-sideload only (not Flathub; see [`docs/FLATHUB.md`](docs/FLATHUB.md)).
+- **Experimental Features:** Long-lived opt-in lane (off by default) for unfinished / in-progress ideas (multi-audio mix, Linux compositor blur, …). Features may graduate to stable settings (like Win/mac blur) or stay experimental indefinitely; not a blocker for `1.0`.
 - **Windows portable ZIP:** No longer shipped; use the MSI.
 
 ## Development
@@ -100,7 +100,7 @@ npm run build:linux # Linux
 
 ### Signing model
 
-Only the macOS build is code-signed end-to-end (Apple Developer ID + notarization). Windows MSIs and Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key) — there is no Authenticode certificate for Windows.
+Only the macOS build is code-signed end-to-end (Apple Developer ID + notarization). Windows MSIs and Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key); there is no Authenticode certificate for Windows.
 
 This means:
 

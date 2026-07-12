@@ -210,7 +210,7 @@ class UpdateService {
         } else if (betaRelease == null && stableRelease != null) {
           // Beta fetch failed (e.g. rate-limited). If the user is already on
           // a pre-release newer than the latest stable, we cannot confidently
-          // say "up to date" — treat this as a failed check instead of falling
+          // say "up to date"; treat this as a failed check instead of falling
           // back to stale stable-only data.
           final stableVer = stableRelease.tagName
               .replaceFirst(RegExp(r'^v'), '')
@@ -228,7 +228,7 @@ class UpdateService {
             );
             return null;
           }
-          // User is behind the latest stable — offer the stable upgrade.
+          // User is behind the latest stable; offer the stable upgrade.
           release = stableRelease;
           stableWins = true;
         } else {

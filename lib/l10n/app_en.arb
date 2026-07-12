@@ -84,7 +84,7 @@
   "settingsLinuxCompositorBlur": "Experimental Linux compositor blur",
   "settingsLinuxCompositorBlurSubtitle": "Enables transparent window path for compositors that support blur (for example KDE blur rules)",
   "settingsExperimentalEnable": "Enable Experimental Features",
-  "settingsExperimentalUnstable": "Work-in-progress features — may be incomplete or change.",
+  "settingsExperimentalUnstable": "Work-in-progress features; may be incomplete or change.",
   "settingsRecentFiles": "Recent files",
   "settingsRecentFilesCount": "{count, plural, =0{0 files} =1{1 file} other{{count} files}}",
   "@settingsRecentFilesCount": {
@@ -181,7 +181,7 @@
   },
 
   "emptyStateMessage": "Drop a file here or click Open",
-  "emptyStateFlatpakMessage": "Use Open File or Open Folder — drag-and-drop only works for Music, Videos, Downloads, and Pictures",
+  "emptyStateFlatpakMessage": "Use Open File or Open Folder; drag-and-drop only works for Music, Videos, Downloads, and Pictures",
   "emptyStateTipReopenLast": "Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file",
   "actionDismissTip": "Got it",
   "dropOverlayHint": "Drop media files to play or enqueue",
@@ -200,7 +200,7 @@
   "linuxUpdateGuidanceDebRpm": "Install the new package (.deb / .rpm) from the release page.",
   "linuxUpdateGuidancePortable": "Download the latest Linux build from the release page and replace this install.",
   "linuxUpdateGuidanceGeneric": "Download the latest Linux build from the release page.",
-  "settingsLinuxUpdateHint": "Linux self-update is not built in — use your package type’s update path.",
+  "settingsLinuxUpdateHint": "Linux self-update is not built in; use your package type’s update path.",
   "buttonReopenLast": "Reopen Last",
 
   "dialogAudioTrackTitle": "Audio track",
@@ -246,7 +246,7 @@
   },
   "snackSleepTimerSet": "Sleep timer set.",
   "snackSleepTimerCancelled": "Sleep timer cancelled.",
-  "snackSleepTimerFired": "Sleep timer ended — playback stopped.",
+  "snackSleepTimerFired": "Sleep timer ended; playback stopped.",
   "osdExternalAudioLoaded": "External audio loaded",
   "osdExternalAudioFailed": "Could not load external audio",
   "osdExternalSubtitleLoaded": "External subtitle loaded",

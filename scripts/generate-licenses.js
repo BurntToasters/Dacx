@@ -103,7 +103,7 @@ const FLUTTER_SDK_LICENSE_TEXT =
 
 function writeThirdPartyNotices(licenses, outDir) {
   const lines = [
-    "Dacx — Third-Party Notices",
+    "Dacx: Third-Party Notices",
     "==========================",
     "",
     "Dacx (run.rosie.dacx) is licensed under the GNU General Public License",

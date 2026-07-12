@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// How Dacx was installed on Linux — drives update guidance copy.
+/// How Dacx was installed on Linux; drives update guidance copy.
 enum LinuxInstallKind { flatpak, appImage, debOrRpm, portable, unknown }
 
 abstract final class LinuxInstallDetector {
@@ -28,7 +28,7 @@ abstract final class LinuxInstallDetector {
     }
     final exe = (resolvedExecutable ?? Platform.resolvedExecutable).trim();
     if (exe.isEmpty) return LinuxInstallKind.unknown;
-    // Always use POSIX path rules — this detector is for Linux install layouts,
+    // Always use POSIX path rules; this detector is for Linux install layouts,
     // and unit tests pass Linux paths on Windows/macOS hosts.
     final posixPath = exe.replaceAll('\\', '/');
     final lower = posixPath.toLowerCase();

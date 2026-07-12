@@ -12,7 +12,7 @@ Dacx is a desktop media player built with Flutter and libmpv.
 Supports audio and video playback with drag-and-drop, minimal UI,
 and cross-platform consistency.
 
-# Spec is used as a template — rpmbuild invoked by package-release.js
+# Spec is used as a template; rpmbuild invoked by package-release.js
 # with pre-populated BUILDROOT. No %build or %install sections needed.
 
 %files

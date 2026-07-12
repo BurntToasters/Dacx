@@ -87,7 +87,7 @@ class SelfUpdateProgress {
 class SelfUpdateService {
   /// Expected Apple Developer Team ID, baked in at build time via
   /// `--dart-define=DACX_APPLE_TEAM_ID=...`. Sourced from APPLE_TEAM_ID in
-  /// `.env` by `scripts/flutter-build-macos.js`. Empty means unconfigured —
+  /// `.env` by `scripts/flutter-build-macos.js`. Empty means unconfigured;
   /// macOS self-update is disabled in that case (returns
   /// `gatekeeperRejected` with a clear message).
   static const String expectedTeamId = String.fromEnvironment(
@@ -176,7 +176,7 @@ class SelfUpdateService {
     );
   }
 
-  /// Returns true on Windows or macOS only — the platforms where self-update
+  /// Returns true on Windows or macOS only; the platforms where self-update
   /// is implemented. Linux and others fall back to the existing "View" link.
   /// Portable Windows builds (marked by a `portable.txt` file next to the
   /// executable) also return false: there is no MSI install state to upgrade,
@@ -486,7 +486,7 @@ class SelfUpdateService {
   }
 
   /// Top-level orchestrator. On success returns [SelfUpdateOutcome.spawned]
-  /// — caller should then call `exit(0)` (the spawned helper/watchdog has
+  /// Caller should then call `exit(0)` (the spawned helper/watchdog has
   /// taken over).
   Future<SelfUpdateResult> applyUpdate(
     UpdateInfo info, {
@@ -1000,8 +1000,8 @@ exit 0
     }
 
     // Fetch the small checksums file in Dart (fast, testable) to get the
-    // expected SHA256 hex. The heavy work — download, verify, extract,
-    // codesign, swap — all happens in the unsandboxed XPC helper so that no
+    // expected SHA256 hex. The heavy work, download, verify, extract,
+    // codesign, swap, all happens in the unsandboxed XPC helper so that no
     // files are stamped with com.apple.provenance from our sandbox.
     final String checksumsBody;
     try {

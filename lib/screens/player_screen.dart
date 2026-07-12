@@ -3464,7 +3464,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
       return;
     }
-    // Validate IDs are numeric — mpv's lavfi-complex labels are [aid<N>]
+    // Validate IDs are numeric; mpv's lavfi-complex labels are [aid<N>]
     // where <N> must be the integer track-id reported in track-list.
     final invalid = ids.where((id) => int.tryParse(id) == null).toList();
     if (invalid.isNotEmpty) {

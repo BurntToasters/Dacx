@@ -156,7 +156,7 @@ class TransportControls extends StatelessWidget {
                 onPressed: _cycleLoopMode,
                 iconSize: 20,
               ),
-              // Speed control — tap to cycle presets
+              // Speed control; tap to cycle presets
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 switchInCurve: Curves.easeOutCubic,

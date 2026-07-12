@@ -14,13 +14,13 @@
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
 >
-> This is a pre-1.0 beta — expect rough edges. Arm64 Linux and Windows binaries are *not* available yet.
+> This is a pre-1.0 beta; expect rough edges. Arm64 Linux and Windows binaries are *not* available yet.
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
 ## Changes in `v0.11.0-beta.5:`
 - **Misc:** Removed the experimental audio spectrum visualizer (too heavy for the current packaging story; see `docs/ideas/visualizer.md` for a future reintroduction path).
-- **Fix:** Pausing then quitting no longer auto-resumes on next launch — the queue snapshot stores play/pause and session restore honors it.
+- **Fix:** Pausing then quitting no longer auto-resumes on next launch; the queue snapshot stores play/pause and session restore honors it.
 
 ## Changes in `v0.11.0-beta.4:`
 - **Ver:** Bumped version to `v0.11.0-beta.4`.
@@ -37,7 +37,7 @@
 
 - **Ver:** Bumped version to `v0.11.0-beta.2`.
 - **Shortcuts:** Escape goes back from Settings, closes the play queue drawer before exiting fullscreen (and reconciles OS/title-bar fullscreen via WindowListener), and cancels keybind capture instead of binding Escape.
-- **UI:** Removed the empty-state Open URL button — Open URL stays in the ⋯ more menu (and macOS File → Open URL) plus `Ctrl/Cmd+U`.
+- **UI:** Removed the empty-state Open URL button; Open URL stays in the ⋯ more menu (and macOS File → Open URL) plus `Ctrl/Cmd+U`.
 - **UI:** Unsupported extensions and Flatpak-inaccessible drops now show clear snackbars; failed external audio/subtitle loads surface a snackbar in addition to the OSD tip.
 - **Security:** Windows self-update now launches a native `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk `apply-update.ps1` / `spawn-watchdog.ps1`) so the helper survives the app Job Object, re-checks SHA-256 (and optional Authenticode), then elevates `msiexec`. After a successful install the helper relaunches Dacx (update & restart). Trust stays Ed25519-first.
 - **Testing:** Expanded the headless `PlayerScreen` harness and Windows self-update tests around Escape reconcile, snacks, session restore, external tracks, and the native helper launch path.
@@ -69,7 +69,7 @@
 ## Changes in `v0.10.1-beta.1:`
 
 - **NEW - Audio visualizer:** Added a new audio-reactive bar visualizer for audio playback (experimental).
-- **UI:** More work on window transparency / blur — closer to graduating out of Experimental!
+- **UI:** More work on window transparency / blur; closer to graduating out of Experimental!
 - **Codebase:** Updated the pinned Flutter version to `v3.44.5`.
 - **Testing:** Expanded `npm run test:all` with a headless `PlayerScreen` harness (transport, queue, settings, drag-drop, shortcuts, media session, screenshots, and more) plus extracted playback-policy unit coverage.
 - **Misc:** `IPlayerService` injection and load-generation guards reduce stale UI after rapid queue changes; self-update redirect allowlist and Windows manifest validation covered by direct tests.
@@ -87,8 +87,8 @@ The UI has been revamped to provide a way better user experience and UI moving f
   * **Misc:** Color scheme improvements, animation updates, general cleanup.
 
 * **NEW - Linux AppImage and Flatpak:** Added AppImage and Flatpak support!
-  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.AppImage) — portable, no installation needed.
-  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.flatpak) — sandboxed package for app-store distributions (Flathub support planned).
+  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.AppImage); portable, no installation needed.
+  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.flatpak); sandboxed package for app-store distributions (Flathub support planned).
 - **NEW - Localization completeness:** Nearly all user-facing strings are now localized via `flutter gen-l10n`. Covered: transport control tooltips; folder + URL button and dialog labels; media info metadata labels; folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI; accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button); keyboard shortcut action names; equalizer preset labels; chapter and track fallback labels. Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
 - **Testing:** 352+ tests passing. Code verified clean with zero lint issues.
 - **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.
@@ -192,5 +192,5 @@ Welcome to the first beta build of Dacx! I've pruned through the codebase enough
 - **GPG Signed:** My public key is attached to every release to ensure authenticity.
 - **GPG Key:** Public key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc .
 - **Code Signing:** macOS releases are fully signed and notarized. Windows MSIs are not Authenticode-signed by default; trust the GPG `.asc` plus the Ed25519-signed update manifest for self-update. Linux packages are GPG-signed the same way.
-- **Windows package:** Dacx ships MSI (not EXE) on Windows, including betas — that is intentional for the self-updater.
+- **Windows package:** Dacx ships MSI (not EXE) on Windows, including betas; that is intentional for the self-updater.
 - **More info:** See the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md), [FAQ](https://help.rosie.run/dacx/en-us/faq), and [BCLS](https://github.com/BurntToasters/BCLS).

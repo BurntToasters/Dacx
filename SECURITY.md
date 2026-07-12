@@ -27,9 +27,9 @@ We aim to acknowledge reports within a few business days and will coordinate dis
 
 Dacx is a **local desktop media player**. It does not implement user accounts or a server API. Primary trust boundaries:
 
-- **Self-update** — downloads from GitHub (host allowlist). **Windows:** SHA256 must match both `SHA256SUMS` and an **Ed25519-signed update manifest** (primary install trust). Authenticode is **not** required for official GitHub MSI builds (SmartScreen may warn). After verification, Dacx launches bundled `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk PowerShell scripts) so the helper survives Process Lifetime Management, re-checks SHA256, elevates `msiexec`, then relaunches Dacx on success. **macOS:** SHA256SUMS over TLS, then Apple code signature verification (`codesign --verify --deep --strict`) plus Team ID / bundle ID / version / Gatekeeper checks via the XPC helper — Developer ID signing is the trust anchor (no separate Ed25519 update manifest). **Linux:** no in-app self-update; prefer AppImage + [AppManager](https://github.com/kem-a/AppManager) for install/updates, or trust GPG-signed deb/rpm/tar / GitHub Flatpak sideloads / manual downloads.
-- **Local IPC** — method/event channels between Flutter and native runners; Windows named pipes use a per-user DACL.
-- **File open** — paths from CLI, drag-and-drop, and OS “Open With” are validated before use (UNC / credential URLs rejected).
+- **Self-update:** downloads from GitHub (host allowlist). **Windows:** SHA256 must match both `SHA256SUMS` and an **Ed25519-signed update manifest** (primary install trust). Authenticode is **not** required for official GitHub MSI builds (SmartScreen may warn). After verification, Dacx launches bundled `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk PowerShell scripts) so the helper survives Process Lifetime Management, re-checks SHA256, elevates `msiexec`, then relaunches Dacx on success. **macOS:** SHA256SUMS over TLS, then Apple code signature verification (`codesign --verify --deep --strict`) plus Team ID / bundle ID / version / Gatekeeper checks via the XPC helper; Developer ID signing is the trust anchor (no separate Ed25519 update manifest). **Linux:** no in-app self-update; prefer AppImage + [AppManager](https://github.com/kem-a/AppManager) for install/updates, or trust GPG-signed deb/rpm/tar / GitHub Flatpak sideloads / manual downloads.
+- **Local IPC:** method/event channels between Flutter and native runners; Windows named pipes use a per-user DACL.
+- **File open:** paths from CLI, drag-and-drop, and OS “Open With” are validated before use (UNC / credential URLs rejected).
 
 Release signing keys and `.env` secrets must remain on maintainer release machines only.
 
@@ -50,8 +50,8 @@ for bundled native runtime notes (libmpv / media_kit).
 
 Official Windows release builds **should** set in `.env` when an Authenticode certificate is available:
 
-- `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`) — signs the MSI and bakes the thumbprint for runtime Authenticode checks (optional pin **in addition to** Ed25519)
-- `DACX_REQUIRE_WINDOWS_SIGNER=1` — causes `npm run build:win` to **fail** if the thumbprint is missing
+- `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`): signs the MSI and bakes the thumbprint for runtime Authenticode checks (optional pin **in addition to** Ed25519)
+- `DACX_REQUIRE_WINDOWS_SIGNER=1`: causes `npm run build:win` to **fail** if the thumbprint is missing
 
 Dev / unsigned MSI builds may omit both; self-update then relies on Ed25519 alone (matches README). Do not treat Authenticode as required for the public GitHub distribution model unless you actually ship signed MSIs.
 

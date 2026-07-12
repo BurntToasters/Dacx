@@ -1,4 +1,4 @@
-// dacx-update-helper.exe — post-exit Windows MSI installer watchdog.
+// dacx-update-helper.exe: post-exit Windows MSI installer watchdog.
 //
 // Spawned outside Dacx's Job Object (via WMI from Dart) so it survives
 // Process Lifetime Management when the app calls exit(0) after starting an update.

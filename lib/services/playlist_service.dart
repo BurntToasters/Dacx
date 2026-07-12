@@ -138,7 +138,7 @@ class PlaylistService extends ChangeNotifier {
 
   /// Moves item at [oldIndex] to [newIndex] (ReorderableListView semantics).
   /// Reorders queue for [ReorderableListView.onReorderItem] (already-adjusted
-  /// [newIndex] — no manual `newIndex -= 1` when moving downward).
+  /// [newIndex]; no manual `newIndex -= 1` when moving downward).
   void moveItem(int oldIndex, int newIndex) {
     if (oldIndex < 0 || oldIndex >= _items.length) return;
     if (newIndex < 0 || newIndex >= _items.length) return;

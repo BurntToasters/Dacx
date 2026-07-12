@@ -362,7 +362,7 @@ class _DacxAppState extends State<DacxApp>
       _ => NSVisualEffectViewMaterial.fullScreenUI,
     };
     try {
-      // Ensure window alpha is fully opaque — alpha < 1 fades the whole
+      // Ensure window alpha is fully opaque; alpha < 1 fades the whole
       // window including the vibrancy layer into sharp transparency.
       await WindowManipulator.setWindowAlphaValue(1.0);
       await WindowManipulator.setWindowBackgroundColorToClear();
@@ -561,7 +561,7 @@ class _DacxAppState extends State<DacxApp>
       try {
         if (bypassNativeOpacity) {
           // window_manager.setOpacity enables WS_EX_LAYERED on Windows and alters
-          // alphaValue on macOS / gtk opacity on Linux — all of which flatten or
+          // alphaValue on macOS / gtk opacity on Linux; all of which flatten or
           // fight native blur/vibrancy/compositor blur.
           if (Platform.isWindows) {
             await _clearWindowsLayeredStyle();
@@ -628,7 +628,7 @@ class _DacxAppState extends State<DacxApp>
           } else if (Platform.isMacOS) {
             await _applyMacOSBlur(strength: strength);
           } else if (Platform.isLinux) {
-            // Linux has no GTK blur API — only transparency. Compositor
+            // Linux has no GTK blur API; only transparency. Compositor
             // (KWin forceblur, etc.) blurs the transparent regions.
             await Window.setEffect(
               effect: WindowEffect.transparent,

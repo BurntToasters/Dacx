@@ -18,11 +18,11 @@ Run every project Flutter or Dart command through FVM: `fvm flutter ...` or
 npm run test:all
 ```
 
-This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **55%**. Required sources (`player_screen`, spectrum) must appear in the lcov report but are excluded from the scoped gate. CI runs a subset plus multi-OS build smoke on `main` and `beta` only (and `v*` tags) — interim branches are skipped to save minutes.
+This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **55%**. Required sources (`player_screen`) must appear in the lcov report but are excluded from the scoped gate. CI runs a subset plus multi-OS build smoke on `main` and `beta` only (and `v*` tags); interim branches are skipped to save minutes.
 
 Before a stable cut, run the manual checklist in [docs/QA.md](docs/QA.md).
 
-`release:prepare` intentionally does **not** run a clean-tree / branch guard — maintainers release from the branch they are on after `release:warn`. Keep the working tree intentional; do not assume an automated guard.
+`release:prepare` intentionally does **not** run a clean-tree / branch guard; maintainers release from the branch they are on after `release:warn`. Keep the working tree intentional; do not assume an automated guard.
 
 Before packaging a release, `release:prepare` runs `npm run licenses` to refresh
 `build/THIRD_PARTY_NOTICES.txt` (copied into installers by `package-release.js`).

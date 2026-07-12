@@ -4,8 +4,8 @@
  * but signal half-finished work shipped to a release branch:
  *
  *  - Stray TODO/FIXME/XXX/HACK markers in lib/ (warns, not fails)
- *  - `print(` calls left in lib/ (fails — use DebugLogService)
- *  - `debugPrint(` outside test/ (warns — Flutter's intended diagnostic
+ *  - `print(` calls left in lib/ (fails; use DebugLogService)
+ *  - `debugPrint(` outside test/ (warns; Flutter's intended diagnostic
  *    helper is allowed in lib/, but call sites are surfaced so they can
  *    be migrated to DebugLogService when they accumulate)
  *  - .orig / .bak / .rej merge debris anywhere
@@ -50,10 +50,10 @@ if (fs.existsSync(libDir)) {
       const optedOut =
         /\/\/\s*ignore:\s*avoid_print/.test(prev) ||
         /\/\/\s*ignore:\s*avoid_print/.test(line);
-      // Skip line comments — TODOs in comments are warn-only anyway.
+      // Skip line comments; TODOs in comments are warn-only anyway.
       const code = line.split("//")[0];
       if (!optedOut && printRe.test(code)) {
-        const msg = `${path.relative(root, file)}:${idx + 1}: stray print() — use DebugLogService`;
+        const msg = `${path.relative(root, file)}:${idx + 1}: stray print(); use DebugLogService`;
         (strict ? failures : warnings).push(msg);
       }
       if (!optedOut && debugPrintRe.test(code)) {

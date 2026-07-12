@@ -9,7 +9,7 @@ import MediaPlayer
 /// callbacks.
 ///
 /// All mutable state (`channels`, `activeChannel`, `info`, `artworkTask`,
-/// `enabled`) is owned by `stateQueue` — a serial queue — to keep multi-
+/// `enabled`) is owned by `stateQueue` (a serial queue) to keep multi-
 /// engine attach/detach and the URLSession artwork callback off each other's
 /// read-modify-write paths.
 final class MediaSessionBridge {
@@ -294,7 +294,7 @@ private func isPublicRemoteArtworkHost(_ rawHost: String?) -> Bool {
   if host.hasPrefix("10.") { return false }
   if host.hasPrefix("192.168.") { return false }
   if host.hasPrefix("169.254.") { return false }
-  // 172.16.0.0 – 172.31.255.255
+  // 172.16.0.0 - 172.31.255.255
   if host.hasPrefix("172.") {
     let parts = host.split(separator: ".")
     if parts.count >= 2, let second = Int(parts[1]), (16...31).contains(second) {

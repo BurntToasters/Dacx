@@ -517,7 +517,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsExperimentalUnstable.
   ///
   /// In en, this message translates to:
-  /// **'Work-in-progress features — may be incomplete or change.'**
+  /// **'Work-in-progress features; may be incomplete or change.'**
   String get settingsExperimentalUnstable;
 
   /// No description provided for @settingsRecentFiles.
@@ -853,7 +853,7 @@ abstract class AppLocalizations {
   /// No description provided for @emptyStateFlatpakMessage.
   ///
   /// In en, this message translates to:
-  /// **'Use Open File or Open Folder — drag-and-drop only works for Music, Videos, Downloads, and Pictures'**
+  /// **'Use Open File or Open Folder; drag-and-drop only works for Music, Videos, Downloads, and Pictures'**
   String get emptyStateFlatpakMessage;
 
   /// No description provided for @emptyStateTipReopenLast.
@@ -967,7 +967,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsLinuxUpdateHint.
   ///
   /// In en, this message translates to:
-  /// **'Linux self-update is not built in — use your package type’s update path.'**
+  /// **'Linux self-update is not built in; use your package type’s update path.'**
   String get settingsLinuxUpdateHint;
 
   /// No description provided for @buttonReopenLast.
@@ -1201,7 +1201,7 @@ abstract class AppLocalizations {
   /// No description provided for @snackSleepTimerFired.
   ///
   /// In en, this message translates to:
-  /// **'Sleep timer ended — playback stopped.'**
+  /// **'Sleep timer ended; playback stopped.'**
   String get snackSleepTimerFired;
 
   /// No description provided for @osdExternalAudioLoaded.

@@ -14,7 +14,7 @@ const thumbprint = (
 const requireSigner = process.env.DACX_REQUIRE_WINDOWS_SIGNER === '1';
 if (!thumbprint) {
   const message =
-    'WINDOWS_SIGNING_CERT_THUMBPRINT (or DACX_WINDOWS_SIGNER_THUMBPRINT) not set in .env — MSI will not be Authenticode-pinned; self-update still requires the Ed25519-signed manifest (Authenticode is an optional extra pin when the thumbprint is baked in).';
+    'WINDOWS_SIGNING_CERT_THUMBPRINT (or DACX_WINDOWS_SIGNER_THUMBPRINT) not set in .env; MSI will not be Authenticode-pinned; self-update still requires the Ed25519-signed manifest (Authenticode is an optional extra pin when the thumbprint is baked in).';
   if (requireSigner) {
     console.error(
       `ERROR: ${message}\nSet the thumbprint on release VMs, or unset DACX_REQUIRE_WINDOWS_SIGNER for local dev builds.`,

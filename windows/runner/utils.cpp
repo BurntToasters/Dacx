@@ -47,7 +47,7 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
   }
   // Compute the required UTF-8 byte count, including the trailing NUL.
   // If WideCharToMultiByte returns 0, the conversion failed (e.g. invalid
-  // surrogate pair with WC_ERR_INVALID_CHARS) — bail out instead of
+  // surrogate pair with WC_ERR_INVALID_CHARS); bail out instead of
   // underflowing the unsigned subtraction below.
   int required = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
                                        utf16_string, -1, nullptr, 0, nullptr,

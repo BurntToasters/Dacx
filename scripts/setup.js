@@ -111,7 +111,7 @@ function printMacXcodeInstallHelp() {
 // Win
 
 function setupWindows() {
-  header('Dacx — Windows setup');
+  header('Dacx: Windows setup');
 
   // Flutter
   if (!resolveFlutterOnWindowsPath()) {
@@ -141,7 +141,7 @@ function setupWindows() {
 // macOS
 
 function setupMac() {
-  header('Dacx — macOS setup');
+  header('Dacx: macOS setup');
 
   // Xcode CLI tools
   console.log('\nChecking Xcode command-line tools...');
@@ -203,7 +203,7 @@ function setupMac() {
 // Linux
 
 function setupLinux() {
-  header('Dacx — Linux setup (apt-based)');
+  header('Dacx: Linux setup (apt-based)');
 
   // System packages for Flutter desktop + media_kit (libmpv)
   const packages = [
@@ -250,7 +250,7 @@ function setupLinux() {
   try {
     machineArch = execSync('uname -m', { encoding: 'utf8' }).trim();
   } catch {
-    // uname unavailable — default to x86_64
+    // uname unavailable; default to x86_64
   }
   const appimageArch = machineArch === 'aarch64' ? 'aarch64' : 'x86_64';
   const appimageUrl = `https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-${appimageArch}.AppImage`;
@@ -264,7 +264,7 @@ function setupLinux() {
     if (appimageInstalled) {
       console.log('✔ appimagetool installed → /usr/local/bin/appimagetool');
     } else {
-      console.warn('⚠ appimagetool install failed — .AppImage builds will be skipped.');
+      console.warn('⚠ appimagetool install failed; .AppImage builds will be skipped.');
       console.warn('  Install manually from a trusted release asset and verify checksum/signature first.');
     }
   } else {
@@ -287,7 +287,7 @@ function setupLinux() {
   if (flatpakRuntimeInstalled) {
     console.log('✔ Freedesktop Platform/SDK 25.08 ready');
   } else {
-    console.warn('⚠ Flatpak runtime install failed — flatpak:bundle builds will be skipped.');
+    console.warn('⚠ Flatpak runtime install failed; flatpak:bundle builds will be skipped.');
     console.warn('  Run manually: sudo flatpak install flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08');
   }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Advisory: surface any direct Dart dependencies that have a newer
- * resolvable version available. Never fails the suite — purely a
+ * resolvable version available. Never fails the suite; purely a
  * heads-up for the maintainer between releases.
  *
  * Skipped silently if FVM is not on PATH.

@@ -8,7 +8,7 @@ import 'window_visuals.dart';
 extension GlassDecorations on WindowVisuals {
   bool get isGlass => blurEnabled;
 
-  /// Window backdrop wash — gradient in glass mode, solid otherwise.
+  /// Window backdrop wash: gradient in glass mode, solid otherwise.
   LinearGradient get shellGradient => LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
@@ -168,7 +168,7 @@ class GlassChrome extends StatelessWidget {
   }
 }
 
-/// Shell background — gradient in glass mode, solid color otherwise.
+/// Shell background: gradient in glass mode, solid color otherwise.
 class GlassShellBackground extends StatelessWidget {
   const GlassShellBackground({super.key, required this.child});
 
@@ -190,7 +190,7 @@ class GlassShellBackground extends StatelessWidget {
   }
 }
 
-/// Settings / overlay screens — softer wash over window shell.
+/// Settings / overlay screens: softer wash over window shell.
 class GlassOverlayBackground extends StatelessWidget {
   const GlassOverlayBackground({super.key, required this.child});
 
@@ -218,7 +218,7 @@ class GlassOverlayBackground extends StatelessWidget {
   }
 }
 
-/// Frosted drawer body — used for side-panel drawers (e.g. play queue).
+/// Frosted drawer body: used for side-panel drawers (e.g. play queue).
 /// Applies backdrop blur in glass mode, solid fill otherwise.
 class GlassDrawerBody extends StatelessWidget {
   const GlassDrawerBody({

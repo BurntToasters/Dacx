@@ -11,13 +11,13 @@ Related history: experimental toggle under Settings → Experimental; mutual exc
 The feature looked small in Dart (settings toggle + bar painter + mpv `af` segment), but it was not small in packaging or correctness:
 
 1. **It was not a real spectrum.** The working path shaped one overall RMS/Peak (`astats`) into ~32 synchronized bars. Product copy said “frequency / spectrum,” which overclaimed.
-2. **Bundled Win/mac FFmpeg is filter-starved.** media_kit’s libmpv builds FFmpeg with `--disable-filters` and only re-enables a tiny whitelist (historically `overlay` + `equalizer`). Filters like `astats`, `asplit`, `showfreqs`, `showspectrum` are **absent from the binary linked into libmpv**. Installing a full `ffmpeg` on `PATH` does not help — libmpv uses its own libavfilter.
+2. **Bundled Win/mac FFmpeg is filter-starved.** media_kit’s libmpv builds FFmpeg with `--disable-filters` and only re-enables a tiny whitelist (historically `overlay` + `equalizer`). Filters like `astats`, `asplit`, `showfreqs`, `showspectrum` are **absent from the binary linked into libmpv**. Installing a full `ffmpeg` on `PATH` does not help; libmpv uses its own libavfilter.
 3. **`setAudioFilter` “success” lied.** Echoing the `af` property back often meant the string was accepted or stored, not that the lavfi graph was live and exporting metadata.
 4. **`af-metadata` polling was unreliable** on the bundled mpv (nested `af-metadata/label/key` reads, empty polls → flat UI / resting ticks that looked “broken”).
 5. **Unit tests could not catch it.** Fakes returned whatever metadata we injected; CI never exercised real libmpv/FFmpeg filter capability.
 6. **Cost vs. value.** A trustworthy visualizer needs custom native packaging (Win/mac), album-art / `lavfi-complex` conflict handling, and honest UX. Too much for a small experimental strip.
 
-Linux often “worked better” only because system libmpv/FFmpeg usually ships a fuller filter set — not because the Dart design was solid cross-platform.
+Linux often “worked better” only because system libmpv/FFmpeg usually ships a fuller filter set; not because the Dart design was solid cross-platform.
 
 ---
 
@@ -33,7 +33,7 @@ Linux often “worked better” only because system libmpv/FFmpeg usually ships 
 
 ---
 
-## Recommended path: Option A — `lavfi-complex` + `showfreqs` as video
+## Recommended path for Option A: `lavfi-complex` + `showfreqs` as video
 
 Goal: a **true** frequency visual that reuses the existing media_kit `VideoController` texture path, with **zero cost when off**.
 
@@ -51,7 +51,7 @@ audio decode (mpv)
  mpv video output → media_kit VideoController → Flutter texture
 ```
 
-Sketch (illustrative — tune labels/filters when implementing):
+Sketch (illustrative; tune labels/filters when implementing):
 
 ```text
 lavfi-complex =
@@ -96,7 +96,7 @@ Today, audio playback often shows Flutter-drawn album art while mpv has little/n
 
 Implications:
 
-- Cache album-art image bytes in Dart (already partly done for media session) and composite in Flutter **above or beside** the spectrum texture — do **not** expect mpv cover-art VO and `showfreqs` VO to coexist cleanly without an explicit layout plan.
+- Cache album-art image bytes in Dart (already partly done for media session) and composite in Flutter **above or beside** the spectrum texture; do **not** expect mpv cover-art VO and `showfreqs` VO to coexist cleanly without an explicit layout plan.
 - Decide one primary visual for audio mode: spectrum strip + art card, or spectrum as full backdrop with art overlay. Document the choice in UI before coding.
 
 ### Conflict with multi-audio mix
@@ -106,7 +106,7 @@ Multi-audio mix already uses `lavfi-complex`. Two complex graphs cannot own the 
 Options when reintroducing:
 
 1. **Mutual exclusion** (simplest): mix on ⇒ visualizer off (and vice versa), with OSD/copy that says so.
-2. **Merged graph**: one `lavfi-complex` that mixes `aid*` **and** feeds `showfreqs` — harder, must be tested per track-count.
+2. **Merged graph**: one `lavfi-complex` that mixes `aid*` **and** feeds `showfreqs`; harder, must be tested per track-count.
 
 Start with (1) unless mix + viz is a hard requirement.
 
@@ -114,7 +114,7 @@ Start with (1) unless mix + viz is a hard requirement.
 
 Keep EQ on the `af` chain (`equalizer=…`) when possible. Order matters: decide whether spectrum samples pre- or post-EQ and document it (users usually expect **post-EQ** “what I hear”).
 
-If EQ and `lavfi-complex` interact badly on a given mpv build, apply EQ inside the complex graph instead of separate `af` — treat that as an implementation detail with tests.
+If EQ and `lavfi-complex` interact badly on a given mpv build, apply EQ inside the complex graph instead of separate `af`; treat that as an implementation detail with tests.
 
 ### Product / UX rules (non-negotiable if it returns)
 
@@ -129,9 +129,9 @@ If EQ and `lavfi-complex` interact badly on a given mpv build, apply EQ inside t
 
 | Option | Summary | Why secondary |
 | ------ | ------- | ------------- |
-| **B – PCM tap + Dart FFT** | Patch libmpv / custom plugin to expose PCM; FFT in Dart/FFI | Heavier maintenance than custom FFmpeg filters; still needs custom natives |
-| **C – Second decoder** | Decode file twice for analysis | Drift, CPU, battery; bad for a desktop player |
-| **D – Cosmetic animation** | Fake bars from playhead / random | Dishonest; only OK if labeled as decoration, not “audio visualizer” |
+| **B: PCM tap + Dart FFT** | Patch libmpv / custom plugin to expose PCM; FFT in Dart/FFI | Heavier maintenance than custom FFmpeg filters; still needs custom natives |
+| **C: Second decoder** | Decode file twice for analysis | Drift, CPU, battery; bad for a desktop player |
+| **D: Cosmetic animation** | Fake bars from playhead / random | Dishonest; only OK if labeled as decoration, not “audio visualizer” |
 
 ---
 
@@ -156,13 +156,13 @@ If EQ and `lavfi-complex` interact badly on a given mpv build, apply EQ inside t
 2. **Player integration:** audio-only layout, off-by-default setting, mix exclusion, EQ ordering.
 3. **Linux / release:** same libs or probed system mpv; AppImage + Flatpak notes.
 4. **Polish:** themes, height, reduced-motion, OSD/capability copy.
-5. **Graduate or keep Experimental** based on burn-in — not a `1.0` blocker either way.
+5. **Graduate or keep Experimental** based on burn-in; not a `1.0` blocker either way.
 
 ---
 
 ## References (investigation notes)
 
-- media_kit / libmpv Darwin & Windows builds historically use FFmpeg `--disable-filters` with a minimal enable list — analysis/viz filters are not in that list.
+- media_kit / libmpv Darwin & Windows builds historically use FFmpeg `--disable-filters` with a minimal enable list; analysis/viz filters are not in that list.
 - Stock `equalizer` remaining in the whitelist is why EQ works today while `astats`/`showfreqs` do not on those bundles.
 - Nested mpv property reads for `af-metadata/<label>/…` on older bundled mpv were a second failure mode even when filters existed.
 - This feature was removed rather than left “experimental but broken” to avoid trust erosion; reintroduction should be packaging-first, UI-second.

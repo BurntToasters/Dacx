@@ -848,7 +848,7 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
                 }
             }
 
-            // 3. Extract with ditto (un-sandboxed — no com.apple.provenance stamped)
+            // 3. Extract with ditto (un-sandboxed; no com.apple.provenance stamped)
             let extractDir = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("dacx-extract-\(UUID().uuidString)", isDirectory: true)
             do {
@@ -893,7 +893,7 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
             if abortIfExpired("bundle validation") { return }
             dacxLog("installFromUrl: bundle valid; spawning worker")
 
-            // 5. Spawn detached worker — it waits for parent PID exit, then swaps
+            // 5. Spawn detached worker; it waits for parent PID exit, then swaps
             let env: [String: String] = [
                 "DACX_UPDATE_WORKER": "1",
                 "DACX_NEW_APP": extractedAppPath,

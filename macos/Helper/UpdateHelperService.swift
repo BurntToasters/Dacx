@@ -43,7 +43,7 @@ enum UpdateHelperService {
 // the caller's bundle identifier *and* anchor to Apple's certificate chain,
 // and (when our own team id is resolvable) restrict to that team's OU. The
 // team is read from our running code so it stays in sync with whatever cert
-// the parent .app was signed by — no build-time bake-in required.
+// the parent .app was signed by; no build-time bake-in required.
 private func buildCallerRequirement() -> String? {
     let team = ownTeamIdentifier() ?? ""
     if team.isEmpty {
@@ -84,7 +84,7 @@ final class UpdateHelperServiceDelegate: NSObject, NSXPCListenerDelegate {
         }
 
         // macOS 13+ enforces this kernel-side via the connection's audit
-        // token — no PID race. Our deployment floor is macOS 15, so this
+        // token; no PID race. Our deployment floor is macOS 15, so this
         // path is always available.
         newConnection.setCodeSigningRequirement(codeRequirement)
 

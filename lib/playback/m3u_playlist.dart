@@ -7,7 +7,7 @@ import '../models/playable_source.dart';
 import 'player_path_utils.dart';
 
 /// Local playlist file helpers (`.m3u` / `.pls`). HLS `.m3u8` stays a media
-/// source for mpv — not expanded here.
+/// source for mpv; not expanded here.
 abstract final class M3uPlaylist {
   static const extensions = {'m3u', 'pls'};
 

@@ -134,7 +134,7 @@ class SettingsService extends ChangeNotifier {
       ];
 
   void _runMigrationsIfNeeded() {
-    // Fresh install: no settings keys have been written yet — stamp the
+    // Fresh install: no settings keys have been written yet; stamp the
     // current schema version and skip running any migrations.
     final hasAnyKey = _prefs.getKeys().isNotEmpty;
     final stored = _prefs.getInt(_kSchemaVersion);

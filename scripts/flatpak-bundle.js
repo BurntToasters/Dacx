@@ -109,7 +109,7 @@ function main() {
   }
   if (!fs.existsSync(noticesPath)) {
     throw new Error(
-      "Missing build/THIRD_PARTY_NOTICES.txt — run npm run licenses before flatpak:bundle",
+      "Missing build/THIRD_PARTY_NOTICES.txt; run npm run licenses before flatpak:bundle",
     );
   }
 

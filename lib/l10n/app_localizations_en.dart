@@ -245,7 +245,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsExperimentalUnstable =>
-      'Work-in-progress features — may be incomplete or change.';
+      'Work-in-progress features; may be incomplete or change.';
 
   @override
   String get settingsRecentFiles => 'Recent files';
@@ -456,7 +456,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emptyStateFlatpakMessage =>
-      'Use Open File or Open Folder — drag-and-drop only works for Music, Videos, Downloads, and Pictures';
+      'Use Open File or Open Folder; drag-and-drop only works for Music, Videos, Downloads, and Pictures';
 
   @override
   String get emptyStateTipReopenLast =>
@@ -521,7 +521,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsLinuxUpdateHint =>
-      'Linux self-update is not built in — use your package type’s update path.';
+      'Linux self-update is not built in; use your package type’s update path.';
 
   @override
   String get buttonReopenLast => 'Reopen Last';
@@ -641,7 +641,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackSleepTimerCancelled => 'Sleep timer cancelled.';
 
   @override
-  String get snackSleepTimerFired => 'Sleep timer ended — playback stopped.';
+  String get snackSleepTimerFired => 'Sleep timer ended; playback stopped.';
 
   @override
   String get osdExternalAudioLoaded => 'External audio loaded';

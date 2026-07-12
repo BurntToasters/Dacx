@@ -13,7 +13,7 @@ class HardwareAccelerationService {
 
   /// Resolve macOS hardware-acceleration support off the UI isolate so the
   /// expensive `sysctl` + `system_profiler` probes do not block the first
-  /// frame. Safe to call multiple times — subsequent calls reuse the cached
+  /// frame. Safe to call multiple times; subsequent calls reuse the cached
   /// result. No-op on non-macOS platforms.
   static Future<void> prime() {
     if (!Platform.isMacOS) return Future.value();

@@ -268,7 +268,7 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
   group('SelfUpdateService.isSupported', () {
     test('matches host platform expectations', () {
       // Windows or macOS hosts → true; Linux/other → false. Just check the
-      // value is consistent with Platform — no assumption about test runner.
+      // value is consistent with Platform; no assumption about test runner.
       final result = SelfUpdateService.isSupported();
       expect(result, isA<bool>());
     });
