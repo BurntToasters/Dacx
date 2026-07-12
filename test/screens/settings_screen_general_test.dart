@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -131,6 +132,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(svc.settings.accentColor, AccentColor.teal);
+    });
+
+    testWidgets('Escape pops Settings back to previous route', (tester) async {
+      final svc = await _services();
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: _theme(),
+          home: Builder(
+            builder: (context) {
+              final updates = UpdateService(
+                debugLog: svc.debugLog,
+                debugSource: 'settings_escape_test',
+              );
+              return Scaffold(
+                body: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => SettingsScreen(
+                          settings: svc.settings,
+                          debugLog: svc.debugLog,
+                          updateService: updates,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Open settings'),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Settings'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Settings'), findsNothing);
+      expect(find.text('Open settings'), findsOneWidget);
     });
   });
 }

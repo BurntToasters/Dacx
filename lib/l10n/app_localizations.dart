@@ -712,54 +712,6 @@ abstract class AppLocalizations {
   /// **'Debug mode disabled.'**
   String get snackDebugModeDisabled;
 
-  /// No description provided for @settingsShortcutOpenFile.
-  ///
-  /// In en, this message translates to:
-  /// **'Open File'**
-  String get settingsShortcutOpenFile;
-
-  /// No description provided for @settingsShortcutReopenLast.
-  ///
-  /// In en, this message translates to:
-  /// **'Reopen Last'**
-  String get settingsShortcutReopenLast;
-
-  /// No description provided for @settingsShortcutPlayPause.
-  ///
-  /// In en, this message translates to:
-  /// **'Play / Pause'**
-  String get settingsShortcutPlayPause;
-
-  /// No description provided for @settingsShortcutSeek.
-  ///
-  /// In en, this message translates to:
-  /// **'Seek ±5 seconds'**
-  String get settingsShortcutSeek;
-
-  /// No description provided for @settingsShortcutVolume.
-  ///
-  /// In en, this message translates to:
-  /// **'Volume ±5%'**
-  String get settingsShortcutVolume;
-
-  /// No description provided for @settingsShortcutMute.
-  ///
-  /// In en, this message translates to:
-  /// **'Mute / Unmute'**
-  String get settingsShortcutMute;
-
-  /// No description provided for @settingsShortcutFullscreen.
-  ///
-  /// In en, this message translates to:
-  /// **'Toggle Fullscreen'**
-  String get settingsShortcutFullscreen;
-
-  /// No description provided for @settingsShortcutExitFullscreen.
-  ///
-  /// In en, this message translates to:
-  /// **'Exit Fullscreen'**
-  String get settingsShortcutExitFullscreen;
-
   /// No description provided for @snackCouldNotReadDroppedFile.
   ///
   /// In en, this message translates to:
@@ -1281,12 +1233,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use default (Pictures/DACX)'**
   String get settingsResetScreenshotDir;
-
-  /// No description provided for @menuSeekThumbnails.
-  ///
-  /// In en, this message translates to:
-  /// **'Seek thumbnails (uses more resources)'**
-  String get menuSeekThumbnails;
 
   /// No description provided for @menuQueueEmpty.
   ///

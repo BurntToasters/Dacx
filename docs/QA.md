@@ -5,7 +5,7 @@ Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer
 ## Playback
 
 - [ ] Open File / Open Folder / Open Playlist from UI (and macOS File menu where applicable)
-- [ ] Empty state: **Open URL** button and ⋯ more menu work **without** media; `Ctrl/Cmd+U` opens URL dialog
+- [ ] Empty state: ⋯ more menu **Open URL** works **without** media; `Ctrl/Cmd+U` opens URL dialog
 - [ ] Drag-and-drop a supported file onto the empty state
 - [ ] Play / pause / stop / seek / mute / volume
 - [ ] Cycle playback speed from transport chip and `[` / `]` / `\`; OS Now Playing / SMTC / MPRIS reflects rate
@@ -31,6 +31,12 @@ Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer
 
 ## Settings / updates
 
+- [ ] Escape from Settings returns to the player (same as back)
+- [ ] Escape closes the play queue drawer; a second Escape exits fullscreen when active (including OS/title-bar fullscreen)
+- [ ] Keybind capture: Escape cancels without saving a binding
+- [ ] Opening an unrecognized extension warns with a snackbar (playback may still be attempted)
+- [ ] Failed external audio/subtitle load shows a snackbar
+- [ ] Flatpak (if tested): dropping inaccessible files mentions sandbox / inaccessible paths
 - [ ] Appearance: theme, accent; Win/mac blur + opacity without Experimental master switch
 - [ ] Turning **Experimental off** on Win/mac does **not** clear Appearance blur / opacity
 - [ ] Hardware decode change applies without requiring app restart (copy matches behavior)
@@ -38,6 +44,7 @@ Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux packages**: prefer
 - [ ] Experimental section: visualizer + multi-audio mix (and Linux blur) appear when master is on
 - [ ] Seek thumbnails toggle lives under Playback settings (not the more menu)
 - [ ] Check for Updates opens a sensible path (self-update on Win MSI / macOS Applications; Linux package guidance)
+- [ ] Windows MSI self-update: `dacx-update-helper.exe` sits next to `dacx.exe`; after Apply, no `apply-update.ps1` / `spawn-watchdog.ps1` under `%LOCALAPPDATA%\Dacx\updates`; `%LOCALAPPDATA%\Dacx\updates\helper.log` shows wait → sha256 → msiexec
 - [ ] Flatpak (if tested): empty-state copy mentions picker; update guidance mentions reinstalling the `.flatpak`, not Flathub `flatpak update`
 
 ## Trust smoke

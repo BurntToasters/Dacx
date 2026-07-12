@@ -365,30 +365,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackDebugModeDisabled => 'Debug mode disabled.';
 
   @override
-  String get settingsShortcutOpenFile => 'Open File';
-
-  @override
-  String get settingsShortcutReopenLast => 'Reopen Last';
-
-  @override
-  String get settingsShortcutPlayPause => 'Play / Pause';
-
-  @override
-  String get settingsShortcutSeek => 'Seek ±5 seconds';
-
-  @override
-  String get settingsShortcutVolume => 'Volume ±5%';
-
-  @override
-  String get settingsShortcutMute => 'Mute / Unmute';
-
-  @override
-  String get settingsShortcutFullscreen => 'Toggle Fullscreen';
-
-  @override
-  String get settingsShortcutExitFullscreen => 'Exit Fullscreen';
-
-  @override
   String get snackCouldNotReadDroppedFile =>
       'Could not read dropped file path.';
 
@@ -682,9 +658,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsResetScreenshotDir => 'Use default (Pictures/DACX)';
-
-  @override
-  String get menuSeekThumbnails => 'Seek thumbnails (uses more resources)';
 
   @override
   String get menuQueueEmpty => 'Queue (empty)';

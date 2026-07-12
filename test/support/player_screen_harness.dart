@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +31,12 @@ abstract final class PlayerScreenHarness {
   static final List<MethodCall> windowManagerCalls = <MethodCall>[];
   static final List<MethodCall> windowMethodsCalls = <MethodCall>[];
 
+  /// Force the mocked window-manager fullscreen flag (without going through F).
+  @visibleForTesting
+  static void setFullscreenForTesting(bool value) {
+    _fullscreen = value;
+  }
+
   static const mediaSessionChannel = MethodChannel(
     'run.rosie.dacx/media_session',
   );
@@ -44,6 +53,9 @@ abstract final class PlayerScreenHarness {
 
   /// When non-null, [FilePicker.pickFile] returns the first path. Empty list = cancel.
   static List<String>? filePickerPaths;
+
+  /// When non-null, [FilePicker.saveFile] returns this path.
+  static String? filePickerSavePath;
 
   static Future<
     ({
@@ -73,6 +85,7 @@ abstract final class PlayerScreenHarness {
     windowManagerCalls.clear();
     windowMethodsCalls.clear();
     filePickerPaths = null;
+    filePickerSavePath = null;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
@@ -167,8 +180,20 @@ abstract final class PlayerScreenHarness {
               )
               .toList(growable: false);
         case 'dir':
-        case 'save':
           return null;
+        case 'save':
+          final path = filePickerSavePath;
+          if (path == null || path.isEmpty) return null;
+          final args = call.arguments;
+          if (args is Map) {
+            final raw = args['bytes'];
+            if (raw is Uint8List) {
+              File(path).writeAsBytesSync(raw);
+            } else if (raw is List) {
+              File(path).writeAsBytesSync(List<int>.from(raw));
+            }
+          }
+          return path;
         case 'pickFiles':
           final paths = filePickerPaths;
           if (paths == null || paths.isEmpty) return null;

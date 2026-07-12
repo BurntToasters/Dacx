@@ -134,7 +134,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late final IPlayerService _playerService;
   VideoController? _videoController;
@@ -316,6 +316,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'loop_mode': _settings.loopMode.name,
       },
     );
+
+    windowManager.addListener(this);
 
     // Apply saved playback settings.
     unawaited(
@@ -650,6 +652,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _isDisposed = true;
+    windowManager.removeListener(this);
     if (Platform.isMacOS) {
       const MethodChannel(
         InstanceModeService.windowMethodChannelName,
@@ -1629,6 +1632,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         detailsBuilder: () => {'extension': ext, 'path': normalizedValue},
         severity: DebugSeverity.warn,
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackUnsupportedFileType,
+            ),
+          ),
+        );
+      }
     }
     final gen = _playback.beginLoad();
     if (SourceLoadPreOpenPolicy.shouldAbortBeforeOpen(
@@ -1808,10 +1820,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         severity: DebugSeverity.warn,
       );
       if (mounted) {
+        final l10n = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context).snackCouldNotReadDroppedFile,
+              LinuxInstallDetector.isFlatpak
+                  ? l10n.snackDropPathInaccessible
+                  : l10n.snackCouldNotReadDroppedFile,
             ),
           ),
         );
@@ -1831,7 +1846,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            batch.skippedCount == 1
+            LinuxInstallDetector.isFlatpak
+                ? l10n.snackDropPathInaccessible
+                : batch.skippedCount == 1
                 ? l10n.snackSkippedUnreadableFile
                 : l10n.snackSkippedUnreadableFiles(batch.skippedCount),
           ),
@@ -2005,6 +2022,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final hk = HardwareKeyboard.instance;
     if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        !hk.isMetaPressed &&
+        !hk.isControlPressed &&
+        !hk.isShiftPressed &&
+        !hk.isAltPressed) {
+      return _handleEscapeBack();
+    }
+    if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.f1 ||
             (event.logicalKey == LogicalKeyboardKey.question) ||
             (event.logicalKey == LogicalKeyboardKey.slash &&
@@ -2074,9 +2099,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         unawaited(_toggleFullscreen());
         return KeyEventResult.handled;
       case PlayerShortcutAction.exitFullscreen:
-        _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
-        unawaited(_exitFullscreen());
-        return KeyEventResult.handled;
+        // Bare Escape is handled above; keep this for custom/accelerator paths.
+        return _handleEscapeBack();
       case PlayerShortcutAction.chapterNext:
         _log('shortcut_chapter_next', category: DebugLogCategory.ui);
         unawaited(_stepChapter(1));
@@ -2210,6 +2234,53 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   bool _fullscreenToggleInFlight = false;
+  bool _isFullscreen = false;
+
+  @override
+  void onWindowEnterFullScreen() {
+    _isFullscreen = true;
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    _isFullscreen = false;
+  }
+
+  /// Escape: close queue drawer → exit fullscreen → otherwise ignore.
+  KeyEventResult _handleEscapeBack() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold?.isEndDrawerOpen ?? false) {
+      _log('shortcut_close_queue_drawer', category: DebugLogCategory.ui);
+      scaffold!.closeEndDrawer();
+      return KeyEventResult.handled;
+    }
+    if (_isFullscreen) {
+      _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
+      unawaited(_exitFullscreen());
+      return KeyEventResult.handled;
+    }
+    // Cache can drift if fullscreen was entered outside our toggle path;
+    // reconcile asynchronously without swallowing Escape when windowed.
+    unawaited(_exitFullscreenIfActuallyFullscreen());
+    return KeyEventResult.ignored;
+  }
+
+  Future<void> _exitFullscreenIfActuallyFullscreen() async {
+    try {
+      if (!await windowManager.isFullScreen()) return;
+      if (!mounted) return;
+      _isFullscreen = true;
+      _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
+      await _exitFullscreen();
+    } catch (e) {
+      _log(
+        'fullscreen_reconcile_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
 
   Future<void> _toggleFullscreen() async {
     if (_fullscreenToggleInFlight) return;
@@ -2219,6 +2290,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await windowManager.setFullScreen(!enabled);
       // Verify state actually changed (Wayland / tiling WMs may reject).
       final actual = await windowManager.isFullScreen();
+      if (mounted) {
+        _isFullscreen = actual;
+      }
       if (actual == enabled && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2248,6 +2322,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       if (await windowManager.isFullScreen()) {
         await windowManager.setFullScreen(false);
+        if (mounted) {
+          _isFullscreen = false;
+        }
+      } else if (mounted) {
+        _isFullscreen = false;
       }
     } catch (e) {
       _log(
@@ -2818,12 +2897,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         onPressed: () => unawaited(_openPlaylistPicker()),
                         icon: const Icon(Icons.queue_music),
                         label: Text(l10n.buttonOpenPlaylist),
-                      ),
-                      FilledButton.tonalIcon(
-                        key: const Key('open-url-empty-button'),
-                        onPressed: () => unawaited(_openUrl()),
-                        icon: const Icon(Icons.link),
-                        label: Text(l10n.buttonOpenUrl),
                       ),
                       FilledButton.tonalIcon(
                         key: const Key('reopen-last-empty-button'),
@@ -3721,6 +3794,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _preCompactAlwaysOnTop = _settings.alwaysOnTop;
         if (await windowManager.isFullScreen()) {
           await windowManager.setFullScreen(false);
+          if (mounted) {
+            _isFullscreen = false;
+          }
         }
         await windowManager.setSize(_compactWindowSize);
         await windowManager.setAlwaysOnTop(true);
@@ -4179,6 +4255,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (ok) {
         _cacheTracksForCurrentLoad(_playerService.currentTracks);
         setState(() {});
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
       }
     } catch (e) {
       _log(
@@ -4188,6 +4268,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (mounted) {
         _showOsdMessage(l10n.osdExternalAudioFailed);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
       }
     }
   }
@@ -4219,6 +4302,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (ok) {
         _cacheTracksForCurrentLoad(_playerService.currentTracks);
         setState(() {});
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalSubtitleFailed)));
       }
     } catch (e) {
       _log(
@@ -4228,6 +4315,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (mounted) {
         _showOsdMessage(l10n.osdExternalSubtitleFailed);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalSubtitleFailed)));
       }
     }
   }
@@ -4620,8 +4710,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 autofocus: true,
                 focusNode: node,
                 onKeyEvent: (n, e) {
-                  if (e is KeyDownEvent &&
-                      e.logicalKey != LogicalKeyboardKey.controlLeft &&
+                  if (e is! KeyDownEvent) {
+                    return KeyEventResult.ignored;
+                  }
+                  if (e.logicalKey == LogicalKeyboardKey.escape) {
+                    Navigator.pop(ctx);
+                    return KeyEventResult.handled;
+                  }
+                  if (e.logicalKey != LogicalKeyboardKey.controlLeft &&
                       e.logicalKey != LogicalKeyboardKey.controlRight &&
                       e.logicalKey != LogicalKeyboardKey.shiftLeft &&
                       e.logicalKey != LogicalKeyboardKey.shiftRight &&

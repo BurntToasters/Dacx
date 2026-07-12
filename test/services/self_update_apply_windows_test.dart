@@ -52,6 +52,14 @@ String _sha256Hex(List<int> bytes) {
 
 void main() {
   group('SelfUpdateService.applyWindowsUpdate', () {
+    setUp(() {
+      SelfUpdateService.windowsUpdateHelperPathOverride =
+          r'C:\Program Files\Dacx\dacx-update-helper.exe';
+    });
+    tearDown(() {
+      SelfUpdateService.windowsUpdateHelperPathOverride = null;
+    });
+
     test('returns missingAsset when MSI asset is absent', () async {
       final svc = SelfUpdateService();
       final result = await svc.applyWindowsUpdate(
@@ -297,6 +305,48 @@ void main() {
 
       expect(result.outcome, SelfUpdateOutcome.signatureInvalid);
       expect(result.message, contains('unsigned'));
+    });
+
+    test('returns spawnFailed when update helper is missing', () async {
+      SelfUpdateService.windowsUpdateHelperPathOverride = '';
+      final msiBytes = utf8.encode('verified-msi');
+      final hash = _sha256Hex(msiBytes);
+      final manifestBytes = utf8.encode(
+        jsonEncode({
+          'version': '0.10.0',
+          'app': 'dacx',
+          'platform': 'windows-x64',
+          'released_at': DateTime.now().toUtc().toIso8601String(),
+          'assets': {'Dacx-Windows-x64.msi': hash},
+        }),
+      );
+
+      final svc = SelfUpdateService(
+        downloadTo: (url, outFile, {onProgress}) async {
+          await outFile.writeAsBytes(msiBytes);
+        },
+        fetchText: (url) async {
+          if (url.contains('SHA256SUMS')) {
+            return '$hash  Dacx-Windows-x64.msi\n';
+          }
+          if (url.contains('.sig')) return base64Encode([1, 2, 3]);
+          return '';
+        },
+        fetchBytes: (url) async => manifestBytes,
+        validateWindowsManifest:
+            ({
+              required manifestBytes,
+              required signatureBytes,
+              required version,
+              required assetName,
+            }) async => const SelfUpdateResult(SelfUpdateOutcome.spawned),
+      );
+
+      final result = await svc.applyWindowsUpdate(
+        _windowsUpdateInfo(assets: _fullWindowsAssets(msiHash: hash)),
+      );
+      expect(result.outcome, SelfUpdateOutcome.spawnFailed);
+      expect(result.message, contains('dacx-update-helper.exe'));
     });
 
     test('returns spawnFailed when watchdog spawn fails', () async {
