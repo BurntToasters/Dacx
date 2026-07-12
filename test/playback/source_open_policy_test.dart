@@ -33,6 +33,25 @@ void main() {
         isFalse,
       );
     });
+
+    test('playOverride wins over forcePlay and autoplay setting', () {
+      expect(
+        SourceOpenPolicy.shouldAutoplayOnOpen(
+          forcePlay: true,
+          autoPlaySetting: true,
+          playOverride: false,
+        ),
+        isFalse,
+      );
+      expect(
+        SourceOpenPolicy.shouldAutoplayOnOpen(
+          forcePlay: false,
+          autoPlaySetting: false,
+          playOverride: true,
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('SourceOpenPolicy.paramsFor', () {
@@ -43,6 +62,16 @@ void main() {
         autoPlaySetting: false,
       );
       expect(params.path, '/media/song.mp3');
+      expect(params.play, isFalse);
+    });
+
+    test('honors playOverride for session restore', () {
+      final params = SourceOpenPolicy.paramsFor(
+        normalizedPath: '/media/song.mp3',
+        forcePlay: false,
+        autoPlaySetting: true,
+        playOverride: false,
+      );
       expect(params.play, isFalse);
     });
   });

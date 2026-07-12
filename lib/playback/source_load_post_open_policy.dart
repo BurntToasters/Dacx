@@ -29,7 +29,7 @@ class SourceLoadPostOpenPlan {
 class SourceLoadPostOpenFollowUp {
   const SourceLoadPostOpenFollowUp({
     required this.shouldCacheTracks,
-    required this.shouldSyncSpectrum,
+    required this.shouldApplyAudioFilters,
     required this.shouldRefreshChapters,
     required this.shouldApplyMultiAudioMix,
     required this.shouldUpdateMediaSessionMetadata,
@@ -44,7 +44,7 @@ class SourceLoadPostOpenFollowUp {
   });
 
   final bool shouldCacheTracks;
-  final bool shouldSyncSpectrum;
+  final bool shouldApplyAudioFilters;
   final bool shouldRefreshChapters;
   final bool shouldApplyMultiAudioMix;
   final bool shouldUpdateMediaSessionMetadata;
@@ -59,7 +59,7 @@ class SourceLoadPostOpenFollowUp {
 
   static const SourceLoadPostOpenFollowUp noop = SourceLoadPostOpenFollowUp(
     shouldCacheTracks: false,
-    shouldSyncSpectrum: false,
+    shouldApplyAudioFilters: false,
     shouldRefreshChapters: false,
     shouldApplyMultiAudioMix: false,
     shouldUpdateMediaSessionMetadata: false,
@@ -129,7 +129,7 @@ abstract final class SourceLoadPostOpenPolicy {
     if (!plan.shouldProceed) return SourceLoadPostOpenFollowUp.noop;
     return SourceLoadPostOpenFollowUp(
       shouldCacheTracks: true,
-      shouldSyncSpectrum: true,
+      shouldApplyAudioFilters: true,
       shouldRefreshChapters: true,
       shouldApplyMultiAudioMix: true,
       shouldUpdateMediaSessionMetadata: true,

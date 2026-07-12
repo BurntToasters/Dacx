@@ -12,7 +12,6 @@ class PlayerSettingsSyncState {
     this.lastMediaSessionEnabled,
     this.lastPlaylistShuffle,
     this.lastMultiAudioMix,
-    this.lastAudioWaveformEnabled,
     this.lastEqEnabled,
     this.lastEqBands,
     this.lastHwDec,
@@ -24,7 +23,6 @@ class PlayerSettingsSyncState {
   final bool? lastMediaSessionEnabled;
   final bool? lastPlaylistShuffle;
   final bool? lastMultiAudioMix;
-  final bool? lastAudioWaveformEnabled;
   final bool? lastEqEnabled;
   final List<double>? lastEqBands;
   final String? lastHwDec;
@@ -36,7 +34,6 @@ class PlayerSettingsSyncState {
     bool? lastMediaSessionEnabled,
     bool? lastPlaylistShuffle,
     bool? lastMultiAudioMix,
-    bool? lastAudioWaveformEnabled,
     bool? lastEqEnabled,
     List<double>? lastEqBands,
     String? lastHwDec,
@@ -49,8 +46,6 @@ class PlayerSettingsSyncState {
           lastMediaSessionEnabled ?? this.lastMediaSessionEnabled,
       lastPlaylistShuffle: lastPlaylistShuffle ?? this.lastPlaylistShuffle,
       lastMultiAudioMix: lastMultiAudioMix ?? this.lastMultiAudioMix,
-      lastAudioWaveformEnabled:
-          lastAudioWaveformEnabled ?? this.lastAudioWaveformEnabled,
       lastEqEnabled: lastEqEnabled ?? this.lastEqEnabled,
       lastEqBands: lastEqBands ?? this.lastEqBands,
       lastHwDec: lastHwDec ?? this.lastHwDec,
@@ -122,13 +117,11 @@ abstract final class PlayerSettingsSync {
     }
 
     final audioChanged =
-        state.lastAudioWaveformEnabled != settings.audioWaveformEnabled ||
         state.lastEqEnabled != settings.eqEnabled ||
         !listEquals(state.lastEqBands, settings.eqBands);
     if (audioChanged) {
       audioFilters = true;
       next = next.copyWith(
-        lastAudioWaveformEnabled: settings.audioWaveformEnabled,
         lastEqEnabled: settings.eqEnabled,
         lastEqBands: List<double>.from(settings.eqBands),
       );

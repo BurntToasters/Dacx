@@ -26,36 +26,5 @@ void main() {
         isFalse,
       );
     });
-
-    test('showAudioSpectrum requires audio file and enabled setting', () async {
-      final settings = await settingsWith({
-        'experimental_features_enabled': true,
-        'audio_waveform_enabled': true,
-      });
-      expect(
-        PlayerUiPolicies.showAudioSpectrum(
-          settings: settings,
-          isAudioFile: true,
-        ),
-        isTrue,
-      );
-      expect(
-        PlayerUiPolicies.showAudioSpectrum(
-          settings: settings,
-          isAudioFile: false,
-        ),
-        isFalse,
-      );
-    });
-
-    test('spectrumHeight is 40 when visualizer enabled else 0', () async {
-      final off = await settingsWith({'audio_waveform_enabled': false});
-      final on = await settingsWith({
-        'experimental_features_enabled': true,
-        'audio_waveform_enabled': true,
-      });
-      expect(PlayerUiPolicies.spectrumHeight(off), 0.0);
-      expect(PlayerUiPolicies.spectrumHeight(on), 40.0);
-    });
   });
 }

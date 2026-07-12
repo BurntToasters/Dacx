@@ -24,7 +24,6 @@ void main() {
         lastMediaSessionEnabled: true,
         lastPlaylistShuffle: false,
         lastMultiAudioMix: false,
-        lastAudioWaveformEnabled: false,
         lastEqEnabled: false,
         lastEqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         lastHwDec: 'auto',
@@ -148,22 +147,6 @@ void main() {
 
       expect(delta.hwDec, 'no');
       expect(next.lastHwDec, 'no');
-    });
-
-    test('detects audio waveform-only change', () async {
-      final settings = await settingsWith({
-        'experimental_features_enabled': true,
-        'audio_waveform_enabled': true,
-      });
-      const state = PlayerSettingsSyncState(lastAudioWaveformEnabled: false);
-
-      final (delta, next) = PlayerSettingsSync.diff(
-        state: state,
-        settings: settings,
-      );
-
-      expect(delta.audioFilters, isTrue);
-      expect(next.lastAudioWaveformEnabled, isTrue);
     });
   });
 }

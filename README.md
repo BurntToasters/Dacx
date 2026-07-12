@@ -56,7 +56,6 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
 - External audio / subtitle track load from the more menu.
 - 10-band equalizer with presets.
 - Optional multi-audio-track mixing via `lavfi-complex` (Experimental Features; unstable).
-- Optional audio spectrum visualizer (Experimental Features; off by default).
 - Optional seek thumbnails (Playback settings; uses extra memory).
 - Window transparency / background blur on Windows and macOS (Appearance settings). Linux compositor blur remains experimental.
 - Resume playback from where you left off; session queue restore.
@@ -72,7 +71,7 @@ Dacx is a desktop music and video player focused on speed and low overhead, with
 - **macOS:** 15 (Sequoia) or newer.
 - **CPU arch:** Windows/Linux ship **x64** only (arm64 not a priority).
 - **Linux (recommended):** [AppImage](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.AppImage) + [AppManager](https://github.com/kem-a/AppManager) for desktop install and updates. deb/rpm/Flatpak/tar remain available; Flatpak is GitHub-sideload only (not Flathub — see [`docs/FLATHUB.md`](docs/FLATHUB.md)).
-- **Experimental Features:** Long-lived opt-in lane (off by default) for unfinished / in-progress ideas (visualizer, multi-audio mix, Linux compositor blur, …). Features may graduate to stable settings (like Win/mac blur) or stay experimental indefinitely — not a blocker for `1.0`.
+- **Experimental Features:** Long-lived opt-in lane (off by default) for unfinished / in-progress ideas (multi-audio mix, Linux compositor blur, …). Features may graduate to stable settings (like Win/mac blur) or stay experimental indefinitely — not a blocker for `1.0`.
 - **Windows portable ZIP:** No longer shipped; use the MSI.
 
 ## Development

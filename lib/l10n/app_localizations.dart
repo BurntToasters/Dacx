@@ -250,35 +250,11 @@ abstract class AppLocalizations {
   /// **'Publish playback to MPRIS / SMTC / Now Playing'**
   String get settingsMediaSessionSubtitle;
 
-  /// No description provided for @settingsAudioWaveform.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio spectrum visualizer'**
-  String get settingsAudioWaveform;
-
-  /// No description provided for @settingsAudioWaveformSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Real-time frequency bars while playing audio (Experimental)'**
-  String get settingsAudioWaveformSubtitle;
-
   /// No description provided for @settingsMultiAudioMixSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Play every audio track at once (Experimental; disables visualizer)'**
+  /// **'Play every audio track at once (Experimental)'**
   String get settingsMultiAudioMixSubtitle;
-
-  /// No description provided for @osdSpectrumUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio visualizer unavailable on this system'**
-  String get osdSpectrumUnavailable;
-
-  /// No description provided for @osdSpectrumDisabledForMix.
-  ///
-  /// In en, this message translates to:
-  /// **'Visualizer paused while mixing audio tracks'**
-  String get osdSpectrumDisabledForMix;
 
   /// No description provided for @settingsSeekPreview.
   ///
@@ -295,7 +271,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsExperimentalStoredPrefsHint.
   ///
   /// In en, this message translates to:
-  /// **'Stored experimental options (visualizer, mix, Linux compositor blur) turn back on when you re-enable this'**
+  /// **'Stored experimental options (mix, Linux compositor blur) turn back on when you re-enable this'**
   String get settingsExperimentalStoredPrefsHint;
 
   /// No description provided for @snackDropPathInaccessible.
