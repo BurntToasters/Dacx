@@ -182,7 +182,7 @@
 
   "emptyStateMessage": "Drop a file here or click Open",
   "emptyStateFlatpakMessage": "Use Open File or Open Folder; drag-and-drop only works for Music, Videos, Downloads, and Pictures",
-  "emptyStateTipReopenLast": "Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file",
+  "emptyStateTipReopenLast": "Tip: Reopen Last (Ctrl/Cmd+R) reopens your previous file; with Resume on, it continues near where you left off",
   "actionDismissTip": "Got it",
   "dropOverlayHint": "Drop media files to play or enqueue",
   "keyCaptureWaiting": "Waiting…",
@@ -244,7 +244,12 @@
       "minutes": { "type": "int" }
     }
   },
-  "snackSleepTimerSet": "Sleep timer set.",
+  "snackSleepTimerSet": "Sleep timer set for {minutes} minutes.",
+  "@snackSleepTimerSet": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
   "snackSleepTimerCancelled": "Sleep timer cancelled.",
   "snackSleepTimerFired": "Sleep timer ended; playback stopped.",
   "osdExternalAudioLoaded": "External audio loaded",

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'debug_log_service.dart';
 import 'idle_inhibit_service.dart';
+import '../playback/mpris_set_position_policy.dart';
 
 /// Cross-platform media-session bridge.
 ///
@@ -309,6 +310,12 @@ class _MprisAdapter extends MPRISService {
       _dispatch(MediaSessionCommand('seek_relative', offset ~/ 1000));
   @override
   Future<void> onSetPosition(String trackId, int position) async {
+    if (!MprisSetPositionPolicy.shouldSeek(
+      requestedTrackId: trackId,
+      currentTrackId: metadata.trackId,
+    )) {
+      return;
+    }
     _dispatch(MediaSessionCommand('seek', position ~/ 1000));
   }
 

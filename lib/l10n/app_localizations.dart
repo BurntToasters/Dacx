@@ -859,7 +859,7 @@ abstract class AppLocalizations {
   /// No description provided for @emptyStateTipReopenLast.
   ///
   /// In en, this message translates to:
-  /// **'Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file'**
+  /// **'Tip: Reopen Last (Ctrl/Cmd+R) reopens your previous file; with Resume on, it continues near where you left off'**
   String get emptyStateTipReopenLast;
 
   /// No description provided for @actionDismissTip.
@@ -1189,8 +1189,8 @@ abstract class AppLocalizations {
   /// No description provided for @snackSleepTimerSet.
   ///
   /// In en, this message translates to:
-  /// **'Sleep timer set.'**
-  String get snackSleepTimerSet;
+  /// **'Sleep timer set for {minutes} minutes.'**
+  String snackSleepTimerSet(int minutes);
 
   /// No description provided for @snackSleepTimerCancelled.
   ///

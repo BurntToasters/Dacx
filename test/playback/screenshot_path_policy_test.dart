@@ -41,9 +41,24 @@ void main() {
         directory: '/tmp/shots',
         baseName: 'clip',
         format: 'png',
-        timestamp: DateTime.utc(2026, 3, 21, 14, 30, 45),
+        timestamp: DateTime.utc(2026, 3, 21, 14, 30, 45, 123),
       );
-      expect(path, p.join('/tmp/shots', 'clip_2026-03-21T14-30-45.png'));
+      expect(path, p.join('/tmp/shots', 'clip_2026-03-21T14-30-45-123Z.png'));
     });
+
+    test(
+      'timestampToken keeps milliseconds to avoid same-second collisions',
+      () {
+        final a = ScreenshotPathPolicy.timestampToken(
+          DateTime.utc(2026, 3, 21, 14, 30, 45, 1),
+        );
+        final b = ScreenshotPathPolicy.timestampToken(
+          DateTime.utc(2026, 3, 21, 14, 30, 45, 2),
+        );
+        expect(a, isNot(b));
+        expect(a, contains('14-30-45-001'));
+        expect(b, contains('14-30-45-002'));
+      },
+    );
   });
 }

@@ -45,6 +45,8 @@ class HeadlessPlayerService implements IPlayerService {
   Uint8List? screenshotBytes;
   Duration _openDelay = Duration.zero;
   final Set<String> _failPropertyNames = <String>{};
+  bool failAudioTrack = false;
+  bool failSubtitleTrack = false;
 
   @visibleForTesting
   set openError(Object? value) => _openError = value;
@@ -174,9 +176,10 @@ class HeadlessPlayerService implements IPlayerService {
       List.unmodifiable(_playlistModeCalls);
 
   @override
-  Future<void> setAudioTrack(AudioTrack track) async {
-    if (_disposed) return;
+  Future<bool> setAudioTrack(AudioTrack track) async {
+    if (_disposed) return false;
     _audioTrackCalls.add(track);
+    if (failAudioTrack) return false;
     _trackCtrl.add(
       Track(
         audio: track,
@@ -184,6 +187,7 @@ class HeadlessPlayerService implements IPlayerService {
         subtitle: SubtitleTrack.no(),
       ),
     );
+    return true;
   }
 
   @visibleForTesting
@@ -193,9 +197,10 @@ class HeadlessPlayerService implements IPlayerService {
   Future<void> setVideoTrack(VideoTrack track) async {}
 
   @override
-  Future<void> setSubtitleTrack(SubtitleTrack track) async {
-    if (_disposed) return;
+  Future<bool> setSubtitleTrack(SubtitleTrack track) async {
+    if (_disposed) return false;
     _subtitleTrackCalls.add(track);
+    if (failSubtitleTrack) return false;
     _trackCtrl.add(
       Track(
         audio: const AudioTrack('auto', 'auto', null),
@@ -203,6 +208,7 @@ class HeadlessPlayerService implements IPlayerService {
         subtitle: track,
       ),
     );
+    return true;
   }
 
   @visibleForTesting

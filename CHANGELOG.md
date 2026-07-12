@@ -5,11 +5,11 @@
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-arm64.AppImage) --> |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-arm64.deb) --> |
-| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-aarch64.rpm) --> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-aarch64.flatpak) --> |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.5/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-arm64.AppImage) --> |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-arm64.deb) --> |
+| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-aarch64.rpm) --> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-aarch64.flatpak) --> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -18,9 +18,21 @@
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
+## Changes in `v0.11.0-beta.6 (RC1):`
+- **Change:** Quit no longer restores the last session queue; relaunch opens the empty home state. (Per-file resume position when reopening a file is unchanged.)
+- **Fix:** Failed experimental multi-audio mix now shows OSD + snackbar and turns the toggle back off (no silent “on but not mixing”).
+- **Fix:** Hardened media-session album-art export against stale screenshot races and cleans up superseded temporary artwork.
+- **Fix:** Verify `lavfi-complex` writes, including clears, so unsupported native mix graphs fail visibly instead of appearing enabled.
+- **Fix:** Mix-triggered reloads preserve the saved playback position without applying per-file resume a second time.
+- **Fix:** MPRIS `SetPosition` ignores stale/mismatched track IDs; M3U export/import round-trips query URLs; audio/subtitle track switches no longer show success OSD after a failed set; screenshot filenames keep milliseconds to avoid same-second overwrites.
+- **Fix:** Sleep timer snack includes minutes and the ⋯ menu countdown ticks live; periodic resume persist skips while paused; mini-player restores a previously maximized window; Flatpak drop snacks no longer blame the sandbox for every skipped path.
+- **UI:** Empty-state tip mentions per-file Resume; accent color swatches gain tooltips.
+- **Docs:** Clarified per-file resume, empty relaunch behavior, Flatpak sideload status, and the Ed25519-first Windows signing model.
+- **Docs:** Expanded `docs/QA.md` for per-file resume, Reopen Last + resume, media-session artwork, and mix failure feedback.
+- **Docs/PKG:** Version sync checks `package-lock.json` and Flatpak `# x-version:`; Linux tray build dep (`libayatana-appindicator3-dev`) in setup/CI; deb/rpm runtime Depends for appindicator; `NATIVE_DEPENDENCIES.md` clarifies bundled vs system libmpv.
+
 ## Changes in `v0.11.0-beta.5:`
 - **Misc:** Removed the experimental audio spectrum visualizer (too heavy for the current packaging story; see `docs/ideas/visualizer.md` for a future reintroduction path).
-- **Fix:** Pausing then quitting no longer auto-resumes on next launch; the queue snapshot stores play/pause and session restore honors it.
 
 ## Changes in `v0.11.0-beta.4:`
 - **Ver:** Bumped version to `v0.11.0-beta.4`.
@@ -87,8 +99,8 @@ The UI has been revamped to provide a way better user experience and UI moving f
   * **Misc:** Color scheme improvements, animation updates, general cleanup.
 
 * **NEW - Linux AppImage and Flatpak:** Added AppImage and Flatpak support!
-  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.AppImage); portable, no installation needed.
-  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.10.1-beta.1/Dacx-Linux-x86_64.flatpak); sandboxed package for app-store distributions (Flathub support planned).
+  * **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0/Dacx-Linux-x86_64.AppImage); portable, no installation needed.
+  * **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.9.0/Dacx-Linux-x86_64.flatpak); sandboxed package for GitHub sideload (not Flathub).
 - **NEW - Localization completeness:** Nearly all user-facing strings are now localized via `flutter gen-l10n`. Covered: transport control tooltips; folder + URL button and dialog labels; media info metadata labels; folder scan and queue-truncation error feedback; update progress dialog (installing/progress/failure states and all error-outcome messages); post-update result snackbars; debug log panel UI; accessibility `Semantics` labels (seek bar, accent color picker, mini-player exit button); keyboard shortcut action names; equalizer preset labels; chapter and track fallback labels. Previously orphaned `snackDebugLogCopied`/`snackDebugLogCleared` keys are now used.
 - **Testing:** 352+ tests passing. Code verified clean with zero lint issues.
 - **Codebase:** All l10n keys auto-generated via `flutter gen-l10n`.

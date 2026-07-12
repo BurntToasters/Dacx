@@ -22,6 +22,19 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkgVersion ?? "")) {
   failures.push(`package.json version invalid: "${pkgVersion}"`);
 }
 
+const lock = JSON.parse(readText("package-lock.json"));
+if (lock.version !== pkgVersion) {
+  failures.push(
+    `version drift: package.json=${pkgVersion} package-lock.json=${lock.version}`,
+  );
+}
+const lockRoot = lock.packages?.[""]?.version;
+if (lockRoot !== pkgVersion) {
+  failures.push(
+    `version drift: package.json=${pkgVersion} package-lock.json packages[""]=${lockRoot}`,
+  );
+}
+
 function semverToDebianVersion(semver) {
   return semver.split("+")[0].replace("-", "~");
 }
@@ -57,6 +70,19 @@ if (fs.existsSync(path.join(root, metainfoPath))) {
   if (!meta.includes(`version="${pkgVersion}"`)) {
     failures.push(
       `${metainfoPath} has no <release version="${pkgVersion}"> entry`,
+    );
+  }
+}
+
+const flatpakPath = "flatpak/run.rosie.dacx.yaml";
+if (fs.existsSync(path.join(root, flatpakPath))) {
+  const flatpak = readText(flatpakPath);
+  const m = flatpak.match(/^# x-version:\s*(\S+)\s*$/m);
+  if (!m) {
+    failures.push(`${flatpakPath} missing # x-version: line`);
+  } else if (m[1] !== pkgVersion) {
+    failures.push(
+      `version drift: package.json=${pkgVersion} ${flatpakPath}=${m[1]}`,
     );
   }
 }

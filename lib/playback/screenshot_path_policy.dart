@@ -23,7 +23,10 @@ abstract final class ScreenshotPathPolicy {
   }
 
   static String timestampToken(DateTime timestamp) {
-    return timestamp.toIso8601String().replaceAll(':', '-').split('.').first;
+    return timestamp
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .replaceAll('.', '-');
   }
 
   static String buildOutputPath({

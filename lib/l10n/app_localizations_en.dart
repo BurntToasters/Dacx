@@ -460,7 +460,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emptyStateTipReopenLast =>
-      'Tip: Reopen Last (or Ctrl/Cmd+R) restores your previous file';
+      'Tip: Reopen Last (Ctrl/Cmd+R) reopens your previous file; with Resume on, it continues near where you left off';
 
   @override
   String get actionDismissTip => 'Got it';
@@ -635,7 +635,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get snackSleepTimerSet => 'Sleep timer set.';
+  String snackSleepTimerSet(int minutes) {
+    return 'Sleep timer set for $minutes minutes.';
+  }
 
   @override
   String get snackSleepTimerCancelled => 'Sleep timer cancelled.';

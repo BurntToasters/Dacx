@@ -13,6 +13,8 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] Cycle playback speed from transport chip and `[` / `]` / `\`; OS Now Playing / SMTC / MPRIS reflects rate
 - [ ] Loop modes; queue prev/next wraps or stops as expected (tooltips: Shift+P / Shift+N)
 - [ ] Reopen Last restores the previous file (Ctrl/Cmd+R)
+- [ ] With **Resume from last position** on: seek into a file, quit or stop, reopen the same file (or Reopen Last) and land near the saved position
+- [ ] With resume on: seek near the end, reopen; resume should clear / start near the beginning (no stuck near-end seek)
 - [ ] Load external audio / subtitle from the more menu when media is open
 - [ ] Sleep timer (⋯ menu): set 15/30/45/60 → playback stops when it fires; Off cancels
 
@@ -22,12 +24,12 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] Shuffle toggle on drawer **and** more menu (OS shuffle stays in sync); quit/relaunch keeps preference
 - [ ] Clear queue
 - [ ] Save Playlist exports `.m3u`; re-open that playlist and a `.pls`
-- [ ] Quit and relaunch: queue + index restore (missing files pruned)
-- [ ] Pause, quit, relaunch: media reloads paused (does not auto-resume)
+- [ ] Quit and relaunch shows empty home (no auto-loaded queue/media)
 
 ## OS chrome
 
 - [ ] Media session / Now Playing / SMTC / MPRIS shows title + artwork and responds to play/pause
+- [ ] Media-session artwork: play a file with embedded cover art; OS chrome shows art (not blank/stale from a prior track)
 - [ ] Display does not sleep while video plays (idle inhibit); leave playing ≥1-2 min
 - [ ] Windows: Jump List recents + taskbar progress while playing
 - [ ] macOS: File menu + Dock menu New Window / Open; Open Recent → Clear Menu
@@ -47,6 +49,7 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] Hardware decode change applies without requiring app restart (copy matches behavior)
 - [ ] Settings → Keyboard shortcuts opens the full editable F1 keybinds dialog
 - [ ] Experimental section: multi-audio mix (and Linux blur) appear when master is on (WIP lane; expected unstable)
+- [ ] Experimental mix: when enable fails, OSD/snack explains it and the toggle turns back off
 - [ ] Seek thumbnails toggle lives under Playback settings (not the more menu)
 - [ ] Check for Updates opens a sensible path (self-update on Win MSI / macOS Applications; Linux package guidance)
 - [ ] Windows MSI self-update burn-in: `dacx-update-helper.exe` next to `dacx.exe`; after Apply, no `.ps1` under `%LOCALAPPDATA%\Dacx\updates`; `helper.log` shows wait → sha256 → msiexec → `relaunched …\dacx.exe`; app returns like macOS update & restart

@@ -49,9 +49,6 @@ class SettingsService extends ChangeNotifier {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
     _persistResumePositionsToPrefs();
-    _playlistPersistTimer?.cancel();
-    _playlistPersistTimer = null;
-    _persistPlaylistQueueToPrefs();
     super.dispose();
   }
 
@@ -62,22 +59,12 @@ class SettingsService extends ChangeNotifier {
     _persistResumePositionsToPrefs();
   }
 
-  /// Writes any pending queue snapshot to disk immediately.
-  void flushPlaylistQueue() {
-    _playlistPersistTimer?.cancel();
-    _playlistPersistTimer = null;
-    _persistPlaylistQueueToPrefs();
-  }
-
   List<double>? _eqBandsCache;
   Map<String, List<String>>? _keybindsCache;
   Map<String, _ResumeEntry>? _resumePositionsCache;
   Timer? _resumePersistTimer;
   int _resumeAccessCounter = 0;
   static const Duration _resumePersistDebounce = Duration(milliseconds: 800);
-  PlaylistQueueSnapshot? _playlistQueueCache;
-  Timer? _playlistPersistTimer;
-  static const Duration _playlistPersistDebounce = Duration(milliseconds: 500);
 
   /// Bump this and append a new entry to [_migrations] whenever a stored
   /// settings key is added/removed/renamed/retyped in a way that needs to
@@ -86,7 +73,7 @@ class SettingsService extends ChangeNotifier {
   /// Each migration is a synchronous function `(prefs) => void` that takes
   /// the schema from version `i` to version `i + 1`, where `i` is the
   /// migration's index in [_migrations].
-  static const int currentSchemaVersion = 3;
+  static const int currentSchemaVersion = 4;
   static const String _kSchemaVersion = 'settings_schema_version';
 
   /// `_migrations[i]` upgrades from version `i` to version `i + 1`.
@@ -128,9 +115,13 @@ class SettingsService extends ChangeNotifier {
             prefs.remove('resume_positions_v1');
           }
         },
-        // 2 -> 3: introduce playlist_queue_v1 (no transform; stamps schema so
-        // restores only run on installs that understand the key).
+        // 2 -> 3: historically introduced playlist_queue_v1 (no transform;
+        // stamped schema only). Queue persistence was removed in 3 -> 4.
         (prefs) {},
+        // 3 -> 4: drop session queue restore; remove playlist_queue_v1.
+        (prefs) {
+          prefs.remove('playlist_queue_v1');
+        },
       ];
 
   void _runMigrationsIfNeeded() {
@@ -195,7 +186,6 @@ class SettingsService extends ChangeNotifier {
   static const _kResumeEnabled = 'resume_playback_enabled';
   static const _kResumePositions = 'resume_positions_v2';
   static const _kPlaylistShuffle = 'playlist_shuffle';
-  static const _kPlaylistQueue = 'playlist_queue_v1';
   static const _kAllowMultipleInstances = 'allow_multiple_instances';
   static const _kEmptyStateTipDismissed = 'empty_state_tip_dismissed';
 
@@ -242,7 +232,6 @@ class SettingsService extends ChangeNotifier {
     _kResumeEnabled,
     _kResumePositions,
     _kPlaylistShuffle,
-    _kPlaylistQueue,
     _kAllowMultipleInstances,
     _kEmptyStateTipDismissed,
   };
@@ -817,116 +806,6 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Last session queue snapshot (paths + index). Missing local files are
-  /// pruned by the caller after restore.
-  PlaylistQueueSnapshot readPlaylistQueue() {
-    final cached = _playlistQueueCache;
-    if (cached != null) return cached;
-    final raw = _prefs.getString(_kPlaylistQueue);
-    if (raw == null || raw.isEmpty) {
-      const empty = PlaylistQueueSnapshot(items: [], index: -1);
-      _playlistQueueCache = empty;
-      return empty;
-    }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) {
-        const empty = PlaylistQueueSnapshot(items: [], index: -1);
-        _playlistQueueCache = empty;
-        return empty;
-      }
-      final rawItems = decoded['items'];
-      final items = <String>[];
-      if (rawItems is List) {
-        for (final entry in rawItems) {
-          if (entry is! String) continue;
-          final trimmed = entry.trim();
-          if (!_isSafeFilePath(trimmed)) continue;
-          items.add(trimmed);
-          if (items.length >= PlaylistQueueSnapshot.maxItems) break;
-        }
-      }
-      var index = -1;
-      final rawIndex = decoded['index'];
-      if (rawIndex is int) index = rawIndex;
-      if (items.isEmpty) {
-        index = -1;
-      } else {
-        index = index.clamp(0, items.length - 1);
-      }
-      final wasPlaying = decoded['was_playing'] == true;
-      final snap = PlaylistQueueSnapshot(
-        items: items,
-        index: index,
-        wasPlaying: wasPlaying,
-      );
-      _playlistQueueCache = snap;
-      return snap;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Dacx: playlist queue decode failed: $e');
-      }
-      const empty = PlaylistQueueSnapshot(items: [], index: -1);
-      _playlistQueueCache = empty;
-      return empty;
-    }
-  }
-
-  /// Schedules a debounced write of the live queue.
-  void savePlaylistQueue(
-    List<PlayableSource> sources,
-    int index, {
-    bool wasPlaying = false,
-  }) {
-    final items = <String>[];
-    for (final source in sources) {
-      final value = source.value.trim();
-      if (!_isSafeFilePath(value)) continue;
-      items.add(value);
-      if (items.length >= PlaylistQueueSnapshot.maxItems) break;
-    }
-    final snap = PlaylistQueueSnapshot(
-      items: items,
-      index: items.isEmpty ? -1 : index.clamp(0, items.length - 1),
-      wasPlaying: wasPlaying && items.isNotEmpty,
-    );
-    _playlistQueueCache = snap;
-    _schedulePlaylistPersist();
-  }
-
-  void clearPlaylistQueue() {
-    _playlistQueueCache = const PlaylistQueueSnapshot(items: [], index: -1);
-    _playlistPersistTimer?.cancel();
-    _playlistPersistTimer = null;
-    _prefs.remove(_kPlaylistQueue);
-  }
-
-  void _schedulePlaylistPersist() {
-    _playlistPersistTimer?.cancel();
-    _playlistPersistTimer = Timer(_playlistPersistDebounce, () {
-      _playlistPersistTimer = null;
-      _persistPlaylistQueueToPrefs();
-    });
-  }
-
-  void _persistPlaylistQueueToPrefs() {
-    final snap =
-        _playlistQueueCache ??
-        const PlaylistQueueSnapshot(items: [], index: -1);
-    if (snap.items.isEmpty) {
-      _prefs.remove(_kPlaylistQueue);
-      return;
-    }
-    _prefs.setString(
-      _kPlaylistQueue,
-      jsonEncode({
-        'items': snap.items,
-        'index': snap.index,
-        'was_playing': snap.wasPlaying,
-      }),
-    );
-  }
-
   bool get allowMultipleInstances =>
       _prefs.getBool(_kAllowMultipleInstances) ?? false;
   set allowMultipleInstances(bool v) {
@@ -1124,25 +1003,4 @@ class _ResumeEntry {
   final int positionMs;
   final int lastAccessMs;
   const _ResumeEntry({required this.positionMs, required this.lastAccessMs});
-}
-
-/// Disk snapshot of the play queue (paths / URLs + current index).
-class PlaylistQueueSnapshot {
-  static const int maxItems = 1000;
-
-  const PlaylistQueueSnapshot({
-    required this.items,
-    required this.index,
-    this.wasPlaying = false,
-  });
-
-  final List<String> items;
-  final int index;
-
-  /// Whether playback was active when the queue was last saved.
-  /// Used so a paused quit does not auto-resume on next launch.
-  final bool wasPlaying;
-
-  bool get isEmpty => items.isEmpty;
-  bool get isNotEmpty => items.isNotEmpty;
 }

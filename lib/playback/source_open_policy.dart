@@ -23,7 +23,7 @@ abstract final class SourceOpenPolicy {
     );
   }
 
-  /// [playOverride] wins when set (session restore after a paused quit).
+  /// [playOverride] wins when set (generic open override).
   /// Otherwise [forcePlay] or the autoplay setting decide.
   static bool shouldAutoplayOnOpen({
     required bool forcePlay,

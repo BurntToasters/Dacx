@@ -83,7 +83,6 @@ const _seekStepBack = Duration(seconds: -5);
 const _osdHideDuration = Duration(seconds: 3);
 const _updateSnackbarDuration = Duration(seconds: 10);
 const _snackbarShortDuration = Duration(seconds: 2);
-const _resumeStartThreshold = Duration(seconds: 1);
 const _settingsFwdTransition = Duration(milliseconds: 340);
 const _settingsRevTransition = Duration(milliseconds: 280);
 const _sheetTransitionDuration = Duration(milliseconds: 180);
@@ -167,6 +166,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Size? _preCompactSize;
   Offset? _preCompactPos;
   bool _preCompactAlwaysOnTop = false;
+  bool _preCompactMaximized = false;
   static const Size _compactWindowSize = Size(480, 320);
 
   // Resume-position bookkeeping.
@@ -175,6 +175,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   String? _activeBookmarkToken;
   String? _mediaDisplayTitle;
   String? _mediaDisplayArtist;
+  int _mediaSessionArtExportGen = 0;
+  String? _lastMediaSessionArtUri;
 
   void _log(
     String event, {
@@ -291,7 +293,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
     );
     _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
-    _playlist.addListener(_onPlaylistChanged);
     _player.volume = _settings.volume;
     _settingsSyncState = PlayerSettingsSyncState(
       lastSpeed: _settings.speed,
@@ -349,7 +350,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (dur.inMilliseconds > 0 && _settings.mediaSessionEnabled) {
           final source = _player.currentSource;
           if (source != null) {
-            unawaited(_pushMediaSessionMetadata(source, duration: dur));
+            unawaited(
+              _pushMediaSessionMetadata(
+                source,
+                duration: dur,
+                exportArt: false,
+              ),
+            );
           }
         }
         if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
@@ -362,13 +369,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _playerService.playingStream.listen((playing) {
         if (!mounted || _isDisposed) return;
         setState(() => _player.isPlaying = playing);
-        // Keep queue snapshot in sync so a paused quit does not resume later.
-        if (_playlist.isNotEmpty) {
-          _persistPlaylistQueue(wasPlaying: playing);
-          if (!playing) {
-            _settings.flushPlaylistQueue();
-          }
-        }
         unawaited(_idleInhibit.setPlaying(playing));
         if (!playing) {
           unawaited(WindowsShellService.clearTaskbarProgress());
@@ -511,7 +511,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     // Periodic resume-position saver (every 5s while playing).
     _resumeSaveTimer = Timer.periodic(
       _resumeSaveInterval,
-      (_) => _persistResumePosition(),
+      (_) => _persistResumePosition(requirePlaying: true),
     );
 
     _openFileBridge = OpenFileBridge(
@@ -596,75 +596,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         unawaited(_loadSource(pendingLoad));
       });
     }
-
-    final shouldRestoreQueue =
-        widget.initialFile == null &&
-        (widget.initialPlaylistSources == null ||
-            widget.initialPlaylistSources!.isEmpty) &&
-        (widget.initialDropPaths == null || widget.initialDropPaths!.isEmpty) &&
-        widget.initialPendingLoad == null &&
-        widget.initialLoadedSource == null;
-    if (shouldRestoreQueue) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_restorePersistedQueue());
-      });
-    }
-  }
-
-  void _onPlaylistChanged() {
-    if (_isDisposed) return;
-    _persistPlaylistQueue(wasPlaying: _player.isPlaying);
-  }
-
-  void _persistPlaylistQueue({required bool wasPlaying}) {
-    _settings.savePlaylistQueue(
-      _playlist.items,
-      _playlist.index,
-      wasPlaying: wasPlaying,
-    );
-  }
-
-  Future<void> _restorePersistedQueue() async {
-    if (_isDisposed || !mounted) return;
-    final snap = _settings.readPlaylistQueue();
-    if (snap.isEmpty) return;
-    final sources = <PlayableSource>[];
-    for (final raw in snap.items) {
-      final source = PlayableSource.fromStored(raw);
-      if (source != null) sources.add(source);
-    }
-    if (sources.isEmpty) {
-      _settings.clearPlaylistQueue();
-      return;
-    }
-    _playlist.replaceSources(sources, startIndex: snap.index);
-    final removed = await _playlist.removeMissingFiles();
-    if (_isDisposed || !mounted) return;
-    if (_playlist.isEmpty) {
-      _settings.clearPlaylistQueue();
-      return;
-    }
-    _persistPlaylistQueue(wasPlaying: snap.wasPlaying);
-    if (removed > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context).snackQueueRemovedMissing(removed),
-          ),
-        ),
-      );
-    }
-    final current = _playlist.current;
-    if (current != null && _player.currentSource == null) {
-      // Honor paused quit: do not autoplay when the user left paused.
-      unawaited(
-        _loadSource(
-          current,
-          syncPlaylist: false,
-          playOverride: snap.wasPlaying,
-        ),
-      );
-    }
   }
 
   @override
@@ -681,9 +612,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _persistResumePosition();
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
-    _playlist.removeListener(_onPlaylistChanged);
-    _persistPlaylistQueue(wasPlaying: _player.isPlaying);
-    _settings.flushPlaylistQueue();
     _openFileBridge.dispose();
     _subscriptions.cancelAll();
     _sleepTimer.dispose();
@@ -730,7 +658,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(l10n.snackSleepTimerSet),
+        content: Text(l10n.snackSleepTimerSet(minutes)),
         duration: _snackbarShortDuration,
       ),
     );
@@ -1508,6 +1436,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     PlayableSource source, {
     bool forcePlay = false,
     bool syncPlaylist = true,
+    bool applyResume = true,
     bool? playOverride,
   }) {
     return _playback.loadQueue.enqueue(
@@ -1515,6 +1444,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         source,
         forcePlay: forcePlay,
         syncPlaylist: syncPlaylist,
+        applyResume: applyResume,
         playOverride: playOverride,
       ),
       onError: (Object e, StackTrace st) {
@@ -1530,6 +1460,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _pushMediaSessionMetadata(
     PlayableSource source, {
     Duration? duration,
+    bool exportArt = true,
   }) async {
     if (!_settings.mediaSessionEnabled || _isDisposed) return;
     String? artist;
@@ -1543,8 +1474,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       // Metadata is best-effort; title falls back to display name.
     }
     String? artUri;
-    if (_player.hasAlbumArtTrack) {
+    if (exportArt && _player.hasAlbumArtTrack) {
       artUri = await _exportAlbumArtForMediaSession();
+    } else if (!exportArt) {
+      artUri = _lastMediaSessionArtUri;
     }
     final title = (metaTitle != null && metaTitle.trim().isNotEmpty)
         ? metaTitle.trim()
@@ -1569,8 +1502,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<String?> _exportAlbumArtForMediaSession() async {
+    final exportGen = ++_mediaSessionArtExportGen;
     try {
       final bytes = await _playerService.screenshot(format: 'image/jpeg');
+      if (exportGen != _mediaSessionArtExportGen) return null;
       if (bytes == null || bytes.isEmpty) return null;
       final dir = Directory(
         p.join(Directory.systemTemp.path, 'dacx-media-session'),
@@ -1578,9 +1513,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (!dir.existsSync()) {
         dir.createSync(recursive: true);
       }
-      final file = File(p.join(dir.path, 'artwork.jpg'));
+      if (exportGen != _mediaSessionArtExportGen) return null;
+      final file = File(p.join(dir.path, 'artwork-$exportGen.jpg'));
       await file.writeAsBytes(bytes, flush: true);
-      return file.uri.toString();
+      if (exportGen != _mediaSessionArtExportGen) {
+        try {
+          await file.delete();
+        } catch (_) {
+          // Best-effort cleanup for an obsolete artwork export.
+        }
+        return null;
+      }
+      final uri = file.uri.toString();
+      _lastMediaSessionArtUri = uri;
+      for (final older in dir.listSync().whereType<File>().where(
+        (candidate) =>
+            candidate.path != file.path &&
+            p.basename(candidate.path).startsWith('artwork-') &&
+            p.basename(candidate.path).endsWith('.jpg'),
+      )) {
+        try {
+          await older.delete();
+        } catch (_) {
+          // Artwork cleanup is best-effort.
+        }
+      }
+      return uri;
     } catch (e) {
       _log(
         'media_session_art_export_failed',
@@ -1641,6 +1599,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     PlayableSource source, {
     bool forcePlay = false,
     bool syncPlaylist = true,
+    bool applyResume = true,
     bool? playOverride,
   }) async {
     if (_isDisposed) return;
@@ -1702,6 +1661,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
     }
     final gen = _playback.beginLoad();
+    _mediaSessionArtExportGen++;
+    _lastMediaSessionArtUri = null;
     if (SourceLoadPreOpenPolicy.shouldAbortBeforeOpen(
       mounted: mounted,
       isDisposed: _isDisposed,
@@ -1832,7 +1793,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (followUp.shouldApplyMultiAudioMix) {
       unawaited(_applyMultiAudioMix());
     }
-    if (followUp.shouldApplyResume) {
+    if (followUp.shouldApplyResume && applyResume) {
       unawaited(_maybeApplyResume(normalizedValue));
     }
     if (followUp.shouldUpdateMediaSessionMetadata) {
@@ -1881,13 +1842,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (mounted) {
         final l10n = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              LinuxInstallDetector.isFlatpak
-                  ? l10n.snackDropPathInaccessible
-                  : l10n.snackCouldNotReadDroppedFile,
-            ),
-          ),
+          SnackBar(content: Text(l10n.snackCouldNotReadDroppedFile)),
         );
       }
       return;
@@ -1905,9 +1860,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            LinuxInstallDetector.isFlatpak
-                ? l10n.snackDropPathInaccessible
-                : batch.skippedCount == 1
+            batch.skippedCount == 1
                 ? l10n.snackSkippedUnreadableFile
                 : l10n.snackSkippedUnreadableFiles(batch.skippedCount),
           ),
@@ -3227,7 +3180,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           listLength: list.length,
         )];
     await _disableMixForManualTrackSelection();
-    await _playerService.setAudioTrack(next);
+    final ok = await _playerService.setAudioTrack(next);
+    if (!ok) return;
     _showOsdMessage(
       l10n.osdAudioTrack(_trackLabel(next.title, next.language, next.id)),
     );
@@ -3249,7 +3203,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           currentIndex: idx,
           listLength: list.length,
         )];
-    await _playerService.setSubtitleTrack(next);
+    final ok = await _playerService.setSubtitleTrack(next);
+    if (!ok) return;
     _player.subtitlesVisible = next.id != 'no';
     _showOsdMessage(
       next.id == 'no'
@@ -3265,7 +3220,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final tracks = _player.currentTracks;
     if (tracks == null) return;
     if (_player.subtitlesVisible) {
-      await _playerService.setSubtitleTrack(SubtitleTrack.no());
+      final ok = await _playerService.setSubtitleTrack(SubtitleTrack.no());
+      if (!ok) return;
       _player.subtitlesVisible = false;
       _showOsdMessage(l10n.osdSubtitlesOff);
     } else {
@@ -3273,7 +3229,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         (t) => t.id != 'no' && t.id != 'auto',
         orElse: SubtitleTrack.auto,
       );
-      await _playerService.setSubtitleTrack(candidate);
+      final ok = await _playerService.setSubtitleTrack(candidate);
+      if (!ok) return;
       _player.subtitlesVisible = true;
       _showOsdMessage(
         l10n.osdSubtitlesTrack(
@@ -3319,7 +3276,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       delta: delta,
       chapterCount: _player.chapters.length,
     );
-    await _playerService.setChapter(next);
+    final ok = await _playerService.setChapter(next);
+    if (!ok) return;
     _showOsdMessage(l10n.osdChapter(_player.chapters[next].title));
   }
 
@@ -3444,10 +3402,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // ── Multi-audio mix ───────────────────────────────────────
 
-  Future<void> _applyMultiAudioMix({bool announce = false}) async {
+  /// Applies or clears the multi-audio `lavfi-complex` graph.
+  ///
+  /// Returns `true` when the requested state was applied (including a clean
+  /// disable). Returns `false` when enable was requested but failed; in that
+  /// case the Experimental mix toggle is turned back off and the user gets
+  /// OSD + snackbar feedback.
+  Future<bool> _applyMultiAudioMix({bool announce = false}) async {
     final l10n = AppLocalizations.of(context);
     final tracks = _player.currentTracks;
-    if (tracks == null) return;
+    // No open media yet; keep the preference for the next multi-track file.
+    if (tracks == null) return true;
     final ids = tracks.audio
         .where((t) => t.id != 'auto' && t.id != 'no')
         .map((t) => t.id)
@@ -3462,7 +3427,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           _showOsdMessage(l10n.osdAudioMixOff);
         }
       }
-      return;
+      return true;
     }
     // Validate IDs are numeric; mpv's lavfi-complex labels are [aid<N>]
     // where <N> must be the integer track-id reported in track-list.
@@ -3473,10 +3438,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         message: 'non-numeric audio track ids: ${invalid.join(',')}',
         severity: DebugSeverity.warn,
       );
-      if (announce) {
-        _showOsdMessage(l10n.osdAudioMixUnsupportedIds);
-      }
-      return;
+      await _revertMultiAudioMixFailure(l10n.osdAudioMixUnsupportedIds);
+      return false;
     }
     final videoIds = tracks.video
         .where((t) => t.id != 'auto' && t.id != 'no')
@@ -3502,13 +3465,24 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (announce || !wasActive) {
         _showOsdMessage(l10n.osdAudioMixActive(ids.length));
       }
-    } else {
-      _player.mixActive = false;
-      _log('multi_audio_mix_setproperty_failed', severity: DebugSeverity.warn);
-      if (announce) {
-        _showOsdMessage(l10n.osdAudioMixFailed);
-      }
+      return true;
     }
+    _log('multi_audio_mix_setproperty_failed', severity: DebugSeverity.warn);
+    await _revertMultiAudioMixFailure(l10n.osdAudioMixFailed);
+    return false;
+  }
+
+  Future<void> _revertMultiAudioMixFailure(String message) async {
+    _player.mixActive = false;
+    if (_settings.multiAudioMix) {
+      _settings.multiAudioMix = false;
+    }
+    await _playerService.setProperty('lavfi-complex', '');
+    if (!mounted || _isDisposed) return;
+    _showOsdMessage(message);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _reloadCurrentForMixChange() async {
@@ -3518,10 +3492,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _mixReloadInFlight = true;
     try {
       final savedPos = _player.position;
-      await _loadSource(source, syncPlaylist: false);
+      await _loadSource(source, syncPlaylist: false, applyResume: false);
       if (savedPos > Duration.zero) {
         await Future<void>.delayed(_mixReloadDelay);
-        if (mounted && _player.position < _resumeStartThreshold) {
+        if (mounted) {
           unawaited(_playerService.seek(savedPos));
         }
       }
@@ -3615,8 +3589,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // ── Resume position ─────────────────────────────────
 
-  void _persistResumePosition() {
+  void _persistResumePosition({bool requirePlaying = false}) {
     if (!_settings.resumePlaybackEnabled) return;
+    if (requirePlaying && !_player.isPlaying) return;
     final path = _player.resumePathInProgress;
     if (path == null) return;
     final action = ResumePlaybackPolicy.persistAction(
@@ -3787,11 +3762,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (_compactMode) {
       // Restore window state.
       try {
-        if (_preCompactSize != null) {
-          await windowManager.setSize(_preCompactSize!);
-        }
-        if (_preCompactPos != null) {
-          await windowManager.setPosition(_preCompactPos!);
+        if (_preCompactMaximized) {
+          await windowManager.maximize();
+        } else {
+          if (_preCompactSize != null) {
+            await windowManager.setSize(_preCompactSize!);
+          }
+          if (_preCompactPos != null) {
+            await windowManager.setPosition(_preCompactPos!);
+          }
         }
         await windowManager.setAlwaysOnTop(_preCompactAlwaysOnTop);
       } catch (e) {
@@ -3809,11 +3788,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _preCompactSize = await windowManager.getSize();
         _preCompactPos = await windowManager.getPosition();
         _preCompactAlwaysOnTop = _settings.alwaysOnTop;
+        _preCompactMaximized = await windowManager.isMaximized();
         if (await windowManager.isFullScreen()) {
           await windowManager.setFullScreen(false);
           if (mounted) {
             _isFullscreen = false;
           }
+        }
+        if (_preCompactMaximized) {
+          await windowManager.unmaximize();
         }
         await windowManager.setSize(_compactWindowSize);
         await windowManager.setAlwaysOnTop(true);
@@ -3986,10 +3969,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           0.22,
         )!;
         var sleepExpanded = false;
-        final remaining = _sleepTimer.remaining;
-        final sleepLabel = remaining == null
-            ? l10n.menuSleepTimer
-            : '${l10n.menuSleepTimer} (${PlayerController.formatDuration(remaining)})';
         // Build the menu items as a compact, right-aligned vertical panel.
         Widget item({
           required IconData icon,
@@ -4129,54 +4108,73 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                               action: 'screenshot',
                             ),
                           const Divider(height: 1),
-                          InkWell(
-                            onTap: () => setSheetState(() {
-                              sleepExpanded = !sleepExpanded;
-                            }),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              child: Row(
+                          ListenableBuilder(
+                            listenable: _sleepTimer,
+                            builder: (context, _) {
+                              final remaining = _sleepTimer.remaining;
+                              final sleepLabel = remaining == null
+                                  ? l10n.menuSleepTimer
+                                  : '${l10n.menuSleepTimer} (${PlayerController.formatDuration(remaining)})';
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Icon(
-                                    Icons.bedtime_outlined,
-                                    size: 18,
-                                    color: cs.onSurface,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      sleepLabel,
-                                      style: const TextStyle(fontSize: 13),
+                                  InkWell(
+                                    onTap: () => setSheetState(() {
+                                      sleepExpanded = !sleepExpanded;
+                                    }),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.bedtime_outlined,
+                                            size: 18,
+                                            color: cs.onSurface,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              sleepLabel,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          Icon(
+                                            sleepExpanded
+                                                ? Icons.expand_less
+                                                : Icons.expand_more,
+                                            size: 18,
+                                            color: cs.onSurface,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  Icon(
-                                    sleepExpanded
-                                        ? Icons.expand_less
-                                        : Icons.expand_more,
-                                    size: 18,
-                                    color: cs.onSurface,
-                                  ),
+                                  if (sleepExpanded) ...[
+                                    item(
+                                      icon: Icons.timer_off_outlined,
+                                      label: l10n.menuSleepTimerOff,
+                                      action: 'sleep_off',
+                                    ),
+                                    for (final minutes
+                                        in SleepTimerController.presetMinutes)
+                                      item(
+                                        icon: Icons.timer_outlined,
+                                        label: l10n.menuSleepTimerMinutes(
+                                          minutes,
+                                        ),
+                                        action: 'sleep_$minutes',
+                                      ),
+                                  ],
                                 ],
-                              ),
-                            ),
+                              );
+                            },
                           ),
-                          if (sleepExpanded) ...[
-                            item(
-                              icon: Icons.timer_off_outlined,
-                              label: l10n.menuSleepTimerOff,
-                              action: 'sleep_off',
-                            ),
-                            for (final minutes
-                                in SleepTimerController.presetMinutes)
-                              item(
-                                icon: Icons.timer_outlined,
-                                label: l10n.menuSleepTimerMinutes(minutes),
-                                action: 'sleep_$minutes',
-                              ),
-                          ],
                           const Divider(height: 1),
                           if (hasAudioOptions &&
                               _settings.experimentalFeaturesEnabled)
@@ -4189,10 +4187,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                 _settings.multiAudioMix = v;
                                 setSheetState(() {});
                                 unawaited(() async {
-                                  await _applyMultiAudioMix(announce: true);
-                                  if (_currentFile != null) {
+                                  final applied = await _applyMultiAudioMix(
+                                    announce: true,
+                                  );
+                                  // Reload when disabling, or when enable
+                                  // succeeded. Skip reload after a failed
+                                  // enable (toggle already reverted).
+                                  if (_currentFile != null && (!v || applied)) {
                                     await _reloadCurrentForMixChange();
                                   }
+                                  if (mounted) setSheetState(() {});
                                 }());
                               },
                             ),
@@ -4482,7 +4486,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       ),
     );
     if (selected != null) {
-      await _playerService.setSubtitleTrack(selected);
+      final ok = await _playerService.setSubtitleTrack(selected);
+      if (!ok) return;
       _player.subtitlesVisible = selected.id != 'no';
     }
   }

@@ -90,8 +90,7 @@ abstract final class M3uPlaylist {
     if (trimmed.isEmpty) return null;
     final uri = Uri.tryParse(trimmed);
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      if (!PlayableSource.isSupportedUrl(trimmed) ||
-          !PlayableSource.isDisplaySafeUrl(trimmed)) {
+      if (!PlayableSource.isSupportedUrl(trimmed)) {
         return null;
       }
       return PlayableSource.url(trimmed);

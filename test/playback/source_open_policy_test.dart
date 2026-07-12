@@ -65,7 +65,7 @@ void main() {
       expect(params.play, isFalse);
     });
 
-    test('honors playOverride for session restore', () {
+    test('honors playOverride when set', () {
       final params = SourceOpenPolicy.paramsFor(
         normalizedPath: '/media/song.mp3',
         forcePlay: false,

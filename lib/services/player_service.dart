@@ -29,8 +29,8 @@ abstract class IPlayerService {
   Future<void> setRate(double rate);
   Future<void> setPlaylistMode(PlaylistMode mode);
   Future<void> setVideoTrack(VideoTrack track);
-  Future<void> setAudioTrack(AudioTrack track);
-  Future<void> setSubtitleTrack(SubtitleTrack track);
+  Future<bool> setAudioTrack(AudioTrack track);
+  Future<bool> setSubtitleTrack(SubtitleTrack track);
   Future<Uint8List?> screenshot({String format = 'image/jpeg'});
   Future<bool> setProperty(String name, String value);
   Future<String?> getProperty(String name);
@@ -99,6 +99,19 @@ class PlayerService implements IPlayerService {
     }
   }
 
+  Future<bool> _guardBool(String op, Future<void> Function() body) async {
+    if (_disposed) return false;
+    try {
+      await body();
+      return true;
+    } catch (e, st) {
+      if (!_errorController.isClosed) {
+        _errorController.add(PlayerErrorEvent(op, e, st));
+      }
+      return false;
+    }
+  }
+
   @override
   Future<void> open(String filePath, {bool play = true}) async {
     if (_disposed) return;
@@ -138,12 +151,12 @@ class PlayerService implements IPlayerService {
       _guard('setVideoTrack', () => player.setVideoTrack(track));
 
   @override
-  Future<void> setAudioTrack(AudioTrack track) =>
-      _guard('setAudioTrack', () => player.setAudioTrack(track));
+  Future<bool> setAudioTrack(AudioTrack track) =>
+      _guardBool('setAudioTrack', () => player.setAudioTrack(track));
 
   @override
-  Future<void> setSubtitleTrack(SubtitleTrack track) =>
-      _guard('setSubtitleTrack', () => player.setSubtitleTrack(track));
+  Future<bool> setSubtitleTrack(SubtitleTrack track) =>
+      _guardBool('setSubtitleTrack', () => player.setSubtitleTrack(track));
 
   @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) =>
@@ -175,6 +188,7 @@ class PlayerService implements IPlayerService {
       case 'chapter':
       case 'hwdec':
       case 'af':
+      case 'lavfi-complex':
         return true;
       default:
         return false;

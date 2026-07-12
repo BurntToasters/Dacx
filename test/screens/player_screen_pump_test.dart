@@ -1224,7 +1224,7 @@ void main() {
     expect(player.openCalls.map((c) => c.path), contains('/media/weird.xyz'));
   });
 
-  testWidgets('session restore loads persisted queue on launch', (
+  testWidgets('launch ignores persisted queue and shows empty home', (
     tester,
   ) async {
     PlayerScreenHarness.configureDesktopViewport(tester);
@@ -1251,14 +1251,16 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    expect(player.openCalls, isEmpty);
     expect(
       player.openCalls.map((c) => c.path),
-      contains('https://example.com/b.mp3'),
+      isNot(contains('https://example.com/a.mp3')),
     );
-    expect(services.settings.readPlaylistQueue().items, [
-      'https://example.com/a.mp3',
-      'https://example.com/b.mp3',
-    ]);
+    expect(
+      player.openCalls.map((c) => c.path),
+      isNot(contains('https://example.com/b.mp3')),
+    );
+    expect(find.textContaining('Drop a file here'), findsOneWidget);
   });
 
   testWidgets('failed external audio load shows snackbar', (tester) async {
@@ -2484,5 +2486,55 @@ void main() {
 
     expect(services.settings.speed, 1.5);
     await mediaCommands.close();
+  });
+
+  testWidgets('failed audio mix reverts toggle and shows feedback', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices(
+      prefs: {'experimental_features_enabled': true},
+    );
+    final player = HeadlessPlayerService()
+      ..failProperties(const ['lavfi-complex']);
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialLoadedSource: PlayableSource.file('/test/movie.mkv'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    player.emitTracks(
+      const Tracks(
+        audio: [
+          AudioTrack('1', 'English', null),
+          AudioTrack('2', 'Commentary', null),
+        ],
+        video: [VideoTrack('1', 'Video', null)],
+        subtitle: [],
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mix all audio tracks'));
+    await tester.pumpAndSettle();
+
+    expect(services.settings.multiAudioMix, isFalse);
+    expect(find.text('Could not enable audio mix'), findsWidgets);
+    expect(
+      player.propertyCalls.where(
+        (call) => call.name == 'lavfi-complex' && call.value.isNotEmpty,
+      ),
+      isNotEmpty,
+    );
   });
 }

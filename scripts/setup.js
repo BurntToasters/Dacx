@@ -209,6 +209,7 @@ function setupLinux() {
   const packages = [
     'clang', 'cmake', 'ninja-build', 'pkg-config',
     'libgtk-3-dev', 'libepoxy-dev', 'libmpv-dev', 'mpv',
+    'libayatana-appindicator3-dev',
     'libunwind-dev',
     'curl', 'git', 'unzip', 'xz-utils', 'zip',
     'flatpak', 'flatpak-builder',

@@ -76,12 +76,22 @@ void main() {
       final sub = service.trackStream.listen(tracks.add);
       const next = AudioTrack('jpn', 'Japanese', null);
 
-      await service.setAudioTrack(next);
+      expect(await service.setAudioTrack(next), isTrue);
       await Future<void>.delayed(Duration.zero);
 
       expect(service.audioTrackCalls.single.id, 'jpn');
       expect(tracks.single.audio.id, 'jpn');
       await sub.cancel();
+      await service.dispose();
+    });
+
+    test('setAudioTrack returns false when failAudioTrack is set', () async {
+      final service = HeadlessPlayerService()..failAudioTrack = true;
+      expect(
+        await service.setAudioTrack(const AudioTrack('eng', 'English', null)),
+        isFalse,
+      );
+      expect(service.audioTrackCalls, hasLength(1));
       await service.dispose();
     });
 

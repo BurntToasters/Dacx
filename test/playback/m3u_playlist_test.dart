@@ -76,6 +76,22 @@ NumberOfEntries=2
       expect(encoded, contains('https://cdn.example/b.flac\n'));
     });
 
+    test('encode/parse round-trips query URLs', () {
+      const url = 'https://cdn.example/stream.mp3?token=abc&exp=1';
+      final encoded = M3uPlaylist.encode([PlayableSource.url(url)]);
+      expect(encoded, contains(url));
+      final sources = M3uPlaylist.parse(encoded);
+      expect(sources.single.value, url);
+    });
+
+    test('parse accepts query URLs that encode writes', () {
+      final sources = M3uPlaylist.parse('''
+#EXTM3U
+https://cdn.example/a.mp3?sig=xyz
+''');
+      expect(sources.single.value, 'https://cdn.example/a.mp3?sig=xyz');
+    });
+
     test('writeFile round-trips encode', () async {
       final dir = await Directory.systemTemp.createTemp('dacx-m3u-out-');
       addTearDown(() => dir.deleteSync(recursive: true));

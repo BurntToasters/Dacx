@@ -21,7 +21,7 @@ AppManager can keep AppImages updated in the background (including optional GitH
 #### Other Linux packages (optional)
 * **Ubuntu/Debian (x64):** **[DEB](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb)**; install the new `.deb` from the release page when updating.
 * **Fedora (x64):** **[RPM](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm)**; same idea with the `.rpm`.
-* **Flatpak (x64, experimental):** **[`.flatpak`](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.flatpak)**; GitHub sideload only (not Flathub). `flatpak install --user …`; reinstall to update. See [`docs/FLATHUB.md`](FLATHUB.md).
+* **Flatpak (x64, optional sideload):** **[`.flatpak`](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.flatpak)**; GitHub sideload only (not Flathub). `flatpak install --user …`; reinstall to update.
 * **Generic tarball (x64):** **[TAR.GZ](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.tar.gz)**; unpack and run; replace the tree to update.
 
 **ARM64:** There is no support for Linux arm64 on Dacx. This is not a priority of mine due to the low user-base of arm64 linux. If this project gets popular and it becomes a widely requested feature, it may be something I would look into.
