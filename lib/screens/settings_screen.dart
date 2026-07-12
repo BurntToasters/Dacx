@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
@@ -82,6 +83,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  void _popSettings() {
+    _log('settings_back_pressed', category: DebugLogCategory.ui);
+    Navigator.of(context).maybePop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -89,183 +95,199 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDesktopCustomChrome = Platform.isMacOS || Platform.isWindows;
     final l10n = AppLocalizations.of(context);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: isDesktopCustomChrome
-          ? null
-          : AppBar(title: Text(l10n.settingsTitle)),
-      body: GlassOverlayBackground(
-        child: Column(
-          children: [
-            if (isDesktopCustomChrome) const CustomTitleBar(),
-            if (isDesktopCustomChrome) _desktopHeader(context),
-            Expanded(
-              child: DecoratedBox(
-                decoration: visuals.overlayDecoration(),
-                child: Material(
-                  color: Colors.transparent,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 210),
-                    curve: Curves.easeOutCubic,
-                    opacity: _contentVisible ? 1 : 0,
-                    child: AnimatedSlide(
-                      duration: const Duration(milliseconds: 260),
-                      curve: Curves.easeOutCubic,
-                      offset: _contentVisible
-                          ? Offset.zero
-                          : const Offset(0, 0.02),
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        children: [
-                          _helpFaqTile(),
-                          _supportProjectTile(),
-                          if (Platform.isLinux &&
-                              (Platform.environment['FLATPAK_ID'] ?? '')
-                                  .isNotEmpty)
-                            ListTile(
-                              leading: const Icon(Icons.info_outline),
-                              title: Text(l10n.flatpakSandboxHint),
-                              dense: true,
-                            ),
-                          const Divider(),
-                          _sectionHeader(l10n.settingsSectionPlayback),
-                          _speedTile(),
-                          _loopModeTile(),
-                          SwitchListTile(
-                            title: Text(l10n.settingsAutoPlay),
-                            value: _s.autoPlay,
-                            onChanged: (v) => setState(() {
-                              _s.autoPlay = v;
-                              _log(
-                                'auto_play_changed',
-                                detailsBuilder: () => {'value': v},
-                              );
-                            }),
-                          ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsResumePlayback),
-                            subtitle: Text(l10n.settingsResumeSubtitle),
-                            value: _s.resumePlaybackEnabled,
-                            onChanged: (v) =>
-                                setState(() => _s.resumePlaybackEnabled = v),
-                          ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsOnScreenDisplay),
-                            subtitle: Text(l10n.settingsOsdSubtitle),
-                            value: _s.osdEnabled,
-                            onChanged: (v) => setState(() => _s.osdEnabled = v),
-                          ),
-                          _screenshotDirTile(),
-                          _screenshotFormatTile(),
-                          SwitchListTile(
-                            title: Text(l10n.settingsSeekPreview),
-                            subtitle: Text(l10n.settingsSeekPreviewSubtitle),
-                            value: _s.seekPreviewEnabled,
-                            onChanged: (v) =>
-                                setState(() => _s.seekPreviewEnabled = v),
-                          ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsMediaSession),
-                            subtitle: Text(l10n.settingsMediaSessionSubtitle),
-                            value: _s.mediaSessionEnabled,
-                            onChanged: (v) =>
-                                setState(() => _s.mediaSessionEnabled = v),
-                          ),
-                          _hwDecTile(),
-                          const Divider(),
-                          _sectionHeader(l10n.settingsSectionAppearance),
-                          _themeModeTile(),
-                          _accentColorTile(colorScheme),
-                          if (Platform.isWindows || Platform.isMacOS) ...[
-                            _windowOpacityTile(),
-                            _windowBlurTile(),
-                            _windowBlurStrengthTile(),
-                          ],
-                          SwitchListTile(
-                            title: Text(l10n.settingsAlwaysOnTop),
-                            value: _s.alwaysOnTop,
-                            onChanged: (v) => setState(() {
-                              _s.alwaysOnTop = v;
-                              _log(
-                                'always_on_top_changed',
-                                detailsBuilder: () => {'value': v},
-                              );
-                            }),
-                          ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsRememberWindow),
-                            value: _s.rememberWindow,
-                            onChanged: (v) => setState(() {
-                              _s.rememberWindow = v;
-                              _log(
-                                'remember_window_changed',
-                                detailsBuilder: () => {'value': v},
-                              );
-                            }),
-                          ),
-                          SwitchListTile(
-                            title: Text(l10n.settingsAllowMultipleWindows),
-                            subtitle: Text(
-                              l10n.settingsAllowMultipleWindowsSubtitle,
-                            ),
-                            value: _s.allowMultipleInstances,
-                            onChanged: (v) => setState(() {
-                              _s.allowMultipleInstances = v;
-                              _log(
-                                'allow_multiple_instances_changed',
-                                detailsBuilder: () => {'value': v},
-                              );
-                            }),
-                          ),
-                          const Divider(),
-                          _sectionHeader(l10n.settingsSectionGeneral),
-                          SwitchListTile(
-                            title: Text(l10n.settingsCheckForUpdatesOnLaunch),
-                            value: _s.updateCheckEnabled,
-                            onChanged: (v) => setState(() {
-                              _s.updateCheckEnabled = v;
-                              _log(
-                                'update_check_on_launch_changed',
-                                category: DebugLogCategory.update,
-                                detailsBuilder: () => {'value': v},
-                              );
-                            }),
-                          ),
-                          _updateChannelTile(),
-                          _recentFilesTile(),
-                          _checkForUpdatesTile(),
-                          _keyboardShortcutsTile(),
-                          const Divider(),
-                          _sectionHeader(l10n.settingsSectionExperimental),
-                          _experimentalTile(_experimentalFeaturesTile()),
-                          if (_s.experimentalFeaturesEnabled) ...[
-                            if (Platform.isLinux) ...[
-                              _experimentalTile(_linuxCompositorBlurTile()),
-                              _experimentalTile(_windowOpacityTile()),
-                              _experimentalTile(_windowBlurTile()),
-                              _experimentalTile(_windowBlurStrengthTile()),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _popSettings,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: isDesktopCustomChrome
+              ? null
+              : AppBar(title: Text(l10n.settingsTitle)),
+          body: GlassOverlayBackground(
+            child: Column(
+              children: [
+                if (isDesktopCustomChrome) const CustomTitleBar(),
+                if (isDesktopCustomChrome) _desktopHeader(context),
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: visuals.overlayDecoration(),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 210),
+                        curve: Curves.easeOutCubic,
+                        opacity: _contentVisible ? 1 : 0,
+                        child: AnimatedSlide(
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOutCubic,
+                          offset: _contentVisible
+                              ? Offset.zero
+                              : const Offset(0, 0.02),
+                          child: ListView(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            children: [
+                              _helpFaqTile(),
+                              _supportProjectTile(),
+                              if (Platform.isLinux &&
+                                  (Platform.environment['FLATPAK_ID'] ?? '')
+                                      .isNotEmpty)
+                                ListTile(
+                                  leading: const Icon(Icons.info_outline),
+                                  title: Text(l10n.flatpakSandboxHint),
+                                  dense: true,
+                                ),
+                              const Divider(),
+                              _sectionHeader(l10n.settingsSectionPlayback),
+                              _speedTile(),
+                              _loopModeTile(),
+                              SwitchListTile(
+                                title: Text(l10n.settingsAutoPlay),
+                                value: _s.autoPlay,
+                                onChanged: (v) => setState(() {
+                                  _s.autoPlay = v;
+                                  _log(
+                                    'auto_play_changed',
+                                    detailsBuilder: () => {'value': v},
+                                  );
+                                }),
+                              ),
+                              SwitchListTile(
+                                title: Text(l10n.settingsResumePlayback),
+                                subtitle: Text(l10n.settingsResumeSubtitle),
+                                value: _s.resumePlaybackEnabled,
+                                onChanged: (v) => setState(
+                                  () => _s.resumePlaybackEnabled = v,
+                                ),
+                              ),
+                              SwitchListTile(
+                                title: Text(l10n.settingsOnScreenDisplay),
+                                subtitle: Text(l10n.settingsOsdSubtitle),
+                                value: _s.osdEnabled,
+                                onChanged: (v) =>
+                                    setState(() => _s.osdEnabled = v),
+                              ),
+                              _screenshotDirTile(),
+                              _screenshotFormatTile(),
+                              SwitchListTile(
+                                title: Text(l10n.settingsSeekPreview),
+                                subtitle: Text(
+                                  l10n.settingsSeekPreviewSubtitle,
+                                ),
+                                value: _s.seekPreviewEnabled,
+                                onChanged: (v) =>
+                                    setState(() => _s.seekPreviewEnabled = v),
+                              ),
+                              SwitchListTile(
+                                title: Text(l10n.settingsMediaSession),
+                                subtitle: Text(
+                                  l10n.settingsMediaSessionSubtitle,
+                                ),
+                                value: _s.mediaSessionEnabled,
+                                onChanged: (v) =>
+                                    setState(() => _s.mediaSessionEnabled = v),
+                              ),
+                              _hwDecTile(),
+                              const Divider(),
+                              _sectionHeader(l10n.settingsSectionAppearance),
+                              _themeModeTile(),
+                              _accentColorTile(colorScheme),
+                              if (Platform.isWindows || Platform.isMacOS) ...[
+                                _windowOpacityTile(),
+                                _windowBlurTile(),
+                                _windowBlurStrengthTile(),
+                              ],
+                              SwitchListTile(
+                                title: Text(l10n.settingsAlwaysOnTop),
+                                value: _s.alwaysOnTop,
+                                onChanged: (v) => setState(() {
+                                  _s.alwaysOnTop = v;
+                                  _log(
+                                    'always_on_top_changed',
+                                    detailsBuilder: () => {'value': v},
+                                  );
+                                }),
+                              ),
+                              SwitchListTile(
+                                title: Text(l10n.settingsRememberWindow),
+                                value: _s.rememberWindow,
+                                onChanged: (v) => setState(() {
+                                  _s.rememberWindow = v;
+                                  _log(
+                                    'remember_window_changed',
+                                    detailsBuilder: () => {'value': v},
+                                  );
+                                }),
+                              ),
+                              SwitchListTile(
+                                title: Text(l10n.settingsAllowMultipleWindows),
+                                subtitle: Text(
+                                  l10n.settingsAllowMultipleWindowsSubtitle,
+                                ),
+                                value: _s.allowMultipleInstances,
+                                onChanged: (v) => setState(() {
+                                  _s.allowMultipleInstances = v;
+                                  _log(
+                                    'allow_multiple_instances_changed',
+                                    detailsBuilder: () => {'value': v},
+                                  );
+                                }),
+                              ),
+                              const Divider(),
+                              _sectionHeader(l10n.settingsSectionGeneral),
+                              SwitchListTile(
+                                title: Text(
+                                  l10n.settingsCheckForUpdatesOnLaunch,
+                                ),
+                                value: _s.updateCheckEnabled,
+                                onChanged: (v) => setState(() {
+                                  _s.updateCheckEnabled = v;
+                                  _log(
+                                    'update_check_on_launch_changed',
+                                    category: DebugLogCategory.update,
+                                    detailsBuilder: () => {'value': v},
+                                  );
+                                }),
+                              ),
+                              _updateChannelTile(),
+                              _recentFilesTile(),
+                              _checkForUpdatesTile(),
+                              _keyboardShortcutsTile(),
+                              const Divider(),
+                              _sectionHeader(l10n.settingsSectionExperimental),
+                              _experimentalTile(_experimentalFeaturesTile()),
+                              if (_s.experimentalFeaturesEnabled) ...[
+                                if (Platform.isLinux) ...[
+                                  _experimentalTile(_linuxCompositorBlurTile()),
+                                  _experimentalTile(_windowOpacityTile()),
+                                  _experimentalTile(_windowBlurTile()),
+                                  _experimentalTile(_windowBlurStrengthTile()),
+                                ],
+                                _experimentalTile(_audioWaveformTile()),
+                                _experimentalTile(_multiAudioMixTile()),
+                              ],
+                              if (_s.debugModeEnabled) ...[
+                                const Divider(),
+                                _sectionHeader(l10n.settingsSectionDebug),
+                                _debugLogPanel(),
+                              ],
+                              const Divider(),
+                              _resetTile(),
+                              const Divider(),
+                              _licensesTile(),
+                              _aboutTile(),
                             ],
-                            _experimentalTile(_audioWaveformTile()),
-                            _experimentalTile(_multiAudioMixTile()),
-                          ],
-                          if (_s.debugModeEnabled) ...[
-                            const Divider(),
-                            _sectionHeader(l10n.settingsSectionDebug),
-                            _debugLogPanel(),
-                          ],
-                          const Divider(),
-                          _resetTile(),
-                          const Divider(),
-                          _licensesTile(),
-                          _aboutTile(),
-                        ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -284,10 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               IconButton(
                 icon: const Icon(Icons.arrow_back),
                 tooltip: l10n.settingsBack,
-                onPressed: () {
-                  _log('settings_back_pressed', category: DebugLogCategory.ui);
-                  Navigator.of(context).maybePop();
-                },
+                onPressed: _popSettings,
               ),
               Expanded(
                 child: Center(

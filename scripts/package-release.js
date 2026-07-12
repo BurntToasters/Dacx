@@ -150,14 +150,20 @@ function assertWindowsRuntimeDllsPresent(buildDir) {
   const files = fs.readdirSync(buildDir).map((name) => name.toLowerCase());
   const hasVcruntime = files.some((name) => /^vcruntime\d+.*\.dll$/.test(name));
   const hasMsvcp = files.some((name) => /^msvcp\d+.*\.dll$/.test(name));
+  const hasHelper = files.includes("dacx-update-helper.exe");
 
-  if (hasVcruntime && hasMsvcp) return;
+  if (hasVcruntime && hasMsvcp && hasHelper) return;
 
-  console.error("Missing MSVC runtime DLLs in Windows build output.");
+  console.error("Missing required Windows build outputs.");
   console.error(`Checked: ${buildDir}`);
-  console.error("Expected files matching vcruntime*.dll and msvcp*.dll.");
+  if (!hasVcruntime || !hasMsvcp) {
+    console.error("Expected files matching vcruntime*.dll and msvcp*.dll.");
+  }
+  if (!hasHelper) {
+    console.error("Expected dacx-update-helper.exe next to dacx.exe.");
+  }
   console.error(
-    "Fix Windows build packaging before shipping MSI/ZIP (clean machines will fail to launch).",
+    "Fix Windows build packaging before shipping MSI/ZIP (clean machines will fail to launch / self-update).",
   );
   process.exit(1);
 }

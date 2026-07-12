@@ -5,11 +5,11 @@
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-arm64.AppImage) --> |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-arm64.deb) --> |
-| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-aarch64.rpm) --> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-aarch64.flatpak) --> |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.1/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-arm64.AppImage) --> |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-arm64.deb) --> |
+| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-aarch64.rpm) --> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-aarch64.flatpak) --> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.2/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -18,7 +18,17 @@
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
-Hello again — Dacx is my lightweight desktop music and video player, meant to launch quick and play media without extra nonsense. This beta packs a big chunk of the road toward a stable `1.0`.
+Hello again — Dacx is my lightweight desktop music and video player, meant to launch quick and play media without extra nonsense. This is a polish pass on `0.11.0-beta.1` (Escape behavior, clearer feedback, and a harder Windows self-update path).
+
+## Changes in `v0.11.0-beta.2:`
+
+- **Ver:** Bumped version to `v0.11.0-beta.2`.
+- **Shortcuts:** Escape goes back from Settings, closes the play queue drawer before exiting fullscreen (and reconciles OS/title-bar fullscreen via WindowListener), and cancels keybind capture instead of binding Escape.
+- **UI:** Removed the empty-state Open URL button — Open URL stays in the ⋯ more menu (and macOS File → Open URL) plus `Ctrl/Cmd+U`.
+- **UI:** Unsupported extensions and Flatpak-inaccessible drops now show clear snackbars; failed external audio/subtitle loads surface a snackbar in addition to the OSD tip.
+- **Security:** Windows self-update now launches a native `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk `apply-update.ps1` / `spawn-watchdog.ps1`) so the helper survives the app Job Object, re-checks SHA-256 (and optional Authenticode), then elevates `msiexec`. Trust stays Ed25519-first.
+- **Testing:** Expanded the headless `PlayerScreen` harness and Windows self-update tests around Escape reconcile, snacks, session restore, external tracks, and the native helper launch path.
+- **Misc:** Updated `docs/QA.md`, `SECURITY.md`, and the README Windows signing notes for the helper binary.
 
 ## Changes in `v0.11.0-beta.1:`
 

@@ -44,6 +44,7 @@ class HeadlessPlayerService implements IPlayerService {
   Object? _openError;
   Uint8List? screenshotBytes;
   Duration _openDelay = Duration.zero;
+  final Set<String> _failPropertyNames = <String>{};
 
   @visibleForTesting
   set openError(Object? value) => _openError = value;
@@ -53,6 +54,14 @@ class HeadlessPlayerService implements IPlayerService {
 
   @visibleForTesting
   set openDelay(Duration value) => _openDelay = value;
+
+  /// When set, [setProperty] / external-track adds for these names return false.
+  @visibleForTesting
+  void failProperties(Iterable<String> names) {
+    _failPropertyNames
+      ..clear()
+      ..addAll(names);
+  }
 
   @override
   bool get isDisposed => _disposed;
@@ -211,6 +220,10 @@ class HeadlessPlayerService implements IPlayerService {
   @override
   Future<bool> setProperty(String name, String value) async {
     if (_disposed) return false;
+    if (_failPropertyNames.contains(name)) {
+      _propertyCalls.add((name: name, value: value));
+      return false;
+    }
     _properties[name] = value;
     _propertyCalls.add((name: name, value: value));
     return true;

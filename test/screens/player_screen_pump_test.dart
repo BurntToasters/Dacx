@@ -1068,6 +1068,268 @@ void main() {
     expect(PlayerScreenHarness.fullscreenCalls, [true, false]);
   });
 
+  testWidgets('escape closes queue drawer before exiting fullscreen', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService();
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialLoadedSource: PlayableSource.file('/test/movie.mkv'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(PlayerScreenHarness.fullscreenCalls, [true]);
+
+    await tester.tap(find.byTooltip('Play Queue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Play queue'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    // Drawer closed; still fullscreen.
+    expect(PlayerScreenHarness.fullscreenCalls, [true]);
+    expect(find.text('Play queue'), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(PlayerScreenHarness.fullscreenCalls, [true, false]);
+  });
+
+  testWidgets('escape does nothing when windowed with no overlays', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService();
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(PlayerScreenHarness.fullscreenCalls, isEmpty);
+  });
+
+  testWidgets('escape cancels keybind capture without saving', (tester) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService();
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f1);
+    await tester.pumpAndSettle();
+    expect(find.text('Keyboard shortcuts'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Set new binding').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Press a key combination'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Press a key combination'), findsNothing);
+    expect(find.text('Keyboard shortcuts'), findsOneWidget);
+    expect(services.settings.keybinds, isEmpty);
+  });
+
+  testWidgets('escape reconciles OS fullscreen without F toggle', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService();
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialLoadedSource: PlayableSource.file('/test/movie.mkv'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    PlayerScreenHarness.setFullscreenForTesting(true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(PlayerScreenHarness.fullscreenCalls, [false]);
+  });
+
+  testWidgets('unrecognized extension shows unsupported snackbar', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService();
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialDropPaths: const ['/media/weird.xyz'],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(
+      find.text('Unsupported file type. Open an audio/video file.'),
+      findsOneWidget,
+    );
+    expect(player.openCalls.map((c) => c.path), contains('/media/weird.xyz'));
+  });
+
+  testWidgets('session restore loads persisted queue on launch', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices(
+      prefs: {
+        'settings_schema_version': 3,
+        'playlist_queue_v1': jsonEncode({
+          'items': ['https://example.com/a.mp3', 'https://example.com/b.mp3'],
+          'index': 1,
+        }),
+      },
+    );
+    final player = HeadlessPlayerService();
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(
+      player.openCalls.map((c) => c.path),
+      contains('https://example.com/b.mp3'),
+    );
+    expect(services.settings.readPlaylistQueue().items, [
+      'https://example.com/a.mp3',
+      'https://example.com/b.mp3',
+    ]);
+  });
+
+  testWidgets('failed external audio load shows snackbar', (tester) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService()
+      ..failProperties(const ['audio-files-add']);
+    PlayerScreenHarness.filePickerPaths = ['/media/extra.flac'];
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialLoadedSource: PlayableSource.file('/test/movie.mkv'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Load external audio…'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load external audio'), findsWidgets);
+  });
+
+  testWidgets('playlist export saves m3u via picker', (tester) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService();
+    final out = File(
+      '${Directory.systemTemp.path}/dacx_export_${DateTime.now().microsecondsSinceEpoch}.m3u',
+    );
+    addTearDown(() {
+      if (out.existsSync()) out.deleteSync();
+    });
+    PlayerScreenHarness.filePickerSavePath = out.path;
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialLoadedSource: PlayableSource.file('/media/first.mp3'),
+        initialPlaylistSources: [
+          PlayableSource.file('/media/first.mp3'),
+          PlayableSource.file('/media/second.flac'),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Play Queue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save Playlist'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Playlist saved'), findsOneWidget);
+    expect(out.existsSync(), isTrue);
+    final body = out.readAsStringSync();
+    expect(body, contains('/media/first.mp3'));
+    expect(body, contains('/media/second.flac'));
+  });
+
   testWidgets('single dropped path loads media in headless mode', (
     tester,
   ) async {

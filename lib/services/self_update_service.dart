@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography_plus/cryptography_plus.dart' as cryptography;
@@ -660,22 +661,28 @@ class SelfUpdateService {
       }
     }
 
-    final scriptPath = File(p.join(cacheDir.path, 'apply-update.ps1'));
-    await scriptPath.writeAsString(buildWindowsWatchdogPowerShellScript());
-
-    final bootstrapPath = File(p.join(cacheDir.path, 'spawn-watchdog.ps1'));
-    await bootstrapPath.writeAsString(
-      buildWindowsBootstrapPowerShellScript(
-        scriptPath: scriptPath.path,
-        dacxPid: pid,
-        msiPath: msiPath.path,
-        thumbprint: signerThumbprint,
-        sha256: actualHash,
-      ),
-    );
+    final helperPath = resolveWindowsUpdateHelperPath();
+    if (helperPath == null || helperPath.isEmpty) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.spawnFailed,
+        message:
+            'dacx-update-helper.exe is missing next to the application. '
+            'Reinstall Dacx from the official MSI.',
+      );
+    }
 
     try {
-      final commandLine = buildBootstrapCommandLine(bootstrapPath.path);
+      final helperCmd = buildWindowsUpdateHelperCommandLine(
+        helperPath: helperPath,
+        dacxPid: pid,
+        msiPath: msiPath.path,
+        sha256: actualHash,
+        thumbprint: signerThumbprint,
+      );
+      final encoded = encodePowerShellCommand(
+        buildWindowsHelperWmiBootstrapScript(helperCmd),
+      );
+      final commandLine = buildWindowsHelperLaunchCommandLine(encoded);
       final spawn = await _windowsSpawn(
         commandLine,
         applicationName: WindowsSystemPaths.powershell(),
@@ -689,7 +696,7 @@ class SelfUpdateService {
       if (spawn.exitCode != null && spawn.exitCode != 0) {
         return SelfUpdateResult(
           SelfUpdateOutcome.spawnFailed,
-          message: 'bootstrap exit ${spawn.exitCode}',
+          message: 'helper bootstrap exit ${spawn.exitCode}',
         );
       }
     } catch (e) {
@@ -703,6 +710,7 @@ class SelfUpdateService {
       detailsBuilder: () => {
         'platform': 'windows',
         'msi': msiPath.path,
+        'helper': helperPath,
         'pid': pid,
       },
     );
@@ -886,127 +894,69 @@ class SelfUpdateService {
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
-  /// Builds the full command line passed to `CreateProcessW` to launch the
-  /// bootstrap script with no console window. The script path is quoted so
-  /// spaces in `%LOCALAPPDATA%` are handled.
+  /// Builds the full command line passed to `CreateProcessW` to launch a
+  /// PowerShell `-EncodedCommand` bootstrap with no console window.
   @visibleForTesting
-  static String buildBootstrapCommandLine(String bootstrapPath) {
+  static String buildWindowsHelperLaunchCommandLine(String encodedCommand) {
     return '-NoProfile -ExecutionPolicy Bypass '
-        '-WindowStyle Hidden -File "$bootstrapPath"';
+        '-WindowStyle Hidden -EncodedCommand $encodedCommand';
   }
+
+  /// Resolves `dacx-update-helper.exe` next to the running binary.
+  @visibleForTesting
+  static String? windowsUpdateHelperPathOverride;
 
   @visibleForTesting
-  static String buildWindowsWatchdogPowerShellScript() {
-    return r'''
-param(
-  [Parameter(Mandatory=$true)][int]$DacxPid,
-  [Parameter(Mandatory=$true)][string]$DacxMsi,
-  [Parameter(Mandatory=$false)][AllowEmptyString()][string]$ExpectedThumbprint = '',
-  [Parameter(Mandatory=$true)][string]$ExpectedSha256
-)
-
-$ErrorActionPreference = 'Stop'
-
-$LogDir = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'Dacx', 'updates')
-$null = [System.IO.Directory]::CreateDirectory($LogDir)
-$LogFile = [System.IO.Path]::Combine($LogDir, 'watchdog.log')
-function Log($msg) {
-  $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  Add-Content -LiteralPath $LogFile -Value "$ts $msg" -ErrorAction SilentlyContinue
-}
-
-trap {
-  Log "fatal: $_"
-  exit 99
-}
-
-Log "started pid=$DacxPid msi=$DacxMsi thumb=$ExpectedThumbprint sha=$ExpectedSha256"
-
-try {
-  $dacxProc = Get-Process -Id $DacxPid -ErrorAction Stop
-  if (-not $dacxProc.WaitForExit(600000)) { Log "timeout waiting for pid=$DacxPid"; exit 5 }
-} catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
-  Log "pid=$DacxPid already gone"
-} catch {
-  Log "wait-error: $_"
-  exit 2
-}
-
-Log "dacx exited, verifying sha256"
-$actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $DacxMsi).Hash.ToLowerInvariant()
-if ($actualSha256 -ine $ExpectedSha256) {
-  Log "sha256 mismatch expected=$ExpectedSha256 actual=$actualSha256"
-  exit 12
-}
-
-if ($ExpectedThumbprint -ne '') {
-  $sig = Get-AuthenticodeSignature -LiteralPath $DacxMsi
-  if ($sig.Status -ne 'Valid') {
-    Log "authenticode status=$($sig.Status)"
-    exit 10
-  }
-  $thumb = $sig.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', ''
-  $expected = $ExpectedThumbprint -replace '[^0-9A-Fa-f]', ''
-  if ($thumb -ine $expected) {
-    Log "authenticode thumbprint mismatch expected=$expected actual=$thumb"
-    exit 11
-  }
-}
-
-Log "launching msiexec"
-$msiArgs = @('/i', $DacxMsi, '/passive', '/norestart')
-try {
-  $install = Start-Process -FilePath '@@MSIEXEC@@' -ArgumentList $msiArgs -Verb RunAs -Wait -PassThru
-} catch {
-  Log "msiexec launch failed: $_"
-  exit 1223
-}
-if ($null -eq $install) { Log "msiexec process was null"; exit 1 }
-Log "msiexec exited code=$($install.ExitCode)"
-exit $install.ExitCode
-'''
-        .replaceAll(
-          '@@MSIEXEC@@',
-          WindowsSystemPaths.msiexec().replaceAll("'", "''"),
-        );
+  static String? resolveWindowsUpdateHelperPath() {
+    final override = windowsUpdateHelperPathOverride;
+    if (override != null) return override.isEmpty ? null : override;
+    try {
+      final helper = File(
+        p.join(
+          File(Platform.resolvedExecutable).parent.path,
+          'dacx-update-helper.exe',
+        ),
+      );
+      if (helper.existsSync()) return helper.path;
+    } catch (_) {}
+    return null;
   }
 
-  /// Bootstrap script: spawns the watchdog via WMI `Win32_Process.Create` so it
-  /// runs as a child of the WMI service and escapes any Windows Job Object the
-  /// parent app belongs to. Without this, `dacx.exe`'s job (Windows GUI Process
-  /// Lifetime Management) would kill the watchdog the moment we call `exit(0)`.
+  /// UTF-16LE base64 for PowerShell `-EncodedCommand`.
   @visibleForTesting
-  static String buildWindowsBootstrapPowerShellScript({
-    required String scriptPath,
+  static String encodePowerShellCommand(String script) {
+    final units = script.codeUnits;
+    final bytes = Uint8List(units.length * 2);
+    for (var i = 0; i < units.length; i++) {
+      bytes[i * 2] = units[i] & 0xff;
+      bytes[i * 2 + 1] = (units[i] >> 8) & 0xff;
+    }
+    return base64Encode(bytes);
+  }
+
+  /// Win32 command line for [dacx-update-helper.exe].
+  @visibleForTesting
+  static String buildWindowsUpdateHelperCommandLine({
+    required String helperPath,
     required int dacxPid,
     required String msiPath,
-    required String thumbprint,
     required String sha256,
+    required String thumbprint,
   }) {
-    String esc(String s) => s.replaceAll('"', '\\"');
-    final powershellPath = esc(WindowsSystemPaths.powershell());
-    final cmd =
-        '"$powershellPath" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden '
-        '-File "${esc(scriptPath)}" '
-        '-DacxPid $dacxPid '
-        '-DacxMsi "${esc(msiPath)}" '
-        '-ExpectedThumbprint "${esc(thumbprint)}" '
-        '-ExpectedSha256 $sha256';
-    final cmdLiteral = cmd.replaceAll("'", "''");
+    String quote(String value) => '"${value.replaceAll('"', r'\"')}"';
+    return '${quote(helperPath)} --pid $dacxPid --msi ${quote(msiPath)} '
+        '--sha256 $sha256 --thumbprint ${quote(thumbprint)}';
+  }
+
+  /// Tiny WMI bootstrap so the helper escapes Dacx's Job Object.
+  /// No script files are written to disk (closes the PS1 TOCTOU window).
+  @visibleForTesting
+  static String buildWindowsHelperWmiBootstrapScript(String helperCommandLine) {
+    final escaped = helperCommandLine.replaceAll("'", "''");
     return '''
 \$ErrorActionPreference = 'Stop'
-\$LogDir = [System.IO.Path]::Combine(\$env:LOCALAPPDATA, 'Dacx', 'updates')
-\$null = [System.IO.Directory]::CreateDirectory(\$LogDir)
-\$LogFile = [System.IO.Path]::Combine(\$LogDir, 'bootstrap.log')
-function Log(\$msg) {
-  \$ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  Add-Content -LiteralPath \$LogFile -Value "\$ts \$msg" -ErrorAction SilentlyContinue
-}
-trap { Log "fatal: \$_"; exit 99 }
-\$cmd = '$cmdLiteral'
-Log "spawning via WMI: \$cmd"
+\$cmd = '$escaped'
 \$result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = \$cmd }
-Log "WMI ReturnValue=\$(\$result.ReturnValue) ProcessId=\$(\$result.ProcessId)"
 if (\$result.ReturnValue -ne 0) { exit \$result.ReturnValue }
 exit 0
 ''';
