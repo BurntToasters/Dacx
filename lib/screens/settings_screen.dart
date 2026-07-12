@@ -282,7 +282,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   _experimentalTile(_windowBlurTile()),
                                   _experimentalTile(_windowBlurStrengthTile()),
                                 ],
-                                _experimentalTile(_audioWaveformTile()),
                                 _experimentalTile(_multiAudioMixTile()),
                               ],
                               if (_s.debugModeEnabled) ...[
@@ -765,20 +764,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _audioWaveformTile() {
-    final l10n = AppLocalizations.of(context);
-    return SwitchListTile(
-      secondary: _experimentalWarningIcon(),
-      title: Text(l10n.settingsAudioWaveform),
-      subtitle: Text(l10n.settingsAudioWaveformSubtitle),
-      value: _s.audioWaveformEnabled,
-      onChanged: (v) => setState(() {
-        _s.audioWaveformEnabled = v;
-        _log('audio_waveform_changed', detailsBuilder: () => {'value': v});
-      }),
-    );
-  }
-
   Widget _multiAudioMixTile() {
     final l10n = AppLocalizations.of(context);
     return SwitchListTile(
@@ -788,9 +773,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       value: _s.multiAudioMix,
       onChanged: (v) => setState(() {
         _s.multiAudioMix = v;
-        if (v) {
-          _s.audioWaveformEnabled = false;
-        }
         _log('multi_audio_mix_changed', detailsBuilder: () => {'value': v});
       }),
     );

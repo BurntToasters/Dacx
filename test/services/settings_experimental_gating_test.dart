@@ -37,41 +37,17 @@ void main() {
     );
 
     test(
-      'audioWaveformEnabled reports false when experimental is disabled',
-      () async {
-        final settings = await serviceWith(
-          experimental: false,
-          prefs: {'audio_waveform_enabled': true},
-        );
-        expect(settings.audioWaveformEnabled, isFalse);
-      },
-    );
-
-    test(
-      'audioWaveformEnabled reports stored value when experimental is enabled',
-      () async {
-        final settings = await serviceWith(
-          experimental: true,
-          prefs: {'audio_waveform_enabled': true},
-        );
-        expect(settings.audioWaveformEnabled, isTrue);
-      },
-    );
-
-    test(
       'disabling experimental preserves stored experimental prefs',
       () async {
         final settings = await serviceWith(
           experimental: true,
-          prefs: {'multi_audio_mix': true, 'audio_waveform_enabled': true},
+          prefs: {'multi_audio_mix': true},
         );
         settings.experimentalFeaturesEnabled = false;
         expect(settings.multiAudioMix, isFalse);
-        expect(settings.audioWaveformEnabled, isFalse);
 
         settings.experimentalFeaturesEnabled = true;
         expect(settings.multiAudioMix, isTrue);
-        expect(settings.audioWaveformEnabled, isTrue);
       },
     );
   });

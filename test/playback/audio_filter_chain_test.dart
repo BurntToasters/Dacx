@@ -1,16 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dacx/playback/audio_filter_chain.dart';
-import 'package:dacx/services/audio_spectrum_service.dart';
 
 void main() {
   group('AudioFilterChain.buildMergedChain', () {
-    test('returns empty when EQ off and spectrum not wanted', () {
+    test('returns empty when EQ off', () {
       expect(
         AudioFilterChain.buildMergedChain(
           eqEnabled: false,
           eqBands: List<double>.filled(10, 0),
-          spectrumWanted: false,
         ),
         '',
       );
@@ -20,21 +18,8 @@ void main() {
       final chain = AudioFilterChain.buildMergedChain(
         eqEnabled: true,
         eqBands: const [6, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        spectrumWanted: false,
       );
       expect(chain, contains('equalizer'));
-      expect(chain, isNot(contains('dacxb0')));
-    });
-
-    test('includes spectrum segments when wanted', () {
-      final chain = AudioFilterChain.buildMergedChain(
-        eqEnabled: false,
-        eqBands: List<double>.filled(10, 0),
-        spectrumWanted: true,
-      );
-      expect(chain, AudioSpectrumService.afSegment);
-      expect(chain, contains('dacxb0'));
-      expect(chain, contains('dacxb3'));
     });
   });
 
@@ -45,7 +30,6 @@ void main() {
         lastAppliedChain: '',
         eqEnabled: false,
         eqBands: List<double>.filled(10, 0),
-        spectrumWanted: false,
         setAudioFilter: (_) async {
           calls++;
           return true;
@@ -55,112 +39,31 @@ void main() {
       expect(calls, 0);
     });
 
-    test('skip with spectrum wanted but unconfirmed needs confirm', () async {
-      final chain = AudioSpectrumService.afSegment;
-      final result = await AudioFilterChain.apply(
-        lastAppliedChain: chain,
-        eqEnabled: false,
-        eqBands: List<double>.filled(10, 0),
-        spectrumWanted: true,
-        spectrumCurrentlyConfirmed: false,
-        setAudioFilter: (_) async => true,
-      );
-      expect(result.skipped, isTrue);
-      expect(result.needsSpectrumConfirm, isTrue);
-    });
-
-    test('applies merged chain and marks spectrum installed', () async {
+    test('applies EQ chain when enabled', () async {
       String? applied;
       final result = await AudioFilterChain.apply(
         lastAppliedChain: null,
-        eqEnabled: false,
-        eqBands: List<double>.filled(10, 0),
-        spectrumWanted: true,
+        eqEnabled: true,
+        eqBands: const [4, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         setAudioFilter: (filter) async {
           applied = filter;
           return true;
         },
       );
       expect(result.skipped, isFalse);
-      expect(result.spectrumInstalled, isTrue);
-      expect(applied, AudioSpectrumService.afSegment);
+      expect(result.failed, isFalse);
+      expect(applied, contains('equalizer'));
     });
 
-    test('falls back without spectrum when mpv rejects merged chain', () async {
-      final calls = <String>[];
-      final result = await AudioFilterChain.apply(
-        lastAppliedChain: null,
-        eqEnabled: true,
-        eqBands: const [4, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        spectrumWanted: true,
-        setAudioFilter: (filter) async {
-          calls.add(filter);
-          return calls.length > 1;
-        },
-      );
-      expect(calls, hasLength(2));
-      expect(calls.first, contains('dacxb0'));
-      expect(calls.last, isNot(contains('dacxb0')));
-      expect(result.usedSpectrumFallback, isTrue);
-      expect(result.spectrumFailed, isTrue);
-    });
-
-    test('reports failed when mpv rejects all attempts', () async {
+    test('reports failed when mpv rejects chain', () async {
       final result = await AudioFilterChain.apply(
         lastAppliedChain: 'existing',
-        eqEnabled: false,
-        eqBands: List<double>.filled(10, 0),
-        spectrumWanted: true,
+        eqEnabled: true,
+        eqBands: const [4, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         setAudioFilter: (_) async => false,
       );
       expect(result.failed, isTrue);
       expect(result.appliedChain, 'existing');
-    });
-  });
-
-  group('SpectrumSyncPolicy', () {
-    test('shouldRun requires playing audio with visualizer enabled', () {
-      expect(
-        SpectrumSyncPolicy.shouldRun(
-          playing: true,
-          isAudioFile: true,
-          audioWaveformEnabled: true,
-        ),
-        isTrue,
-      );
-      expect(
-        SpectrumSyncPolicy.shouldRun(
-          playing: true,
-          isAudioFile: true,
-          audioWaveformEnabled: true,
-          multiAudioMixEnabled: true,
-        ),
-        isFalse,
-      );
-    });
-
-    test('resolve returns startAndApply when spectrum should start', () {
-      expect(
-        SpectrumSyncPolicy.resolve(
-          playing: true,
-          isAudioFile: true,
-          audioWaveformEnabled: true,
-          spectrumCurrentlyActive: false,
-        ),
-        SpectrumSyncAction.startAndApply,
-      );
-    });
-
-    test('resolve returns stopAndApply when spectrum should stop', () {
-      expect(
-        SpectrumSyncPolicy.resolve(
-          playing: false,
-          isAudioFile: true,
-          audioWaveformEnabled: true,
-          spectrumCurrentlyActive: true,
-        ),
-        SpectrumSyncAction.stopAndApply,
-      );
     });
   });
 }

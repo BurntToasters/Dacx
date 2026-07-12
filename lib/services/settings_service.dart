@@ -189,7 +189,6 @@ class SettingsService extends ChangeNotifier {
   static const _kScreenshotFormat = 'screenshot_format';
   static const _kOsdEnabled = 'osd_enabled';
   static const _kSeekPreviewEnabled = 'seek_preview_enabled';
-  static const _kAudioWaveformEnabled = 'audio_waveform_enabled';
   static const _kMultiAudioMix = 'multi_audio_mix';
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
@@ -237,7 +236,6 @@ class SettingsService extends ChangeNotifier {
     _kScreenshotFormat,
     _kOsdEnabled,
     _kSeekPreviewEnabled,
-    _kAudioWaveformEnabled,
     _kMultiAudioMix,
     _kMediaSession,
     _kKeybinds,
@@ -731,19 +729,6 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Audio spectrum visualizer. Experimental — preference is preserved but
-  /// reported as `false` when Experimental Features is off (same pattern as
-  /// [multiAudioMix]).
-  bool get audioWaveformEnabled {
-    if (!experimentalFeaturesEnabled) return false;
-    return _prefs.getBool(_kAudioWaveformEnabled) ?? false;
-  }
-
-  set audioWaveformEnabled(bool v) {
-    _prefs.setBool(_kAudioWaveformEnabled, v);
-    notifyListeners();
-  }
-
   /// Mix all audio tracks into one output via mpv `lavfi-complex`.
   /// Marked experimental; the stored preference is preserved but
   /// reported as `false` whenever Experimental Features is disabled,
@@ -869,7 +854,12 @@ class SettingsService extends ChangeNotifier {
       } else {
         index = index.clamp(0, items.length - 1);
       }
-      final snap = PlaylistQueueSnapshot(items: items, index: index);
+      final wasPlaying = decoded['was_playing'] == true;
+      final snap = PlaylistQueueSnapshot(
+        items: items,
+        index: index,
+        wasPlaying: wasPlaying,
+      );
       _playlistQueueCache = snap;
       return snap;
     } catch (e) {
@@ -883,7 +873,11 @@ class SettingsService extends ChangeNotifier {
   }
 
   /// Schedules a debounced write of the live queue.
-  void savePlaylistQueue(List<PlayableSource> sources, int index) {
+  void savePlaylistQueue(
+    List<PlayableSource> sources,
+    int index, {
+    bool wasPlaying = false,
+  }) {
     final items = <String>[];
     for (final source in sources) {
       final value = source.value.trim();
@@ -894,6 +888,7 @@ class SettingsService extends ChangeNotifier {
     final snap = PlaylistQueueSnapshot(
       items: items,
       index: items.isEmpty ? -1 : index.clamp(0, items.length - 1),
+      wasPlaying: wasPlaying && items.isNotEmpty,
     );
     _playlistQueueCache = snap;
     _schedulePlaylistPersist();
@@ -924,7 +919,11 @@ class SettingsService extends ChangeNotifier {
     }
     _prefs.setString(
       _kPlaylistQueue,
-      jsonEncode({'items': snap.items, 'index': snap.index}),
+      jsonEncode({
+        'items': snap.items,
+        'index': snap.index,
+        'was_playing': snap.wasPlaying,
+      }),
     );
   }
 
@@ -1131,10 +1130,18 @@ class _ResumeEntry {
 class PlaylistQueueSnapshot {
   static const int maxItems = 1000;
 
-  const PlaylistQueueSnapshot({required this.items, required this.index});
+  const PlaylistQueueSnapshot({
+    required this.items,
+    required this.index,
+    this.wasPlaying = false,
+  });
 
   final List<String> items;
   final int index;
+
+  /// Whether playback was active when the queue was last saved.
+  /// Used so a paused quit does not auto-resume on next launch.
+  final bool wasPlaying;
 
   bool get isEmpty => items.isEmpty;
   bool get isNotEmpty => items.isNotEmpty;

@@ -92,23 +92,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Publish playback to MPRIS / SMTC / Now Playing';
 
   @override
-  String get settingsAudioWaveform => 'Audio spectrum visualizer';
-
-  @override
-  String get settingsAudioWaveformSubtitle =>
-      'Real-time frequency bars while playing audio (Experimental)';
-
-  @override
   String get settingsMultiAudioMixSubtitle =>
-      'Play every audio track at once (Experimental; disables visualizer)';
-
-  @override
-  String get osdSpectrumUnavailable =>
-      'Audio visualizer unavailable on this system';
-
-  @override
-  String get osdSpectrumDisabledForMix =>
-      'Visualizer paused while mixing audio tracks';
+      'Play every audio track at once (Experimental)';
 
   @override
   String get settingsSeekPreview => 'Seek thumbnails';
@@ -119,7 +104,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsExperimentalStoredPrefsHint =>
-      'Stored experimental options (visualizer, mix, Linux compositor blur) turn back on when you re-enable this';
+      'Stored experimental options (mix, Linux compositor blur) turn back on when you re-enable this';
 
   @override
   String get snackDropPathInaccessible =>

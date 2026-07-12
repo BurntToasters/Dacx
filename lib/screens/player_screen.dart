@@ -26,7 +26,6 @@ import '../services/playlist_service.dart';
 import '../services/bookmark_service.dart';
 import '../services/open_file_bridge.dart';
 import '../services/seek_preview_service.dart';
-import '../services/audio_spectrum_service.dart';
 import '../services/self_update_service.dart';
 import '../services/windows_shell_service.dart';
 import '../models/chapter_info.dart';
@@ -75,7 +74,6 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
-import '../widgets/audio_spectrum_visualizer.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
 
@@ -140,7 +138,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final IPlayerService _playerService;
   VideoController? _videoController;
   late final SeekPreviewService _seekPreviewService;
-  late final AudioSpectrumService _audioSpectrum;
   late final PlayerAudioSession _audioSession;
   late final PlaybackController _playback;
   late final SleepTimerController _sleepTimer;
@@ -243,12 +240,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _playback = PlaybackController();
     _playerService = widget.playerService ?? PlayerService();
     _seekPreviewService = SeekPreviewService();
-    _audioSpectrum = AudioSpectrumService(playerService: _playerService);
     _audioSession = PlayerAudioSession(
       playerService: _playerService,
       settings: _settings,
       player: _player,
-      spectrum: _audioSpectrum,
     );
     _sleepTimer = SleepTimerController(onFire: _onSleepTimerFired);
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
@@ -306,7 +301,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       lastPlaylistShuffle: _settings.playlistShuffle,
       lastHwDec: _settings.hwDec,
       lastMultiAudioMix: _settings.multiAudioMix,
-      lastAudioWaveformEnabled: _settings.audioWaveformEnabled,
       lastEqEnabled: _settings.eqEnabled,
       lastEqBands: List<double>.from(_settings.eqBands),
     );
@@ -368,7 +362,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _playerService.playingStream.listen((playing) {
         if (!mounted || _isDisposed) return;
         setState(() => _player.isPlaying = playing);
-        _syncSpectrumService(playing);
+        // Keep queue snapshot in sync so a paused quit does not resume later.
+        if (_playlist.isNotEmpty) {
+          _persistPlaylistQueue(wasPlaying: playing);
+          if (!playing) {
+            _settings.flushPlaylistQueue();
+          }
+        }
         unawaited(_idleInhibit.setPlaying(playing));
         if (!playing) {
           unawaited(WindowsShellService.clearTaskbarProgress());
@@ -613,7 +613,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   void _onPlaylistChanged() {
     if (_isDisposed) return;
-    _settings.savePlaylistQueue(_playlist.items, _playlist.index);
+    _persistPlaylistQueue(wasPlaying: _player.isPlaying);
+  }
+
+  void _persistPlaylistQueue({required bool wasPlaying}) {
+    _settings.savePlaylistQueue(
+      _playlist.items,
+      _playlist.index,
+      wasPlaying: wasPlaying,
+    );
   }
 
   Future<void> _restorePersistedQueue() async {
@@ -636,7 +644,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _settings.clearPlaylistQueue();
       return;
     }
-    _settings.savePlaylistQueue(_playlist.items, _playlist.index);
+    _persistPlaylistQueue(wasPlaying: snap.wasPlaying);
     if (removed > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -648,7 +656,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
     final current = _playlist.current;
     if (current != null && _player.currentSource == null) {
-      unawaited(_loadSource(current, syncPlaylist: false));
+      // Honor paused quit: do not autoplay when the user left paused.
+      unawaited(
+        _loadSource(
+          current,
+          syncPlaylist: false,
+          playOverride: snap.wasPlaying,
+        ),
+      );
     }
   }
 
@@ -667,7 +682,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
     _playlist.removeListener(_onPlaylistChanged);
-    _settings.savePlaylistQueue(_playlist.items, _playlist.index);
+    _persistPlaylistQueue(wasPlaying: _player.isPlaying);
     _settings.flushPlaylistQueue();
     _openFileBridge.dispose();
     _subscriptions.cancelAll();
@@ -679,7 +694,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _playlist.dispose();
     unawaited(_idleInhibit.dispose());
     unawaited(_seekPreviewService.dispose());
-    _audioSpectrum.dispose();
     unawaited(_playerService.dispose());
     super.dispose();
   }
@@ -792,7 +806,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
 
     if (delta.audioFilters) {
-      _syncSpectrumService(_player.isPlaying);
+      unawaited(_applyMergedAudioFilters());
     }
 
     if (delta.multiAudioMix) {
@@ -1494,12 +1508,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     PlayableSource source, {
     bool forcePlay = false,
     bool syncPlaylist = true,
+    bool? playOverride,
   }) {
     return _playback.loadQueue.enqueue(
       () => _loadSourceInternal(
         source,
         forcePlay: forcePlay,
         syncPlaylist: syncPlaylist,
+        playOverride: playOverride,
       ),
       onError: (Object e, StackTrace st) {
         _log(
@@ -1625,6 +1641,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     PlayableSource source, {
     bool forcePlay = false,
     bool syncPlaylist = true,
+    bool? playOverride,
   }) async {
     if (_isDisposed) return;
     final requestedValue = source.value.trim();
@@ -1696,7 +1713,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     setState(() {
       _player.beginSourceLoad(normalizedSource, ext);
     });
-    _audioSpectrum.resetDynamics();
     _log(
       'media_type_initial_state',
       detailsBuilder: () => {
@@ -1714,6 +1730,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         normalizedPath: normalizedValue,
         forcePlay: forcePlay,
         autoPlaySetting: _settings.autoPlay,
+        playOverride: playOverride,
       );
       await _playerService.open(open.path, play: open.play);
     } catch (e) {
@@ -1806,8 +1823,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
 
     _player.resumePathInProgress = followUp.resumeTrackingPath;
-    if (followUp.shouldSyncSpectrum) {
-      _syncSpectrumService(_player.isPlaying);
+    if (followUp.shouldApplyAudioFilters) {
+      unawaited(_applyMergedAudioFilters());
     }
     if (followUp.shouldRefreshChapters) {
       unawaited(_refreshChapters());
@@ -1835,7 +1852,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     if (result.audioOnlyChanged) {
       setState(() {});
-      _syncSpectrumService(_player.isPlaying);
+      unawaited(_applyMergedAudioFilters());
     }
     if (result.refreshChapters) {
       unawaited(_refreshChaptersIfNeeded());
@@ -2222,7 +2239,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         );
       }),
     );
-    _audioSpectrum.resetDynamics();
     _log(
       'seek_relative',
       detailsBuilder: () => {'target_ms': target.inMilliseconds},
@@ -2468,22 +2484,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                                 PlayerController.stripOsdTimestamp(
                                                   _player.osdTransientMessage,
                                                 ),
-                                          ),
-                                        ),
-                                      if (_currentFile != null &&
-                                          PlayerUiPolicies.showAudioSpectrum(
-                                            settings: _settings,
-                                            isAudioFile: _player.isAudioFile,
-                                          ))
-                                        Positioned(
-                                          left: 0,
-                                          right: 0,
-                                          bottom: 0,
-                                          height: 40,
-                                          child: AudioSpectrumVisualizer(
-                                            isPlaying: _player.isPlaying,
-                                            bandsListenable:
-                                                _audioSpectrum.bandsNotifier,
                                           ),
                                         ),
                                       if (_compactMode)
@@ -3087,69 +3087,61 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final colorScheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final visualizerHeight = PlayerUiPolicies.spectrumHeight(_settings);
         final shortestSide = MediaQuery.sizeOf(context).shortestSide;
         final shortestSideSize = shortestSide.clamp(220.0, 360.0).toDouble();
-        final maxByHeight = (constraints.maxHeight - 260 - visualizerHeight)
-            .clamp(170.0, 360.0);
+        final maxByHeight = (constraints.maxHeight - 260).clamp(170.0, 360.0);
         final albumArtSize = math.min(shortestSideSize, maxByHeight);
 
-        return Padding(
-          padding: EdgeInsets.only(bottom: visualizerHeight),
-          child: Semantics(
-            label: AppLocalizations.of(context).audioPlaybackLabel,
-            child: Center(
-              child: _buildCenterPanel(
-                maxWidth: 700,
-                children: [
-                  if (showAlbumArt)
-                    _buildAlbumArtSurface(size: albumArtSize)
-                  else
-                    _buildCenterIconSurface(
-                      icon: Icons.album,
-                      size: 54,
-                      color: colorScheme.primary.withValues(alpha: 0.88),
-                    ),
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            color: colorScheme.onSurface.withValues(
-                              alpha: 0.88,
-                            ),
-                            fontWeight: FontWeight.w500,
-                            height: 1.2,
-                          ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+        return Semantics(
+          label: AppLocalizations.of(context).audioPlaybackLabel,
+          child: Center(
+            child: _buildCenterPanel(
+              maxWidth: 700,
+              children: [
+                if (showAlbumArt)
+                  _buildAlbumArtSurface(size: albumArtSize)
+                else
+                  _buildCenterIconSurface(
+                    icon: Icons.album,
+                    size: 54,
+                    color: colorScheme.primary.withValues(alpha: 0.88),
                   ),
-                  if (artist != null && artist.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      artist,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.72),
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  Text(
-                    AppLocalizations.of(context).labelAudioPlayback,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.62),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.88),
+                      fontWeight: FontWeight.w500,
                       height: 1.2,
                     ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (artist != null && artist.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    artist,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.72),
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
-              ),
+                const SizedBox(height: 10),
+                Text(
+                  AppLocalizations.of(context).labelAudioPlayback,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withValues(alpha: 0.62),
+                    height: 1.2,
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -3411,18 +3403,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await _applyMergedAudioFilters();
   }
 
-  /// Builds and applies the combined af chain: EQ + spectrum analysis.
+  /// Builds and applies the EQ af chain.
   Future<void> _applyMergedAudioFilters() async {
     final result = await _audioSession.applyMergedAudioFilters();
-    if (result.spectrumFailed && result.usedSpectrumFallback && mounted) {
-      _showOsdMessage(AppLocalizations.of(context).osdSpectrumUnavailable);
-    }
-    if (_audioSpectrum.capabilityFailed &&
-        _settings.audioWaveformEnabled &&
-        mounted) {
-      _showOsdMessage(AppLocalizations.of(context).osdSpectrumUnavailable);
-      await _audioSession.disableSpectrumDueToCapabilityFailure();
-    }
     if (result.failed) {
       _log(
         'audio_filter_apply_failed',
@@ -3430,11 +3413,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.warn,
       );
     }
-  }
-
-  /// Start or stop spectrum polling based on playing state + settings.
-  void _syncSpectrumService(bool playing) {
-    _audioSession.syncSpectrum(playing);
   }
 
   void _toggleEqualizer() {
@@ -3596,7 +3574,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       case MediaSessionDispatchKind.seek:
         final target = dispatch.seekTarget;
         if (target != null) {
-          _audioSpectrum.resetDynamics();
           unawaited(_playerService.seek(target));
         }
       case MediaSessionDispatchKind.setLoopMode:
@@ -3634,8 +3611,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await _playerService.stop();
     if (!mounted || _isDisposed) return;
     setState(_player.resetTransport);
-    _audioSpectrum.resetDynamics();
-    _syncSpectrumService(false);
   }
 
   // ── Resume position ─────────────────────────────────
@@ -4213,19 +4188,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                               onChanged: (v) {
                                 _settings.multiAudioMix = v;
                                 setSheetState(() {});
-                                if (v && _settings.audioWaveformEnabled) {
-                                  _showOsdMessage(
-                                    l10n.osdSpectrumDisabledForMix,
-                                  );
-                                  _syncSpectrumService(_player.isPlaying);
-                                }
                                 unawaited(() async {
                                   await _applyMultiAudioMix(announce: true);
                                   if (_currentFile != null) {
                                     await _reloadCurrentForMixChange();
-                                  }
-                                  if (!v) {
-                                    _syncSpectrumService(_player.isPlaying);
                                   }
                                 }());
                               },

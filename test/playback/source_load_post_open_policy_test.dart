@@ -110,7 +110,7 @@ void main() {
 
       final followUp = SourceLoadPostOpenPolicy.followUpFor(plan);
       expect(followUp.shouldCacheTracks, isTrue);
-      expect(followUp.shouldSyncSpectrum, isTrue);
+      expect(followUp.shouldApplyAudioFilters, isTrue);
       expect(followUp.shouldRefreshChapters, isTrue);
       expect(followUp.shouldApplyMultiAudioMix, isTrue);
       expect(followUp.shouldUpdateMediaSessionMetadata, isTrue);

@@ -1,7 +1,5 @@
-import 'package:dacx/models/playable_source.dart';
 import 'package:dacx/playback/player_audio_session.dart';
 import 'package:dacx/playback/player_controller.dart';
-import 'package:dacx/services/audio_spectrum_service.dart';
 import 'package:dacx/services/player_service.dart';
 import 'package:dacx/services/settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,7 +32,6 @@ void main() {
     late _FakePlayerService playerService;
     late SettingsService settings;
     late PlayerController player;
-    late AudioSpectrumService spectrum;
     late PlayerAudioSession session;
 
     setUp(() async {
@@ -43,47 +40,40 @@ void main() {
       settings = SettingsService(prefs);
       playerService = _FakePlayerService();
       player = PlayerController();
-      spectrum = AudioSpectrumService(playerService: playerService);
       session = PlayerAudioSession(
         playerService: playerService,
         settings: settings,
         player: player,
-        spectrum: spectrum,
       );
     });
 
-    tearDown(() {
-      spectrum.dispose();
-    });
-
-    test('applyMergedAudioFilters confirms spectrum when wanted', () async {
-      settings.experimentalFeaturesEnabled = true;
-      settings.audioWaveformEnabled = true;
-      player.beginSourceLoad(PlayableSource.file('/tmp/song.mp3'), 'mp3');
-      await spectrum.start();
+    test('applyMergedAudioFilters applies EQ when enabled', () async {
+      settings.eqEnabled = true;
+      settings.eqBands = const [4, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
       final result = await session.applyMergedAudioFilters();
-      expect(result.spectrumInstalled || result.needsSpectrumConfirm, isTrue);
-      expect(spectrum.isFilterInstalled, isTrue);
-      expect(playerService.lastAf, contains('dacxb0'));
+      expect(result.failed, isFalse);
+      expect(result.skipped, isFalse);
+      expect(playerService.lastAf, contains('equalizer'));
+      expect(player.lastAppliedAfChain, contains('equalizer'));
     });
 
-    test('spectrumWanted is false when mix is enabled', () async {
-      settings.experimentalFeaturesEnabled = true;
-      settings.audioWaveformEnabled = true;
-      settings.multiAudioMix = true;
-      player.beginSourceLoad(PlayableSource.file('/tmp/song.mp3'), 'mp3');
-      await spectrum.start();
-      expect(session.spectrumWanted, isFalse);
+    test('applyMergedAudioFilters skips when chain unchanged', () async {
+      settings.eqEnabled = false;
+      player.lastAppliedAfChain = '';
+
+      final result = await session.applyMergedAudioFilters();
+      expect(result.skipped, isTrue);
+      expect(playerService.lastAf, isNull);
     });
 
-    test('syncSpectrum starts when playing audio with visualizer on', () async {
-      settings.experimentalFeaturesEnabled = true;
-      settings.audioWaveformEnabled = true;
-      player.beginSourceLoad(PlayableSource.file('/tmp/song.mp3'), 'mp3');
-      session.syncSpectrum(true);
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-      expect(spectrum.isActive, isTrue);
+    test('applyMergedAudioFilters reports failed when mpv rejects', () async {
+      settings.eqEnabled = true;
+      settings.eqBands = const [4, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      playerService.afOk = false;
+
+      final result = await session.applyMergedAudioFilters();
+      expect(result.failed, isTrue);
     });
   });
 }

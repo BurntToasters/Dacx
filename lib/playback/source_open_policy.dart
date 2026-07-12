@@ -11,20 +11,26 @@ abstract final class SourceOpenPolicy {
     required String normalizedPath,
     required bool forcePlay,
     required bool autoPlaySetting,
+    bool? playOverride,
   }) {
     return SourceOpenParams(
       path: normalizedPath,
       play: shouldAutoplayOnOpen(
         forcePlay: forcePlay,
         autoPlaySetting: autoPlaySetting,
+        playOverride: playOverride,
       ),
     );
   }
 
+  /// [playOverride] wins when set (session restore after a paused quit).
+  /// Otherwise [forcePlay] or the autoplay setting decide.
   static bool shouldAutoplayOnOpen({
     required bool forcePlay,
     required bool autoPlaySetting,
+    bool? playOverride,
   }) {
+    if (playOverride != null) return playOverride;
     return forcePlay || autoPlaySetting;
   }
 

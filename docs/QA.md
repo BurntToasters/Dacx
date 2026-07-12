@@ -23,6 +23,7 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] Clear queue
 - [ ] Save Playlist exports `.m3u`; re-open that playlist and a `.pls`
 - [ ] Quit and relaunch: queue + index restore (missing files pruned)
+- [ ] Pause, quit, relaunch: media reloads paused (does not auto-resume)
 
 ## OS chrome
 
@@ -45,7 +46,7 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] Turning **Experimental off** on Win/mac does **not** clear Appearance blur / opacity
 - [ ] Hardware decode change applies without requiring app restart (copy matches behavior)
 - [ ] Settings → Keyboard shortcuts opens the full editable F1 keybinds dialog
-- [ ] Experimental section: visualizer + multi-audio mix (and Linux blur) appear when master is on (WIP lane — expected unstable)
+- [ ] Experimental section: multi-audio mix (and Linux blur) appear when master is on (WIP lane — expected unstable)
 - [ ] Seek thumbnails toggle lives under Playback settings (not the more menu)
 - [ ] Check for Updates opens a sensible path (self-update on Win MSI / macOS Applications; Linux package guidance)
 - [ ] Windows MSI self-update burn-in: `dacx-update-helper.exe` next to `dacx.exe`; after Apply, no `.ps1` under `%LOCALAPPDATA%\Dacx\updates`; `helper.log` shows wait → sha256 → msiexec → `relaunched …\dacx.exe`; app returns like macOS update & restart
