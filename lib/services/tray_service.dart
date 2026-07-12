@@ -32,9 +32,7 @@ class TrayService with TrayListener {
       return _cachedIconPath!;
     }
     final data = await rootBundle.load('assets/icon/icon.png');
-    final out = File(
-      p.join(Directory.systemTemp.path, 'dacx_tray_icon.png'),
-    );
+    final out = File(p.join(Directory.systemTemp.path, 'dacx_tray_icon.png'));
     await out.writeAsBytes(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       flush: true,
