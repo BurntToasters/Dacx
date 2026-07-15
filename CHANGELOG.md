@@ -1,3 +1,6 @@
+<!-- > [!NOTE]
+> 🅱️ This is a Beta build. -->
+
 # ⬇️ Downloads
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
@@ -18,6 +21,25 @@
 ## Changes in `v0.11.0:`
 - **NEW - Windows code signing:** WOO HOO!! Windows Codesigning is here!
   - After a good while of not having it, Windows Binaries are now signed by Azure Artifact Signing!
+- **NEW - Playlist files:** Open/import `.m3u` and `.pls` playlists from the file picker or drag-and-drop, and save/export the play queue as `.m3u`. HLS `.m3u8` files still open as streams for mpv.
+- **NEW - Playback speed:** A transport speed chip cycles presets, with `[` / `]` / `\` shortcuts.
+- **NEW - External tracks:** Load external audio or subtitle files from the more menu.
+- **NEW - Sleep timer:** The ⋯ menu offers 15 / 30 / 45 / 60 minute presets that stop playback when the timer fires.
+- **NEW - Minimize to tray:** An optional Appearance setting lets close hide Dacx to the tray; tray Show / Quit restore or exit the app.
+- **Windows:** Added Jump Lists from recents, taskbar playback progress, idle inhibit while playing, SMTC rate updates, playlist Open With ProgIDs, and expanded media extensions. Fixed an unquoted App Search Open With command. The portable ZIP is no longer packaged; Windows releases use MSI.
+- **macOS:** Expanded File and Dock menus, added Preferences, Check for Updates, display-sleep inhibit, Now Playing playback rate, and richer playlist file associations.
+- **Linux:** Idle/screensaver inhibit now uses a persistent D-Bus session. Update guidance is package-aware, package detection handles `/opt/dacx`, MPRIS/AppStream/MIME support is expanded, and Flatpak has ScreenSaver access.
+- **UI:** Open URL lives in the ⋯ menu (and macOS File menu) with `Ctrl/Cmd+U`; single-file, Open With, and URL loads sync to the play queue; queue reorder and shuffle persist; media info includes title, artist, and album metadata.
+- **Settings:** Window blur and opacity are Appearance settings on Windows/macOS; experimental settings remain isolated; hardware-decoding changes re-apply at runtime; and Keyboard Shortcuts opens the editable F1 keybind dialog.
+- **Shortcuts:** Escape returns from Settings, closes the queue drawer before leaving fullscreen, and cancels keybind capture. Custom keybinds now overlay defaults instead of replacing them.
+- **Updater:** Windows self-update uses a native helper that re-checks SHA-256 and optional Authenticode before elevating MSI installation, then relaunches Dacx. Linux update guidance is package-aware.
+- **Security:** Rejects UNC and unsafe open paths plus URLs with embedded credentials; hardens macOS update-zip containment and remote artwork; and keeps Windows updater trust Ed25519-first with optional Authenticode pinning.
+- **Media session:** Passes title, artist, album, and embedded album artwork to operating-system Now Playing integrations.
+- **Codebase:** Extracted `PlayerAudioSession` from `PlayerScreen`; Linux install-kind checks use POSIX normalization; and the Windows updater helper has dedicated test coverage.
+- **Testing:** Expanded headless PlayerScreen, updater, shortcuts, queue, settings, drag-drop, media-session, and playback-policy coverage.
+- **Docs:** Documented the support contract, Flatpak sideload guidance, per-file resume, the manual QA checklist, and bundled-versus-system native dependencies.
+- **PKG:** Added version sync checks for `package-lock.json` and Flatpak metadata; added Linux tray build/runtime dependencies; and removed the obsolete release guard.
+- **Misc:** Removed the experimental audio spectrum visualizer; its future reintroduction notes live in `docs/ideas/visualizer.md`.
 - **Change:** Quit no longer restores the last session queue; relaunch opens the empty home state. (Per-file resume position when reopening a file is unchanged.)
 - **Fix:** Failed experimental multi-audio mix now shows OSD + snackbar and turns the toggle back off (no silent “on but not mixing”).
 - **Fix:** Hardened media-session album-art export against stale screenshot races and cleans up superseded temporary artwork.
@@ -29,62 +51,6 @@
 - **Docs:** Clarified per-file resume, empty relaunch behavior, Flatpak sideload status, and the Ed25519-first Windows signing model.
 - **Docs:** Expanded `docs/QA.md` for per-file resume, Reopen Last + resume, media-session artwork, and mix failure feedback.
 - **Docs/PKG:** Version sync checks `package-lock.json` and Flatpak `# x-version:`; Linux tray build dep (`libayatana-appindicator3-dev`) in setup/CI; deb/rpm runtime Depends for appindicator; `NATIVE_DEPENDENCIES.md` clarifies bundled vs system libmpv.
-
-## Changes in `v0.11.0-beta.5:`
-- **Misc:** Removed the experimental audio spectrum visualizer (too heavy for the current packaging story; see `docs/ideas/visualizer.md` for a future reintroduction path).
-
-## Changes in `v0.11.0-beta.4:`
-- **Ver:** Bumped version to `v0.11.0-beta.4`.
-- **Updater:** After a successful MSI self-update, `dacx-update-helper.exe` relaunches Dacx (update & restart), matching the macOS updater.
-- **NEW - Sleep timer:** ⋯ more menu presets (15 / 30 / 45 / 60 minutes) stop playback when the timer fires.
-- **NEW - Minimize to tray:** Optional Appearance setting; close hides to tray, tray Show / Quit restore or exit.
-- **PKG:** Windows portable ZIP is no longer packaged (MSI only). WiX v3 fallback removed (WiX v4+ / v7 required).
-- **Misc:** Documented Flatpak as GitHub-sideload-only (no Flathub plans); Linux install guidance prefers AppImage + [AppManager](https://github.com/kem-a/AppManager); Experimental Features kept as a long-lived WIP lane past `1.0`; dropped unused `release:guard` script.
-
-## Changes in `v0.11.0-beta.3:`
-- **Testing:** This update is purely to test the new windows updater helper.
-
-## Changes in `v0.11.0-beta.2:`
-
-- **Ver:** Bumped version to `v0.11.0-beta.2`.
-- **Shortcuts:** Escape goes back from Settings, closes the play queue drawer before exiting fullscreen (and reconciles OS/title-bar fullscreen via WindowListener), and cancels keybind capture instead of binding Escape.
-- **UI:** Removed the empty-state Open URL button; Open URL stays in the ⋯ more menu (and macOS File → Open URL) plus `Ctrl/Cmd+U`.
-- **UI:** Unsupported extensions and Flatpak-inaccessible drops now show clear snackbars; failed external audio/subtitle loads surface a snackbar in addition to the OSD tip.
-- **Security:** Windows self-update now launches a native `dacx-update-helper.exe` via a short in-memory WMI bootstrap (no on-disk `apply-update.ps1` / `spawn-watchdog.ps1`) so the helper survives the app Job Object, re-checks SHA-256 (and optional Authenticode), then elevates `msiexec`. After a successful install the helper relaunches Dacx (update & restart). Trust stays Ed25519-first.
-- **Testing:** Expanded the headless `PlayerScreen` harness and Windows self-update tests around Escape reconcile, snacks, session restore, external tracks, and the native helper launch path.
-- **Misc:** Updated `docs/QA.md`, `SECURITY.md`, and the README Windows signing notes for the helper binary.
-
-## Changes in `v0.11.0-beta.1:`
-
-- **Ver:** Bumped version to `v0.11.0-beta.1`.
-- **NEW - Playlist files:** Added open/import for `.m3u` / `.pls` (file picker, empty state, and drag-drop) plus save/export of the play queue as `.m3u`. HLS `.m3u8` still opens as a stream for mpv.
-- **NEW - Session queue restore:** I now restore the last session queue (paths + index) on launch, prune missing files, and keep shuffle via the existing preference.
-- **NEW - Playback speed:** Added a transport speed chip that cycles presets, plus `[` / `]` / `\` shortcuts.
-- **NEW - External tracks:** You can load external audio or subtitle files from the more menu.
-- **macOS:** Expanded File / Dock menus (Open Folder / Playlist / URL / Reopen Last / New Window / Open Recent → Clear Menu / Save Playlist), Preferences… (⌘,), Check for Updates…, display-sleep inhibit while playing, Now Playing playback rate, and richer Launch Services types including playlists.
-- **Windows:** Added Jump Lists from recents, taskbar playback progress, idle inhibit while playing, SMTC rate updates, playlist Open With ProgIDs, and expanded media extensions. Fixed an issue where App Search registered an unquoted Open With command alongside the file-assoc entry.
-- **Linux:** Idle/screensaver inhibit while playing now uses a persistent D-Bus session so it actually sticks. Update guidance is package-aware (Flatpak / AppImage / deb·rpm / portable). Fixed an issue where deb/rpm installs under `/opt/dacx` were mislabeled as portable. MPRIS `desktopEntry` matches the packaged `.desktop`; fuller icons / MIME / AppStream coverage; Flatpak ScreenSaver talk-name.
-- **UI:** Moved Open URL into the ⋯ more menu (macOS File → Open URL stays), and the more menu now works on the empty state so Win/Linux can still open streams. Added an empty-state Open URL button plus `Ctrl/Cmd+U`. Grouped the menu with dividers. Mute toggles from the volume icon. Prev/next tooltips now match `Shift+P` / `Shift+N`. Media Info shows title / artist / album when tags are present. Empty-state Reopen Last tip mentions Ctrl/Cmd+R.
-- **UI:** Single-file Open / Open With / URL loads sync into the play queue; Open With on the same path restarts when already playing; queue drag-reorder + shuffle on the drawer (shuffle now persists and stays in sync with Settings / media session / OS chrome).
-- **Settings:** Graduated window blur / opacity to Appearance on Windows and macOS (Linux compositor blur stays experimental). Turning Experimental off no longer clears Win/mac blur. Experimental children (visualizer, multi-audio mix, Linux blur) live under the Experimental section. Seek thumbnails stay in Playback settings only. Hardware decode changes re-apply at runtime. Settings → Keyboard shortcuts opens the full editable F1 keybinds dialog (⌘ labels on macOS). Expanded folder-scan extensions (`ts` / `m2ts` / `mpg` / …).
-- **Misc:** Rebuilt the experimental audio visualizer as real multiband lavfi analysis (4 bands → 32 bars) with a safer filter lifecycle, mutual exclusion with multi-audio mix, and a capability probe with OSD. Still experimental and off by default.
-- **Shortcuts:** Custom keybinds now overlay defaults instead of replacing the entire map.
-- **Updater:** Linux Check for Updates copy is package-aware; Flatpak empty state is picker-first with a Reopen Last tip.
-- **Misc:** Media session now passes title / artist / album from tags and exports embedded album art for OS Now Playing.
-- **Security:** Reject UNC / unsafe open paths and URLs with embedded credentials; hardened macOS update zip containment and Now Playing remote artwork hosts; clarified that Windows self-update trust is Ed25519-first with optional Authenticode pin.
-- **Codebase:** Extracted `PlayerAudioSession` from `PlayerScreen`; limited CI / release guard to `main` and `beta`. Linux install-kind path checks use POSIX normalization so detection stays correct when unit-tested on Windows hosts.
-- **Testing:** Expanded VM tests and the headless `PlayerScreen` harness around playback policies and recent UI wiring.
-- **Misc:** Documented the support contract in the README (en-only, macOS 15+, x64), Flatpak sideload update guidance, and a manual QA checklist in `docs/QA.md`.
-- **PKG:** Updated packages.
-
-## Changes in `v0.10.1-beta.1:`
-
-- **NEW - Audio visualizer:** Added a new audio-reactive bar visualizer for audio playback (experimental).
-- **UI:** More work on window transparency / blur; closer to graduating out of Experimental!
-- **Codebase:** Updated the pinned Flutter version to `v3.44.5`.
-- **Testing:** Expanded `npm run test:all` with a headless `PlayerScreen` harness (transport, queue, settings, drag-drop, shortcuts, media session, screenshots, and more) plus extracted playback-policy unit coverage.
-- **Misc:** `IPlayerService` injection and load-generation guards reduce stale UI after rapid queue changes; self-update redirect allowlist and Windows manifest validation covered by direct tests.
-- **PKG:** Updated packages.
 
 <details>
 <summary>Full changelog</summary>
