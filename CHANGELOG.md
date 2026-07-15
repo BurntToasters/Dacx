@@ -26,13 +26,15 @@
 - **NEW - External tracks:** Load external audio or subtitle files from the more menu.
 - **NEW - Sleep timer:** The ⋯ menu offers 15 / 30 / 45 / 60 minute presets that stop playback when the timer fires.
 - **NEW - Minimize to tray:** An optional Appearance setting lets close hide Dacx to the tray; tray Show / Quit restore or exit the app.
-- **Windows:** Added Jump Lists from recents, taskbar playback progress, idle inhibit while playing, SMTC rate updates, playlist Open With ProgIDs, and expanded media extensions. Fixed an unquoted App Search Open With command. The portable ZIP is no longer packaged; Windows releases use MSI.
+- **Windows:** Added Jump Lists from recents, taskbar playback progress, idle inhibit while playing, SMTC rate updates, playlist Open With ProgIDs, and expanded media extensions. Fixed an unquoted App Search Open With command.
+- **PKG - Windows:** Windows releases are now MSI-only. The portable x64 ZIP is no longer built or listed in downloads.
 - **macOS:** Expanded File and Dock menus, added Preferences, Check for Updates, display-sleep inhibit, Now Playing playback rate, and richer playlist file associations.
 - **Linux:** Idle/screensaver inhibit now uses a persistent D-Bus session. Update guidance is package-aware, package detection handles `/opt/dacx`, MPRIS/AppStream/MIME support is expanded, and Flatpak has ScreenSaver access.
 - **UI:** Open URL lives in the ⋯ menu (and macOS File menu) with `Ctrl/Cmd+U`; single-file, Open With, and URL loads sync to the play queue; queue reorder and shuffle persist; media info includes title, artist, and album metadata.
 - **Settings:** Window blur and opacity are Appearance settings on Windows/macOS; experimental settings remain isolated; hardware-decoding changes re-apply at runtime; and Keyboard Shortcuts opens the editable F1 keybind dialog.
 - **Shortcuts:** Escape returns from Settings, closes the queue drawer before leaving fullscreen, and cancels keybind capture. Custom keybinds now overlay defaults instead of replacing them.
 - **Updater:** Windows self-update uses a native helper that re-checks SHA-256 and optional Authenticode before elevating MSI installation, then relaunches Dacx. Linux update guidance is package-aware.
+- **Fix - Windows updater:** Creates the update cache directory before downloading the MSI so self-update works on a clean installation.
 - **Security:** Rejects UNC and unsafe open paths plus URLs with embedded credentials; hardens macOS update-zip containment and remote artwork; and keeps Windows updater trust Ed25519-first with optional Authenticode pinning.
 - **Media session:** Passes title, artist, album, and embedded album artwork to operating-system Now Playing integrations.
 - **Codebase:** Extracted `PlayerAudioSession` from `PlayerScreen`; Linux install-kind checks use POSIX normalization; and the Windows updater helper has dedicated test coverage.

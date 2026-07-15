@@ -309,7 +309,13 @@ class SelfUpdateService {
 
   /// Cross-platform "Dacx update cache" dir. Mirrors the env-var pattern used
   /// by [InstanceModeService] rather than pulling in path_provider.
+  @visibleForTesting
+  static Directory? updateCacheDirOverride;
+
   static Directory updateCacheDir() {
+    final override = updateCacheDirOverride;
+    if (override != null) return override;
+
     final env = Platform.environment;
     String? base;
     if (Platform.isWindows) {
@@ -612,6 +618,7 @@ class SelfUpdateService {
     List<int> manifestBytes;
     List<int> manifestSignatureBytes;
     try {
+      await cacheDir.create(recursive: true);
       await _downloadTo(asset.downloadUrl, msiPath, onProgress: onProgress);
       checksumsBody = await _fetchText(checksums.downloadUrl);
       manifestBytes = await _fetchBytes(manifest.downloadUrl);

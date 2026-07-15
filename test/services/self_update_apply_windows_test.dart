@@ -52,12 +52,26 @@ String _sha256Hex(List<int> bytes) {
 
 void main() {
   group('SelfUpdateService.applyWindowsUpdate', () {
-    setUp(() {
+    late Directory tempRoot;
+    late Directory updateCacheDir;
+
+    setUp(() async {
+      tempRoot = await Directory.systemTemp.createTemp(
+        'dacx-self-update-test-',
+      );
+      updateCacheDir = Directory(
+        '${tempRoot.path}${Platform.pathSeparator}updates',
+      );
+      SelfUpdateService.updateCacheDirOverride = updateCacheDir;
       SelfUpdateService.windowsUpdateHelperPathOverride =
           r'C:\Program Files\Dacx\dacx-update-helper.exe';
     });
-    tearDown(() {
+    tearDown(() async {
       SelfUpdateService.windowsUpdateHelperPathOverride = null;
+      SelfUpdateService.updateCacheDirOverride = null;
+      if (await tempRoot.exists()) {
+        await tempRoot.delete(recursive: true);
+      }
     });
 
     test('returns missingAsset when MSI asset is absent', () async {
@@ -210,6 +224,8 @@ void main() {
     test(
       'returns spawned when downloads verify and watchdog spawn succeeds',
       () async {
+        expect(updateCacheDir.existsSync(), isFalse);
+
         final msiBytes = Uint8List.fromList(utf8.encode('verified-msi'));
         final hash = _sha256Hex(msiBytes);
         final manifestBytes = utf8.encode(
@@ -260,6 +276,7 @@ void main() {
           },
         );
         expect(result.outcome, SelfUpdateOutcome.spawned);
+        expect(updateCacheDir.existsSync(), isTrue);
       },
     );
 
