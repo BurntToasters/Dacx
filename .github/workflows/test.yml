@@ -5,13 +5,10 @@ on:
     branches:
       - main
       - beta
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - main
       - beta
-  workflow_dispatch:
 
 jobs:
   test:
