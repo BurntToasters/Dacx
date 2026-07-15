@@ -1,15 +1,12 @@
-> [!NOTE]
-> 🅱️ This is a Beta build.
-
 # ⬇️ Downloads
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-arm64.AppImage) --> |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-arm64.deb) --> |
-| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-aarch64.rpm) --> |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-aarch64.flatpak) --> |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0-beta.6/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Windows-x64.msi) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Windows-arm64.msi) --> | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-x86_64.AppImage) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-arm64.AppImage) --> |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-macOS.zip)** | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-amd64.deb) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-arm64.deb) --> |
+| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-x86_64.rpm) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-aarch64.rpm) --> |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-x86_64.flatpak) <!-- / [arm64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-aarch64.flatpak) --> |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.0/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -18,7 +15,9 @@
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
-## Changes in `v0.11.0-beta.6 (RC1):`
+## Changes in `v0.11.0:`
+- **NEW - Windows code signing:** WOO HOO!! Windows Codesigning is here!
+  - After a good while of not having it, Windows Binaries are now signed by Azure Artifact Signing!
 - **Change:** Quit no longer restores the last session queue; relaunch opens the empty home state. (Per-file resume position when reopening a file is unchanged.)
 - **Fix:** Failed experimental multi-audio mix now shows OSD + snackbar and turns the toggle back off (no silent “on but not mixing”).
 - **Fix:** Hardened media-session album-art export against stale screenshot races and cleans up superseded temporary artwork.
