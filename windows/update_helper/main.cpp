@@ -5,7 +5,8 @@
 //
 // Usage:
 //   dacx-update-helper.exe --pid <dacxPid> --msi <path> --sha256 <64hex>
-//                          [--thumbprint <hex>] [--exe <dacx.exe>] [--relaunch 0|1]
+//                          [--thumbprint <hex>] [--publisher <name>]
+//                          [--exe <dacx.exe>] [--relaunch 0|1]
 //
 // After a successful msiexec, relaunches Dacx (default) like the macOS updater.
 //
@@ -185,7 +186,9 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
   return true;
 }
 
-bool VerifyAuthenticode(const std::wstring& path, const std::wstring& expected,
+bool VerifyAuthenticode(const std::wstring& path,
+                        const std::wstring& expected_thumbprint,
+                        const std::wstring& expected_publisher,
                         int* exit_code) {
   WINTRUST_FILE_INFO file_info{};
   file_info.cbStruct = sizeof(file_info);
@@ -250,29 +253,47 @@ bool VerifyAuthenticode(const std::wstring& path, const std::wstring& expected,
     return false;
   }
 
-  DWORD hash_len = 0;
-  CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID, nullptr,
-                                    &hash_len);
-  std::vector<BYTE> hash(hash_len);
-  if (!CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID,
-                                         hash.data(), &hash_len)) {
-    CertFreeCertificateContext(cert);
-    CryptMsgClose(msg);
-    CertCloseStore(store, 0);
-    LogLine(L"thumbprint read failed");
-    *exit_code = 10;
-    return false;
+  bool identity_matches = false;
+  if (!expected_publisher.empty()) {
+    const DWORD name_len = CertGetNameStringW(
+        cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, nullptr, 0);
+    std::vector<wchar_t> name(name_len);
+    if (name_len <= 1 ||
+        CertGetNameStringW(cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr,
+                           name.data(), name_len) == 0) {
+      LogLine(L"publisher read failed");
+    } else {
+      const std::wstring actual_publisher(name.data());
+      identity_matches =
+          _wcsicmp(actual_publisher.c_str(), expected_publisher.c_str()) == 0;
+      if (!identity_matches) {
+        LogLine(L"authenticode publisher mismatch expected=" +
+                expected_publisher + L" actual=" + actual_publisher);
+      }
+    }
+  } else {
+    DWORD hash_len = 0;
+    CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID, nullptr,
+                                      &hash_len);
+    std::vector<BYTE> hash(hash_len);
+    if (CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID,
+                                          hash.data(), &hash_len)) {
+      const std::wstring actual =
+          NormalizeThumbprint(ToHexLower(hash.data(), hash.size()));
+      identity_matches =
+          _wcsicmp(actual.c_str(), expected_thumbprint.c_str()) == 0;
+      if (!identity_matches) {
+        LogLine(L"authenticode thumbprint mismatch expected=" +
+                expected_thumbprint + L" actual=" + actual);
+      }
+    } else {
+      LogLine(L"thumbprint read failed");
+    }
   }
-
-  const std::wstring actual =
-      NormalizeThumbprint(ToHexLower(hash.data(), hash.size()));
   CertFreeCertificateContext(cert);
   CryptMsgClose(msg);
   CertCloseStore(store, 0);
-
-  if (_wcsicmp(actual.c_str(), expected.c_str()) != 0) {
-    LogLine(L"authenticode thumbprint mismatch expected=" + expected +
-            L" actual=" + actual);
+  if (!identity_matches) {
     *exit_code = 11;
     return false;
   }
@@ -381,6 +402,7 @@ struct Args {
   std::wstring msi;
   std::wstring sha256;
   std::wstring thumbprint;
+  std::wstring publisher;
   std::wstring exe;
   bool relaunch = true;
 };
@@ -401,6 +423,8 @@ bool ParseArgs(int argc, wchar_t** argv, Args* out) {
       }
     } else if (key == L"--thumbprint") {
       out->thumbprint = NormalizeThumbprint(value);
+    } else if (key == L"--publisher") {
+      out->publisher = value;
     } else if (key == L"--exe") {
       out->exe = value;
     } else if (key == L"--relaunch") {
@@ -426,7 +450,8 @@ int Run(int argc, wchar_t** argv) {
   }
 
   LogLine(L"started pid=" + std::to_wstring(args.pid) + L" msi=" + args.msi +
-          L" thumb=" + args.thumbprint + L" sha=" + args.sha256 +
+          L" publisher=" + args.publisher + L" thumb=" + args.thumbprint +
+          L" sha=" + args.sha256 +
           L" relaunch=" + (args.relaunch ? L"1" : L"0"));
 
   const int wait_rc = WaitForPid(args.pid);
@@ -443,9 +468,10 @@ int Run(int argc, wchar_t** argv) {
     return 12;
   }
 
-  if (!args.thumbprint.empty()) {
+  if (!args.thumbprint.empty() || !args.publisher.empty()) {
     int auth_rc = 0;
-    if (!VerifyAuthenticode(args.msi, args.thumbprint, &auth_rc)) {
+    if (!VerifyAuthenticode(args.msi, args.thumbprint, args.publisher,
+                            &auth_rc)) {
       return auth_rc;
     }
   }

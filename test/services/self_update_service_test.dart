@@ -189,6 +189,14 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
       expect(parsed.thumbprint, '');
       expect(parsed.message, 'No signature | present');
     });
+
+    test('parses Artifact Signing publisher identity', () {
+      final parsed = SelfUpdateService.parseAuthenticodeStatus(
+        'Valid|ABCD1234|publisher:BurntToasters LLC|ok',
+      );
+      expect(parsed.publisher, 'BurntToasters LLC');
+      expect(parsed.message, 'ok');
+    });
   });
 
   group('SelfUpdateService Windows update helper', () {

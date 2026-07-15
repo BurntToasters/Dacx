@@ -98,6 +98,10 @@ class SelfUpdateService {
     'DACX_WINDOWS_SIGNER_THUMBPRINT',
     defaultValue: '',
   );
+  static const String expectedWindowsSignerPublisher = String.fromEnvironment(
+    'DACX_WINDOWS_SIGNER_PUBLISHER',
+    defaultValue: '',
+  );
   static const String _macInstallPath = '/Applications/Dacx.app';
   static const String _windowsManifestName =
       'Dacx-update-manifest-Windows-x64.json';
@@ -125,6 +129,7 @@ class SelfUpdateService {
   final String? _expectedTeamIdOverride;
   final String? _windowsManifestPublicKeyOverride;
   final String? _expectedWindowsSignerThumbprintOverride;
+  final String? _expectedWindowsSignerPublisherOverride;
 
   SelfUpdateService({
     DebugLogService? debugLog,
@@ -139,6 +144,7 @@ class SelfUpdateService {
     @visibleForTesting String? expectedTeamIdOverride,
     @visibleForTesting String? windowsManifestPublicKeyOverride,
     @visibleForTesting String? expectedWindowsSignerThumbprintOverride,
+    @visibleForTesting String? expectedWindowsSignerPublisherOverride,
   }) : _debugLog = debugLog,
        _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
@@ -151,7 +157,9 @@ class SelfUpdateService {
        _expectedTeamIdOverride = expectedTeamIdOverride,
        _windowsManifestPublicKeyOverride = windowsManifestPublicKeyOverride,
        _expectedWindowsSignerThumbprintOverride =
-           expectedWindowsSignerThumbprintOverride;
+           expectedWindowsSignerThumbprintOverride,
+       _expectedWindowsSignerPublisherOverride =
+           expectedWindowsSignerPublisherOverride;
 
   static Future<WindowsSpawnResult> _defaultWindowsSpawn(
     String commandLine, {
@@ -257,19 +265,26 @@ class SelfUpdateService {
     return value.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
   }
 
-  static ({String status, String thumbprint, String message})
+  static ({String status, String thumbprint, String publisher, String message})
   parseAuthenticodeStatus(String text) {
     final line = const LineSplitter()
         .convert(text)
         .map((s) => s.trim())
         .firstWhere((s) => s.isNotEmpty, orElse: () => '');
     final parts = line.split('|');
+    final hasPublisherField =
+        parts.length > 3 && parts[2].startsWith('publisher:');
     return (
       status: parts.isNotEmpty ? parts[0].trim() : '',
       thumbprint: parts.length > 1
           ? normalizeCertificateThumbprint(parts[1])
           : '',
-      message: parts.length > 2 ? parts.sublist(2).join('|').trim() : '',
+      publisher: hasPublisherField
+          ? parts[2].substring('publisher:'.length).trim()
+          : '',
+      message: hasPublisherField
+          ? parts.sublist(3).join('|').trim()
+          : (parts.length > 2 ? parts.sublist(2).join('|').trim() : ''),
     );
   }
 
@@ -654,7 +669,11 @@ class SelfUpdateService {
       _expectedWindowsSignerThumbprintOverride ??
           expectedWindowsSignerThumbprint,
     );
-    if (signerThumbprint.isNotEmpty) {
+    final signerPublisher =
+        (_expectedWindowsSignerPublisherOverride ??
+                expectedWindowsSignerPublisher)
+            .trim();
+    if (signerThumbprint.isNotEmpty || signerPublisher.isNotEmpty) {
       final signature = await _validateWindowsInstallerSignature(msiPath);
       if (signature.outcome != SelfUpdateOutcome.spawned) {
         return signature;
@@ -678,6 +697,7 @@ class SelfUpdateService {
         msiPath: msiPath.path,
         sha256: actualHash,
         thumbprint: signerThumbprint,
+        publisher: signerPublisher,
         exePath: Platform.resolvedExecutable,
         relaunch: true,
       );
@@ -850,18 +870,23 @@ class SelfUpdateService {
       _expectedWindowsSignerThumbprintOverride ??
           expectedWindowsSignerThumbprint,
     );
-    if (expected.isEmpty) {
+    final expectedPublisher =
+        (_expectedWindowsSignerPublisherOverride ??
+                expectedWindowsSignerPublisher)
+            .trim();
+    if (expected.isEmpty && expectedPublisher.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message:
-            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT was not set at build time.',
+            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT or DACX_WINDOWS_SIGNER_PUBLISHER was not set at build time.',
       );
     }
 
     final authenticodeCommand = [
       r"$sig = Get-AuthenticodeSignature -LiteralPath $args[0];",
       r"$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' };",
-      r"Write-Output ($sig.Status.ToString() + '|' + $thumb + '|' + $sig.StatusMessage)",
+      r"$publisher = if ($sig.SignerCertificate) { $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } else { '' };",
+      r"Write-Output ($sig.Status.ToString() + '|' + $thumb + '|publisher:' + $publisher + '|' + $sig.StatusMessage)",
     ].join(' ');
     final result = await _processRun(WindowsSystemPaths.powershell(), [
       '-NoProfile',
@@ -887,7 +912,15 @@ class SelfUpdateService {
             : 'Authenticode status: ${parsed.status}',
       );
     }
-    if (parsed.thumbprint != expected) {
+    if (expectedPublisher.isNotEmpty &&
+        parsed.publisher.toLowerCase() != expectedPublisher.toLowerCase()) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message:
+            'expected publisher $expectedPublisher, got "${parsed.publisher}"',
+      );
+    }
+    if (expectedPublisher.isEmpty && parsed.thumbprint != expected) {
       return SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message: 'expected signer $expected, got "${parsed.thumbprint}"',
@@ -944,6 +977,7 @@ class SelfUpdateService {
     required String msiPath,
     required String sha256,
     required String thumbprint,
+    String publisher = '',
     String? exePath,
     bool relaunch = true,
   }) {
@@ -952,7 +986,8 @@ class SelfUpdateService {
         ? ''
         : ' --exe ${quote(exePath)}';
     return '${quote(helperPath)} --pid $dacxPid --msi ${quote(msiPath)} '
-        '--sha256 $sha256 --thumbprint ${quote(thumbprint)}'
+        '--sha256 $sha256 --thumbprint ${quote(thumbprint)} '
+        '--publisher ${quote(publisher)}'
         '$exe --relaunch ${relaunch ? 1 : 0}';
   }
 

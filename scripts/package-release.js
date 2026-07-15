@@ -31,8 +31,11 @@ import { loadLocalDotEnv } from "./xcode-env.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 loadLocalDotEnv();
+const skipWindowsCodeSigning = process.env.SKIP_WIN_CODESIGN?.trim() === "1";
 
-const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf-8"),
+);
 const VERSION = pkg.version;
 const AUDIO_EXTENSIONS = [
   "mp3",
@@ -73,7 +76,11 @@ const SUPPORTED_MEDIA_EXTENSIONS = [
   ...VIDEO_EXTENSIONS,
   ...PLAYLIST_EXTENSIONS,
 ];
-const MUSIC_FILE_ICON_SOURCE_PNG = path.join(root, "assets", "dacx_music_icon.png");
+const MUSIC_FILE_ICON_SOURCE_PNG = path.join(
+  root,
+  "assets",
+  "dacx_music_icon.png",
+);
 const WINDOWS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.ico";
 const MACOS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.icns";
 
@@ -89,14 +96,20 @@ fs.mkdirSync(releaseDir, { recursive: true });
 const THIRD_PARTY_NOTICES = "THIRD_PARTY_NOTICES.txt";
 const noticesBuildPath = path.join(root, "build", THIRD_PARTY_NOTICES);
 const licensePath = path.join(root, "LICENSE");
-const nativeDependenciesDocPath = path.join(root, "docs", "NATIVE_DEPENDENCIES.md");
+const nativeDependenciesDocPath = path.join(
+  root,
+  "docs",
+  "NATIVE_DEPENDENCIES.md",
+);
 
 function ensureThirdPartyNotices() {
   if (fs.existsSync(noticesBuildPath)) return;
   console.log("  Generating third-party notices...");
   runSilent(`node "${path.join(root, "scripts", "generate-licenses.js")}"`);
   if (!fs.existsSync(noticesBuildPath)) {
-    console.error(`Missing ${path.relative(root, noticesBuildPath)} after generate-licenses.js`);
+    console.error(
+      `Missing ${path.relative(root, noticesBuildPath)} after generate-licenses.js`,
+    );
     process.exit(1);
   }
 }
@@ -171,7 +184,7 @@ function ensureWindowsAudioFileIcon(buildDir) {
   if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
     console.warn(
       `  ⚠ Missing ${path.relative(root, MUSIC_FILE_ICON_SOURCE_PNG)}; ` +
-      "audio files will use the app icon.",
+        "audio files will use the app icon.",
     );
     return null;
   }
@@ -186,8 +199,8 @@ function ensureWindowsAudioFileIcon(buildDir) {
   const outPath = path.join(buildDir, WINDOWS_MUSIC_FILE_ICON_NAME);
   run(
     `magick "${MUSIC_FILE_ICON_SOURCE_PNG}" ` +
-    "-define icon:auto-resize=16,24,32,48,64,128,256 " +
-    `"${outPath}"`,
+      "-define icon:auto-resize=16,24,32,48,64,128,256 " +
+      `"${outPath}"`,
   );
   console.log(`  ✓ ${WINDOWS_MUSIC_FILE_ICON_NAME}`);
   return WINDOWS_MUSIC_FILE_ICON_NAME;
@@ -197,7 +210,7 @@ function ensureMacAudioFileIconInBundle(appBundle) {
   if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
     console.warn(
       `  ⚠ Missing ${path.relative(root, MUSIC_FILE_ICON_SOURCE_PNG)}; ` +
-      "audio files will use the default document icon.",
+        "audio files will use the default document icon.",
     );
     return false;
   }
@@ -235,7 +248,7 @@ function ensureMacAudioFileIconInBundle(appBundle) {
     for (const [fileName, size] of iconsetOutputs) {
       run(
         `sips -z ${size} ${size} "${MUSIC_FILE_ICON_SOURCE_PNG}" ` +
-        `--out "${path.join(iconsetDir, fileName)}"`,
+          `--out "${path.join(iconsetDir, fileName)}"`,
       );
     }
 
@@ -247,7 +260,7 @@ function ensureMacAudioFileIconInBundle(appBundle) {
 
   console.warn(
     "  ⚠ Could not generate macOS audio file icon " +
-    "(needs ImageMagick or sips+iconutil).",
+      "(needs ImageMagick or sips+iconutil).",
   );
   return false;
 }
@@ -338,74 +351,16 @@ function toWindowsPath(inputPath) {
   return path.resolve(inputPath).replace(/\//g, "\\");
 }
 
-function normalizeWindowsThumbprint(value) {
-  return String(value || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
-}
-
-function windowsSigningThumbprint() {
-  return normalizeWindowsThumbprint(
-    process.env.WINDOWS_SIGNING_CERT_THUMBPRINT ||
-      process.env.DACX_WINDOWS_SIGNER_THUMBPRINT ||
-      "",
-  );
-}
-
-function resolveSignToolPath() {
-  const envPath = process.env.WINDOWS_SIGNTOOL_PATH || process.env.SIGNTOOL_PATH;
-  if (envPath && fs.existsSync(envPath)) return envPath;
-
-  const pathHit = resolveCommandFromPath("signtool");
-  if (pathHit) return pathHit;
-
-  const kitsRoot = process.env["ProgramFiles(x86)"]
-    ? path.join(process.env["ProgramFiles(x86)"], "Windows Kits", "10", "bin")
-    : null;
-  if (!kitsRoot || !fs.existsSync(kitsRoot)) return null;
-
-  const candidates = fs
-    .readdirSync(kitsRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(kitsRoot, entry.name, "x64", "signtool.exe"))
-    .filter((candidate) => fs.existsSync(candidate))
-    .sort((a, b) => b.localeCompare(a));
-  return candidates[0] || null;
-}
-
-function verifyWindowsAuthenticode(filePath, expectedThumbprint) {
-  const psPath = escapePowerShellSingleQuoted(toWindowsPath(filePath));
-  const ps = [
-    `$sig = Get-AuthenticodeSignature -LiteralPath '${psPath}'`,
-    `$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' }`,
-    `if ($sig.Status -ne 'Valid') { throw ('Authenticode status ' + $sig.Status + ': ' + $sig.StatusMessage) }`,
-    `$normalized = ($thumb -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()`,
-    `if ($normalized -ne '${expectedThumbprint}') { throw ('Signer thumbprint ' + $normalized + ' does not match expected ${expectedThumbprint}') }`,
-  ].join("; ");
-  run(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${ps}"`);
-}
-
 function signWindowsArtifact(filePath) {
-  const thumbprint = windowsSigningThumbprint();
-  if (!thumbprint) {
-    console.warn(
-      "  ⚠ WINDOWS_SIGNING_CERT_THUMBPRINT not set; Windows installer will not be Authenticode-signed.",
-    );
+  if (skipWindowsCodeSigning) {
+    console.warn(`  SKIP_WIN_CODESIGN=1; leaving unsigned: ${filePath}`);
     return;
   }
-
-  const signtoolPath = resolveSignToolPath();
-  if (!signtoolPath) {
-    console.error("signtool.exe was not found, but WINDOWS_SIGNING_CERT_THUMBPRINT is set.");
-    console.error("Set WINDOWS_SIGNTOOL_PATH to signtool.exe or install the Windows SDK.");
-    process.exit(1);
-  }
-
-  const timestampUrl =
-    process.env.WINDOWS_TIMESTAMP_URL || "http://timestamp.digicert.com";
+  const script = path.join(root, "scripts", "windows-artifact-sign.ps1");
   run(
-    `"${signtoolPath}" sign /fd SHA256 /tr "${timestampUrl}" /td SHA256 ` +
-      `/sha ${thumbprint} "${toWindowsPath(filePath)}"`,
+    `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass ` +
+      `-File "${script}" -FilePath "${filePath}"`,
   );
-  verifyWindowsAuthenticode(filePath, thumbprint);
 }
 
 function escapeXmlAttr(value) {
@@ -441,7 +396,7 @@ function renderWixV4FileAssociationComponent(audioIconFileName) {
     '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "        </RegistryKey>",
     '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Applications\\\\dacx.exe\\\\shell\\\\open\\\\command">',
-      '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+    '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "        </RegistryKey>",
   ];
 
@@ -478,9 +433,7 @@ function renderWixV4FileAssociationComponent(audioIconFileName) {
   lines.push(
     '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist">',
   );
-  lines.push(
-    '          <RegistryValue Type="string" Value="Dacx Playlist" />',
-  );
+  lines.push('          <RegistryValue Type="string" Value="Dacx Playlist" />');
   lines.push("        </RegistryKey>");
   lines.push(
     '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist\\\\DefaultIcon">',
@@ -607,7 +560,14 @@ function toMsiVersion(version) {
 // ── Windows ────────────────────────────────────────────────────
 
 function packageWindows() {
-  const buildDir = path.join(root, "build", "windows", "x64", "runner", "Release");
+  const buildDir = path.join(
+    root,
+    "build",
+    "windows",
+    "x64",
+    "runner",
+    "Release",
+  );
   if (!fs.existsSync(buildDir)) {
     console.error(`Build directory not found: ${buildDir}`);
     console.error("Run 'npm run build:win' first.");
@@ -681,7 +641,8 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   const files = listFilesRecursive(buildDir)
     .map((absolutePath) => {
       const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
-      const relDir = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
+      const relDir =
+        path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
       return { absolutePath, rel, relDir };
     })
     .sort((a, b) => a.rel.localeCompare(b.rel));
@@ -773,7 +734,13 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
     return lines;
   }
 
-  const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const appIconPath = path.join(
+    root,
+    "windows",
+    "runner",
+    "resources",
+    "app_icon.ico",
+  );
   const hasAppIcon = fs.existsSync(appIconPath);
   const msiVersion = toMsiVersion(VERSION);
   const iconBlock = hasAppIcon
@@ -840,7 +807,13 @@ ${renderWixApplicationSearchRegistrationComponent({ indent: "      " })}
 
 function packageMac() {
   const appBundle = path.join(
-    root, "build", "macos", "Build", "Products", "Release", "Dacx.app",
+    root,
+    "build",
+    "macos",
+    "Build",
+    "Products",
+    "Release",
+    "Dacx.app",
   );
   if (!fs.existsSync(appBundle)) {
     console.error(`App bundle not found: ${appBundle}`);
@@ -854,7 +827,9 @@ function packageMac() {
 
   // 1. Zip (may already exist from mac-codesign.sh)
   const codesignZipPattern = /^dacx-(?:.*-)?macos\.zip$/i;
-  const existing = fs.readdirSync(releaseDir).filter((f) => codesignZipPattern.test(f));
+  const existing = fs
+    .readdirSync(releaseDir)
+    .filter((f) => codesignZipPattern.test(f));
   if (existing.length > 0) {
     console.log(`  ✓ ${existing[0]} (from mac-codesign.sh)`);
   } else {
@@ -884,7 +859,7 @@ function packageMac() {
   // Create DMG
   run(
     `hdiutil create -volname "Dacx" -srcfolder "${dmgStage}" ` +
-    `-ov -format UDZO "${dmgPath}"`,
+      `-ov -format UDZO "${dmgPath}"`,
   );
 
   // Clean up staging
@@ -904,7 +879,14 @@ function packageMac() {
 // ── Linux ──────────────────────────────────────────────────────
 
 function packageLinux() {
-  const buildDir = path.join(root, "build", "linux", "x64", "release", "bundle");
+  const buildDir = path.join(
+    root,
+    "build",
+    "linux",
+    "x64",
+    "release",
+    "bundle",
+  );
   if (!fs.existsSync(buildDir)) {
     console.error(`Build directory not found: ${buildDir}`);
     console.error("Run 'npm run build:linux' first.");
@@ -921,7 +903,9 @@ function packageLinux() {
   const tarName = "Dacx-Linux-x86_64.tar.gz";
   const tarPath = path.join(releaseDir, tarName);
   removeIfExists(tarPath);
-  run(`tar -czf "${tarPath}" -C "${path.dirname(buildDir)}" "${path.basename(buildDir)}"`);
+  run(
+    `tar -czf "${tarPath}" -C "${path.dirname(buildDir)}" "${path.basename(buildDir)}"`,
+  );
   console.log(`  ✓ ${tarName}`);
 
   // 2. .deb
@@ -1024,10 +1008,18 @@ function buildDeb(buildDir, desktopFile, iconFile) {
   installLegalFilesInDir(docDir);
 
   // Generate control file from template
-  const controlTemplate = path.join(root, "linux", "packaging", "control.template");
+  const controlTemplate = path.join(
+    root,
+    "linux",
+    "packaging",
+    "control.template",
+  );
   if (fs.existsSync(controlTemplate)) {
     let control = fs.readFileSync(controlTemplate, "utf-8");
-    control = control.replace(/\{\{VERSION\}\}/g, semverToDebianVersion(VERSION));
+    control = control.replace(
+      /\{\{VERSION\}\}/g,
+      semverToDebianVersion(VERSION),
+    );
     // Remove the shebang line if present (it's a template marker, not a real script)
     control = control.replace(/^#!.*\n/, "");
     // Calculate installed size in KB
@@ -1114,7 +1106,12 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   installLegalFilesInDir(docDir);
 
   // Generate spec from template
-  const specTemplate = path.join(root, "linux", "packaging", "dacx.spec.template");
+  const specTemplate = path.join(
+    root,
+    "linux",
+    "packaging",
+    "dacx.spec.template",
+  );
   if (fs.existsSync(specTemplate)) {
     let spec = fs.readFileSync(specTemplate, "utf-8");
     spec = spec.replace(/\{\{VERSION\}\}/g, rpmVersion);
@@ -1128,8 +1125,8 @@ function buildRpm(buildDir, desktopFile, iconFile) {
 
   run(
     `rpmbuild --define "_topdir ${rpmRoot}" ` +
-    `--define "buildroot ${buildroot}" ` +
-    `--target x86_64 -bb "${path.join(specsDir, "dacx.spec")}"`,
+      `--define "buildroot ${buildroot}" ` +
+      `--target x86_64 -bb "${path.join(specsDir, "dacx.spec")}"`,
   );
 
   // Find the built RPM and move it
@@ -1153,7 +1150,9 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
 
   if (!appimageToolCmd) {
     console.warn("  ⚠ appimagetool not found; skipping .AppImage");
-    console.warn("    Install from: https://github.com/AppImage/appimagetool/releases");
+    console.warn(
+      "    Install from: https://github.com/AppImage/appimagetool/releases",
+    );
     console.warn("    Or set APPIMAGETOOL=/path/to/appimagetool in .env");
     return;
   }
@@ -1236,13 +1235,17 @@ exec "$HERE/opt/dacx/dacx" "$@"
 
 function buildFlatpak() {
   if (process.platform !== "linux") {
-    console.warn("  ⚠ Flatpak bundling requires a Linux host; skipping .flatpak");
+    console.warn(
+      "  ⚠ Flatpak bundling requires a Linux host; skipping .flatpak",
+    );
     return;
   }
 
   if (!hasCommand("flatpak-builder") || !hasCommand("flatpak")) {
     console.warn("  ⚠ flatpak/flatpak-builder not found; skipping .flatpak");
-    console.warn("    Install: sudo apt-get install -y flatpak flatpak-builder");
+    console.warn(
+      "    Install: sudo apt-get install -y flatpak flatpak-builder",
+    );
     console.warn("    Then re-run: npm run setup:linux");
     return;
   }

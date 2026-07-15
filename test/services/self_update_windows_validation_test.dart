@@ -267,6 +267,23 @@ void main() {
       },
     );
 
+    test('returns spawned when Artifact Signing publisher matches', () async {
+      final msi = File('${tempDir.path}/publisher.msi')..writeAsStringSync('x');
+      final svc = SelfUpdateService(
+        expectedWindowsSignerPublisherOverride: 'BurntToasters LLC',
+        processRun: (_, _) async {
+          return ProcessResult(
+            0,
+            0,
+            'Valid|ROTATINGTHUMB|publisher:burnttoasters llc|ok',
+            '',
+          );
+        },
+      );
+      final result = await svc.validateWindowsInstallerSignatureForTesting(msi);
+      expect(result.outcome, SelfUpdateOutcome.spawned);
+    });
+
     test('returns signatureInvalid when PowerShell exits non-zero', () async {
       final msi = File('${tempDir.path}/fail.msi')..writeAsStringSync('x');
       final svc = SelfUpdateService(

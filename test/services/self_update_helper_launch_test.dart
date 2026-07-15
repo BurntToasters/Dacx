@@ -15,6 +15,7 @@ void main() {
         sha256:
             'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
         thumbprint: 'ABCD1234',
+        publisher: 'BurntToasters LLC',
         exePath: r'C:\Program Files\Dacx\dacx.exe',
         relaunch: true,
       );
@@ -23,6 +24,7 @@ void main() {
       expect(cmd, contains('--pid 4242'));
       expect(cmd, contains('--sha256 deadbeef'));
       expect(cmd, contains('--thumbprint "ABCD1234"'));
+      expect(cmd, contains('--publisher "BurntToasters LLC"'));
       expect(cmd, contains(r'--exe "C:\Program Files\Dacx\dacx.exe"'));
       expect(cmd, contains('--relaunch 1'));
       expect(cmd, contains('Dacx-Windows-x64.msi'));
