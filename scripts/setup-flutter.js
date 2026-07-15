@@ -1,5 +1,5 @@
 // Ensures fvm is installed and the Flutter version pinned in .fvmrc is
-// available locally. Safe to run on dev machines and CI/release VMs — exits
+// available locally. Safe to run on dev machines and CI/release VMs; exits
 // quickly when already in sync.
 
 import { execSync } from 'node:child_process';
@@ -86,7 +86,7 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pinned)) {
 console.log(`Pinned Flutter version: ${pinned}`);
 
 if (!has('fvm')) {
-  console.log('▶ fvm not found — installing via `dart pub global activate fvm`');
+  console.log('▶ fvm not found; installing via `dart pub global activate fvm`');
   run('dart', ['pub', 'global', 'activate', 'fvm']);
 }
 
@@ -107,7 +107,7 @@ if (installed.includes(`"${pinned}"`)) {
 run('fvm', ['flutter', '--version']);
 
 // Persist `fvm` on the user's shell PATH so subsequent npm scripts that call
-// `fvm flutter` directly resolve it. Idempotent — checked before writing.
+// `fvm flutter` directly resolve it. Idempotent; checked before writing.
 ensurePubBinOnPath();
 console.log(`✓ fvm flutter pinned to ${pinned} and ready`);
 
@@ -136,7 +136,7 @@ function ensurePubBinOnPath() {
 }
 
 function addToWindowsUserPath(bin) {
-  // Use User-scope SetEnvironmentVariable via PowerShell — no admin needed,
+  // Use User-scope SetEnvironmentVariable via PowerShell; no admin needed,
   // persists across shells, idempotent guard avoids duplicate entries.
   const psCmd =
     `$bin = '${bin.replace(/'/g, "''")}'; ` +
@@ -170,11 +170,11 @@ function addToShellRc(bin) {
   ].filter((p) => existsSync(p));
 
   if (targets.length === 0) {
-    // No rc file exists yet — create .profile as a safe default.
+    // No rc file exists yet; create .profile as a safe default.
     targets.push(join(home, '.profile'));
   }
 
-  const marker = '# Added by dacx setup:flutter — fvm bin';
+  const marker = '# Added by dacx setup:flutter: fvm bin';
   let wrote = false;
   for (const file of targets) {
     const isFish = file.endsWith('config.fish');

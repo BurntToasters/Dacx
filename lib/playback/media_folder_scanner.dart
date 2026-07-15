@@ -128,12 +128,12 @@ int _naturalCompare(String a, String b) {
       final aEffLen = i - aNumStart;
       final bEffLen = j - bNumStart;
       if (aEffLen != bEffLen) return aEffLen - bEffLen;
-      // Same effective length — compare digit by digit.
+      // Same effective length; compare digit by digit.
       for (var k = 0; k < aEffLen; k++) {
         final diff = a.codeUnitAt(aNumStart + k) - b.codeUnitAt(bNumStart + k);
         if (diff != 0) return diff;
       }
-      // Same numeric value — shorter original (fewer leading zeros) wins.
+      // Same numeric value; shorter original (fewer leading zeros) wins.
       if (aLen != bLen) return aLen - bLen;
     } else {
       if (ca != cb) return ca - cb;

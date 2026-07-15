@@ -102,7 +102,7 @@ else
 fi
 
 # Build the bundled XPC update helper service directly into the app bundle
-# (signed below as a nested bundle with its own — un-sandboxed — entitlements).
+# (signed below as a nested bundle with its own (un-sandboxed) entitlements).
 HELPER_OUT="$APP_BUNDLE/Contents/XPCServices/run.rosie.dacx.UpdateHelper.xpc"
 HELPER_ENTITLEMENTS="$ROOT/macos/Helper/UpdateHelper.entitlements"
 # Remove any stale pre-migration `dacx-update-helper` binary that would

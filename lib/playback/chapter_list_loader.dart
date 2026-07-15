@@ -1,4 +1,4 @@
-import '../screens/chapter_info.dart';
+import '../models/chapter_info.dart';
 
 typedef MpvPropertyReader = Future<String?> Function(String name);
 

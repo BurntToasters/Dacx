@@ -1,6 +1,7 @@
 import Cocoa
 import CoreServices
 import FlutterMacOS
+import IOKit.pwr_mgt
 import os.log
 
 private let dacxLog = OSLog(subsystem: "run.rosie.dacx", category: "open-file")
@@ -77,6 +78,7 @@ class AppDelegate: FlutterAppDelegate {
   // MPNowPlayingInfoCenter / MPRemoteCommandCenter are process singletons;
   // one bridge attached to every engine's messenger.
   private let mediaSessionBridge = MediaSessionBridge()
+  private var idleAssertionID: IOPMAssertionID = 0
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
@@ -165,6 +167,10 @@ class AppDelegate: FlutterAppDelegate {
         result(self.openNewWindow())
       case "clearLayeredStyle":
         // Windows-only helper; no-op on macOS so Dart can call unconditionally.
+        result(true)
+      case "setIdleInhibit":
+        let inhibit = (call.arguments as? Bool) ?? false
+        self.setIdleInhibit(inhibit)
         result(true)
       default:
         result(FlutterMethodNotImplemented)
@@ -345,5 +351,188 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
+  }
+
+  /// Application menu → Flutter Settings-equivalent update check.
+  @IBAction func checkForUpdates(_ sender: Any?) {
+    invokeFlutterMethod("checkForUpdates")
+  }
+
+  /// Application menu → Flutter Settings (Preferences… / ⌘,).
+  @IBAction func openPreferences(_ sender: Any?) {
+    invokeFlutterMethod("openPreferences")
+  }
+
+  /// File → Open….
+  @IBAction func openMediaFile(_ sender: Any?) {
+    invokeFlutterMethod("openFile")
+  }
+
+  /// File → Open Folder….
+  @IBAction func openMediaFolder(_ sender: Any?) {
+    invokeFlutterMethod("openFolder")
+  }
+
+  /// File → Open Playlist….
+  @IBAction func openMediaPlaylist(_ sender: Any?) {
+    invokeFlutterMethod("openPlaylist")
+  }
+
+  /// File → Open URL….
+  @IBAction func openMediaUrl(_ sender: Any?) {
+    invokeFlutterMethod("openUrl")
+  }
+
+  /// File → Reopen Last.
+  @IBAction func reopenLastMedia(_ sender: Any?) {
+    invokeFlutterMethod("reopenLast")
+  }
+
+  /// File → Save Playlist….
+  @IBAction func savePlaylist(_ sender: Any?) {
+    invokeFlutterMethod("savePlaylist")
+  }
+
+  /// File → New Window.
+  @IBAction func newPlayerWindow(_ sender: Any?) {
+    _ = openNewWindow()
+  }
+
+  /// Open Recent → Clear Menu.
+  @IBAction func clearRecentFiles(_ sender: Any?) {
+    guard let channel = preferredWindowMethodChannel() else { return }
+    channel.invokeMethod("clearRecentFiles", arguments: nil) { [weak self] _ in
+      DispatchQueue.main.async {
+        self?.refreshOpenRecentMenu()
+      }
+    }
+  }
+
+  /// File → Open Recent item (representedObject is the path string).
+  @IBAction func openRecentFile(_ sender: Any?) {
+    guard let item = sender as? NSMenuItem,
+          let path = item.representedObject as? String,
+          !path.isEmpty else { return }
+    invokeFlutterMethod("openRecent", arguments: path)
+  }
+
+  private func setIdleInhibit(_ inhibit: Bool) {
+    if inhibit {
+      if idleAssertionID != 0 { return }
+      let status = IOPMAssertionCreateWithName(
+        kIOPMAssertionTypeNoDisplaySleep as CFString,
+        IOPMAssertionLevel(kIOPMAssertionLevelOn),
+        "Dacx playing media" as CFString,
+        &idleAssertionID
+      )
+      if status != kIOReturnSuccess {
+        idleAssertionID = 0
+        os_log("IOPMAssertionCreateWithName failed: %d", log: dacxLog, type: .error, status)
+      }
+    } else if idleAssertionID != 0 {
+      IOPMAssertionRelease(idleAssertionID)
+      idleAssertionID = 0
+    }
+  }
+
+  override func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+    let menu = NSMenu()
+    let newWindow = NSMenuItem(
+      title: "New Window",
+      action: #selector(newPlayerWindow(_:)),
+      keyEquivalent: ""
+    )
+    newWindow.target = self
+    menu.addItem(newWindow)
+    let open = NSMenuItem(
+      title: "Open…",
+      action: #selector(openMediaFile(_:)),
+      keyEquivalent: ""
+    )
+    open.target = self
+    menu.addItem(open)
+    return menu
+  }
+
+  private func invokeFlutterMethod(_ method: String, arguments: Any? = nil) {
+    guard let channel = preferredWindowMethodChannel() else {
+      os_log("%{public}@: no Flutter window channel ready",
+             log: dacxLog, type: .error, method)
+      return
+    }
+    channel.invokeMethod(method, arguments: arguments)
+  }
+
+  private func preferredWindowMethodChannel() -> FlutterMethodChannel? {
+    let preferredWindow = (NSApp.keyWindow as? MainFlutterWindow)
+        ?? (NSApp.mainWindow as? MainFlutterWindow)
+        ?? (mainFlutterWindow as? MainFlutterWindow)
+    if let win = preferredWindow,
+       let reg = registrations[ObjectIdentifier(win)] {
+      return reg.windowMethodChannel
+    }
+    return registrations.values.first?.windowMethodChannel
+  }
+
+  /// Rebuilds File → Open Recent from Flutter's recent_files list.
+  func refreshOpenRecentMenu() {
+    guard let recentMenu = openRecentSubmenu() else { return }
+    recentMenu.removeAllItems()
+    guard let channel = preferredWindowMethodChannel() else {
+      recentMenu.addItem(disabledRecentPlaceholder())
+      return
+    }
+    channel.invokeMethod("getRecentFiles", arguments: nil) { [weak self] result in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        recentMenu.removeAllItems()
+        let paths = (result as? [Any])?.compactMap { $0 as? String } ?? []
+        if paths.isEmpty {
+          recentMenu.addItem(self.disabledRecentPlaceholder())
+          return
+        }
+        for path in paths.prefix(12) {
+          let title = (path as NSString).lastPathComponent
+          let item = NSMenuItem(
+            title: title.isEmpty ? path : title,
+            action: #selector(self.openRecentFile(_:)),
+            keyEquivalent: ""
+          )
+          item.target = self
+          item.representedObject = path
+          recentMenu.addItem(item)
+        }
+        recentMenu.addItem(NSMenuItem.separator())
+        let clear = NSMenuItem(
+          title: "Clear Menu",
+          action: #selector(self.clearRecentFiles(_:)),
+          keyEquivalent: ""
+        )
+        clear.target = self
+        recentMenu.addItem(clear)
+      }
+    }
+  }
+
+  private func openRecentSubmenu() -> NSMenu? {
+    guard let mainMenu = NSApp.mainMenu else { return nil }
+    for root in mainMenu.items {
+      guard let submenu = root.submenu, submenu.title == "File" else { continue }
+      for item in submenu.items where item.title == "Open Recent" {
+        return item.submenu
+      }
+    }
+    return nil
+  }
+
+  private func disabledRecentPlaceholder() -> NSMenuItem {
+    let item = NSMenuItem(title: "No Recent Files", action: nil, keyEquivalent: "")
+    item.isEnabled = false
+    return item
+  }
+
+  override func applicationDidBecomeActive(_ notification: Notification) {
+    super.applicationDidBecomeActive(notification)
+    refreshOpenRecentMenu()
   }
 }

@@ -55,6 +55,9 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Windows self-update watchdog helper (survives Job Object via WMI spawn).
+add_subdirectory("update_helper")
+
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
@@ -96,6 +99,10 @@ if(DACX_SYSTEM_RUNTIME_LIBS)
 endif()
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+# Self-update helper must ship next to dacx.exe (MSI harvest + runtime resolve).
+install(TARGETS dacx-update-helper RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

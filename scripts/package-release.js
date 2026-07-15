@@ -9,11 +9,10 @@
  * Platforms: win, mac, linux
  *
  * Windows produces:
- *   release/Dacx-Windows-x64.zip    (portable zip)
- *   release/Dacx-Windows-x64.msi    (WiX Toolset installer)
+ *   release/Dacx-Windows-x64.msi    (WiX Toolset installer; portable ZIP discontinued)
  *
  * macOS produces:
- *   release/Dacx-macOS.zip           (codesigned zip — from mac-codesign.sh or fallback)
+ *   release/Dacx-macOS.zip           (codesigned zip; from mac-codesign.sh or fallback)
  *   release/Dacx-macOS.dmg           (disk image via hdiutil)
  *
  * Linux produces:
@@ -32,8 +31,11 @@ import { loadLocalDotEnv } from "./xcode-env.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 loadLocalDotEnv();
+const skipWindowsCodeSigning = process.env.SKIP_WIN_CODESIGN?.trim() === "1";
 
-const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf-8"),
+);
 const VERSION = pkg.version;
 const AUDIO_EXTENSIONS = [
   "mp3",
@@ -46,6 +48,10 @@ const AUDIO_EXTENSIONS = [
   "opus",
   "ape",
   "alac",
+  "aiff",
+  "aif",
+  "wv",
+  "mpc",
 ];
 const VIDEO_EXTENSIONS = [
   "mp4",
@@ -56,9 +62,25 @@ const VIDEO_EXTENSIONS = [
   "wmv",
   "flv",
   "m4v",
+  "ts",
+  "m2ts",
+  "mts",
+  "mpg",
+  "mpeg",
+  "vob",
+  "ogv",
 ];
-const SUPPORTED_MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
-const MUSIC_FILE_ICON_SOURCE_PNG = path.join(root, "assets", "dacx_music_icon.png");
+const PLAYLIST_EXTENSIONS = ["m3u", "pls"];
+const SUPPORTED_MEDIA_EXTENSIONS = [
+  ...AUDIO_EXTENSIONS,
+  ...VIDEO_EXTENSIONS,
+  ...PLAYLIST_EXTENSIONS,
+];
+const MUSIC_FILE_ICON_SOURCE_PNG = path.join(
+  root,
+  "assets",
+  "dacx_music_icon.png",
+);
 const WINDOWS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.ico";
 const MACOS_MUSIC_FILE_ICON_NAME = "dacx_music_icon.icns";
 
@@ -74,14 +96,20 @@ fs.mkdirSync(releaseDir, { recursive: true });
 const THIRD_PARTY_NOTICES = "THIRD_PARTY_NOTICES.txt";
 const noticesBuildPath = path.join(root, "build", THIRD_PARTY_NOTICES);
 const licensePath = path.join(root, "LICENSE");
-const nativeDependenciesDocPath = path.join(root, "docs", "NATIVE_DEPENDENCIES.md");
+const nativeDependenciesDocPath = path.join(
+  root,
+  "docs",
+  "NATIVE_DEPENDENCIES.md",
+);
 
 function ensureThirdPartyNotices() {
   if (fs.existsSync(noticesBuildPath)) return;
   console.log("  Generating third-party notices...");
   runSilent(`node "${path.join(root, "scripts", "generate-licenses.js")}"`);
   if (!fs.existsSync(noticesBuildPath)) {
-    console.error(`Missing ${path.relative(root, noticesBuildPath)} after generate-licenses.js`);
+    console.error(
+      `Missing ${path.relative(root, noticesBuildPath)} after generate-licenses.js`,
+    );
     process.exit(1);
   }
 }
@@ -134,14 +162,20 @@ function assertWindowsRuntimeDllsPresent(buildDir) {
   const files = fs.readdirSync(buildDir).map((name) => name.toLowerCase());
   const hasVcruntime = files.some((name) => /^vcruntime\d+.*\.dll$/.test(name));
   const hasMsvcp = files.some((name) => /^msvcp\d+.*\.dll$/.test(name));
+  const hasHelper = files.includes("dacx-update-helper.exe");
 
-  if (hasVcruntime && hasMsvcp) return;
+  if (hasVcruntime && hasMsvcp && hasHelper) return;
 
-  console.error("Missing MSVC runtime DLLs in Windows build output.");
+  console.error("Missing required Windows build outputs.");
   console.error(`Checked: ${buildDir}`);
-  console.error("Expected files matching vcruntime*.dll and msvcp*.dll.");
+  if (!hasVcruntime || !hasMsvcp) {
+    console.error("Expected files matching vcruntime*.dll and msvcp*.dll.");
+  }
+  if (!hasHelper) {
+    console.error("Expected dacx-update-helper.exe next to dacx.exe.");
+  }
   console.error(
-    "Fix Windows build packaging before shipping MSI/ZIP (clean machines will fail to launch).",
+    "Fix Windows build packaging before shipping MSI/ZIP (clean machines will fail to launch / self-update).",
   );
   process.exit(1);
 }
@@ -150,7 +184,7 @@ function ensureWindowsAudioFileIcon(buildDir) {
   if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
     console.warn(
       `  ⚠ Missing ${path.relative(root, MUSIC_FILE_ICON_SOURCE_PNG)}; ` +
-      "audio files will use the app icon.",
+        "audio files will use the app icon.",
     );
     return null;
   }
@@ -165,8 +199,8 @@ function ensureWindowsAudioFileIcon(buildDir) {
   const outPath = path.join(buildDir, WINDOWS_MUSIC_FILE_ICON_NAME);
   run(
     `magick "${MUSIC_FILE_ICON_SOURCE_PNG}" ` +
-    "-define icon:auto-resize=16,24,32,48,64,128,256 " +
-    `"${outPath}"`,
+      "-define icon:auto-resize=16,24,32,48,64,128,256 " +
+      `"${outPath}"`,
   );
   console.log(`  ✓ ${WINDOWS_MUSIC_FILE_ICON_NAME}`);
   return WINDOWS_MUSIC_FILE_ICON_NAME;
@@ -176,7 +210,7 @@ function ensureMacAudioFileIconInBundle(appBundle) {
   if (!fs.existsSync(MUSIC_FILE_ICON_SOURCE_PNG)) {
     console.warn(
       `  ⚠ Missing ${path.relative(root, MUSIC_FILE_ICON_SOURCE_PNG)}; ` +
-      "audio files will use the default document icon.",
+        "audio files will use the default document icon.",
     );
     return false;
   }
@@ -214,7 +248,7 @@ function ensureMacAudioFileIconInBundle(appBundle) {
     for (const [fileName, size] of iconsetOutputs) {
       run(
         `sips -z ${size} ${size} "${MUSIC_FILE_ICON_SOURCE_PNG}" ` +
-        `--out "${path.join(iconsetDir, fileName)}"`,
+          `--out "${path.join(iconsetDir, fileName)}"`,
       );
     }
 
@@ -226,7 +260,7 @@ function ensureMacAudioFileIconInBundle(appBundle) {
 
   console.warn(
     "  ⚠ Could not generate macOS audio file icon " +
-    "(needs ImageMagick or sips+iconutil).",
+      "(needs ImageMagick or sips+iconutil).",
   );
   return false;
 }
@@ -313,121 +347,20 @@ function getWixMajorVersion(wixPath) {
   }
 }
 
-function resolveWixV3ToolPaths() {
-  const envBin = process.env.WIX_V3_BIN;
-  if (envBin) {
-    const envCandle = path.join(envBin, "candle.exe");
-    const envLight = path.join(envBin, "light.exe");
-    if (fs.existsSync(envCandle) && fs.existsSync(envLight)) {
-      return { candlePath: envCandle, lightPath: envLight };
-    }
-  }
-
-  const pathCandle = resolveCommandFromPath("candle");
-  const pathLight = resolveCommandFromPath("light");
-  if (pathCandle && pathLight) {
-    return { candlePath: pathCandle, lightPath: pathLight };
-  }
-
-  const programFilesX86 = process.env["ProgramFiles(x86)"];
-  const programFiles = process.env.ProgramFiles;
-
-  const directBinCandidates = [
-    programFilesX86 ? path.join(programFilesX86, "WiX Toolset v3.14", "bin") : null,
-    programFilesX86 ? path.join(programFilesX86, "WiX Toolset v3.11", "bin") : null,
-    programFiles ? path.join(programFiles, "WiX Toolset v3.14", "bin") : null,
-    programFiles ? path.join(programFiles, "WiX Toolset v3.11", "bin") : null,
-  ];
-
-  const scannedBins = [
-    ...findWindowsDirByPrefix(programFilesX86, /^WiX Toolset v3/i),
-    ...findWindowsDirByPrefix(programFiles, /^WiX Toolset v3/i),
-  ].map((dir) => path.join(dir, "bin"));
-
-  const bins = [...directBinCandidates, ...scannedBins].filter(Boolean);
-  for (const binDir of bins) {
-    const candlePath = path.join(binDir, "candle.exe");
-    const lightPath = path.join(binDir, "light.exe");
-    if (fs.existsSync(candlePath) && fs.existsSync(lightPath)) {
-      return { candlePath, lightPath };
-    }
-  }
-
-  return null;
-}
-
 function toWindowsPath(inputPath) {
   return path.resolve(inputPath).replace(/\//g, "\\");
 }
 
-function normalizeWindowsThumbprint(value) {
-  return String(value || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
-}
-
-function windowsSigningThumbprint() {
-  return normalizeWindowsThumbprint(
-    process.env.WINDOWS_SIGNING_CERT_THUMBPRINT ||
-      process.env.DACX_WINDOWS_SIGNER_THUMBPRINT ||
-      "",
-  );
-}
-
-function resolveSignToolPath() {
-  const envPath = process.env.WINDOWS_SIGNTOOL_PATH || process.env.SIGNTOOL_PATH;
-  if (envPath && fs.existsSync(envPath)) return envPath;
-
-  const pathHit = resolveCommandFromPath("signtool");
-  if (pathHit) return pathHit;
-
-  const kitsRoot = process.env["ProgramFiles(x86)"]
-    ? path.join(process.env["ProgramFiles(x86)"], "Windows Kits", "10", "bin")
-    : null;
-  if (!kitsRoot || !fs.existsSync(kitsRoot)) return null;
-
-  const candidates = fs
-    .readdirSync(kitsRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(kitsRoot, entry.name, "x64", "signtool.exe"))
-    .filter((candidate) => fs.existsSync(candidate))
-    .sort((a, b) => b.localeCompare(a));
-  return candidates[0] || null;
-}
-
-function verifyWindowsAuthenticode(filePath, expectedThumbprint) {
-  const psPath = escapePowerShellSingleQuoted(toWindowsPath(filePath));
-  const ps = [
-    `$sig = Get-AuthenticodeSignature -LiteralPath '${psPath}'`,
-    `$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' }`,
-    `if ($sig.Status -ne 'Valid') { throw ('Authenticode status ' + $sig.Status + ': ' + $sig.StatusMessage) }`,
-    `$normalized = ($thumb -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()`,
-    `if ($normalized -ne '${expectedThumbprint}') { throw ('Signer thumbprint ' + $normalized + ' does not match expected ${expectedThumbprint}') }`,
-  ].join("; ");
-  run(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${ps}"`);
-}
-
 function signWindowsArtifact(filePath) {
-  const thumbprint = windowsSigningThumbprint();
-  if (!thumbprint) {
-    console.warn(
-      "  ⚠ WINDOWS_SIGNING_CERT_THUMBPRINT not set; Windows installer will not be Authenticode-signed.",
-    );
+  if (skipWindowsCodeSigning) {
+    console.warn(`  SKIP_WIN_CODESIGN=1; leaving unsigned: ${filePath}`);
     return;
   }
-
-  const signtoolPath = resolveSignToolPath();
-  if (!signtoolPath) {
-    console.error("signtool.exe was not found, but WINDOWS_SIGNING_CERT_THUMBPRINT is set.");
-    console.error("Set WINDOWS_SIGNTOOL_PATH to signtool.exe or install the Windows SDK.");
-    process.exit(1);
-  }
-
-  const timestampUrl =
-    process.env.WINDOWS_TIMESTAMP_URL || "http://timestamp.digicert.com";
+  const script = path.join(root, "scripts", "windows-artifact-sign.ps1");
   run(
-    `"${signtoolPath}" sign /fd SHA256 /tr "${timestampUrl}" /td SHA256 ` +
-      `/sha ${thumbprint} "${toWindowsPath(filePath)}"`,
+    `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass ` +
+      `-File "${script}" -FilePath "${filePath}"`,
   );
-  verifyWindowsAuthenticode(filePath, thumbprint);
 }
 
 function escapeXmlAttr(value) {
@@ -463,7 +396,7 @@ function renderWixV4FileAssociationComponent(audioIconFileName) {
     '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "        </RegistryKey>",
     '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Applications\\\\dacx.exe\\\\shell\\\\open\\\\command">',
-      '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+    '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
     "        </RegistryKey>",
   ];
 
@@ -497,70 +430,37 @@ function renderWixV4FileAssociationComponent(audioIconFileName) {
     lines.push("        </RegistryKey>");
   }
 
+  lines.push(
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist">',
+  );
+  lines.push('          <RegistryValue Type="string" Value="Dacx Playlist" />');
+  lines.push("        </RegistryKey>");
+  lines.push(
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist\\\\DefaultIcon">',
+  );
+  lines.push(
+    `          <RegistryValue Type="string" Value="${audioIconValue}" />`,
+  );
+  lines.push("        </RegistryKey>");
+  lines.push(
+    '        <RegistryKey Root="HKLM" Key="Software\\\\Classes\\\\Dacx.Playlist\\\\shell\\\\open\\\\command">',
+  );
+  lines.push(
+    '          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
+  );
+  lines.push("        </RegistryKey>");
+
+  for (const ext of PLAYLIST_EXTENSIONS) {
+    lines.push(
+      `        <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
+    );
+    lines.push(
+      '          <RegistryValue Name="Dacx.Playlist" Type="string" Value="" />',
+    );
+    lines.push("        </RegistryKey>");
+  }
+
   lines.push("      </Component>");
-  return lines.join("\n");
-}
-
-function renderWixV3FileAssociationComponent(audioIconFileName) {
-  const audioIconValue = audioIconFileName
-    ? `[INSTALLFOLDER]${audioIconFileName},0`
-    : "[INSTALLFOLDER]dacx.exe,0";
-  const lines = [
-    '          <Component Id="CMP_FILE_ASSOC" Guid="*" Win64="yes">',
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio">',
-    '              <RegistryValue Type="string" Value="Dacx Audio File" KeyPath="yes" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio\\DefaultIcon">',
-    `              <RegistryValue Type="string" Value="${audioIconValue}" />`,
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Audio\\shell\\open\\command">',
-    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video">',
-    '              <RegistryValue Type="string" Value="Dacx Video File" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video\\DefaultIcon">',
-    '              <RegistryValue Type="string" Value="[INSTALLFOLDER]dacx.exe,0" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Dacx.Video\\shell\\open\\command">',
-    '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-    "            </RegistryKey>",
-    '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe\\shell\\open\\command">',
-      '              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; &quot;%1&quot;" />',
-    "            </RegistryKey>",
-  ];
-
-  for (const ext of SUPPORTED_MEDIA_EXTENSIONS) {
-    lines.push(
-      '            <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe\\SupportedTypes">',
-    );
-    lines.push(
-      `              <RegistryValue Name=".${ext}" Type="string" Value="" />`,
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  for (const ext of AUDIO_EXTENSIONS) {
-    lines.push(
-      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
-    );
-    lines.push(
-      '              <RegistryValue Name="Dacx.Audio" Type="string" Value="" />',
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  for (const ext of VIDEO_EXTENSIONS) {
-    lines.push(
-      `            <RegistryKey Root="HKLM" Key="Software\\Classes\\.${ext}\\OpenWithProgids">`,
-    );
-    lines.push(
-      '              <RegistryValue Name="Dacx.Video" Type="string" Value="" />',
-    );
-    lines.push("            </RegistryKey>");
-  }
-
-  lines.push("          </Component>");
   return lines.join("\n");
 }
 
@@ -587,15 +487,14 @@ function renderWixStartMenuShortcutTree({ indent, includeIcon }) {
 }
 
 function renderWixApplicationSearchRegistrationComponent({ indent }) {
+  // App identity only; open command + SupportedTypes live in CMP_FILE_ASSOC
+  // so we never write the same shell\open\command key twice (quoted vs not).
   return [
     `${indent}<Component Id="CMP_APP_SEARCH_REGISTRATION" Guid="*">`,
     `${indent}  <RegistryKey Root="HKLM" Key="Software\\Classes\\Applications\\dacx.exe">`,
-    `${indent}    <RegistryValue Type="string" Value="Dacx" />`,
+    `${indent}    <RegistryValue Type="string" Value="Dacx" KeyPath="yes" />`,
     `${indent}    <RegistryValue Name="FriendlyAppName" Type="string" Value="Dacx" />`,
     `${indent}    <RegistryValue Name="ApplicationDescription" Type="string" Value="Dacx media player" />`,
-    `${indent}    <RegistryKey Key="shell\\open\\command">`,
-    `${indent}      <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]dacx.exe&quot; %1" KeyPath="yes" />`,
-    `${indent}    </RegistryKey>`,
     `${indent}  </RegistryKey>`,
     `${indent}</Component>`,
   ].join("\n");
@@ -635,7 +534,7 @@ function toMsiVersion(version) {
 
   if (patch > 654) {
     throw new Error(
-      `Patch ${patch} exceeds 654 — MSI build field would overflow (max 65535).`,
+      `Patch ${patch} exceeds 654; MSI build field would overflow (max 65535).`,
     );
   }
 
@@ -646,7 +545,7 @@ function toMsiVersion(version) {
   const tagMatch = prerelease.match(/^beta\.(\d+)$/);
   if (!tagMatch) {
     throw new Error(
-      `Cannot encode prerelease "${prerelease}" — only beta.N is supported (e.g. beta.5).`,
+      `Cannot encode prerelease "${prerelease}"; only beta.N is supported (e.g. beta.5).`,
     );
   }
   const n = Number(tagMatch[1]);
@@ -661,7 +560,14 @@ function toMsiVersion(version) {
 // ── Windows ────────────────────────────────────────────────────
 
 function packageWindows() {
-  const buildDir = path.join(root, "build", "windows", "x64", "runner", "Release");
+  const buildDir = path.join(
+    root,
+    "build",
+    "windows",
+    "x64",
+    "runner",
+    "Release",
+  );
   if (!fs.existsSync(buildDir)) {
     console.error(`Build directory not found: ${buildDir}`);
     console.error("Run 'npm run build:win' first.");
@@ -672,75 +578,27 @@ function packageWindows() {
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
   installLegalFilesInDir(buildDir);
 
-  // Defensive sweep: if a previous run was hard-killed between writing the
-  // portable marker and its `finally` cleanup, the leftover file would be
-  // harvested by WiX into the MSI. Remove it before MSI build runs.
-  const portableMarkerPath = path.join(buildDir, "portable.txt");
-  removeIfExists(portableMarkerPath);
+  // Ensure a leftover portable.txt from older packaging never lands in the MSI.
+  removeIfExists(path.join(buildDir, "portable.txt"));
 
-  // 1. MSI installer (WiX Toolset) — must run before the portable marker is
-  // dropped, so the MSI does not register the marker file and try to gate
-  // itself out of the self-updater after installation.
+  // MSI only; Windows portable ZIP is no longer shipped (unsupported).
   buildWindowsMsiInstaller(buildDir, audioIconFileName);
-
-  // 2. Portable zip — drop the `portable.txt` marker so the running app can
-  // detect it is the portable build and skip the MSI-based self-updater.
-  // (Path declared above so the pre-MSI sweep can reuse it.)
-  fs.writeFileSync(
-    portableMarkerPath,
-    "This file marks the Dacx portable build. Do not delete — its presence\r\n" +
-      "tells the app to skip the MSI-based self-updater and direct the user to\r\n" +
-      "the release page instead.\r\n",
-  );
-
-  const zipName = "Dacx-Windows-x64.zip";
-  const zipPath = path.join(releaseDir, zipName);
-  removeIfExists(zipPath);
-  try {
-    if (hasCommand("7z")) {
-      run(`7z a -tzip -mx=9 "${zipPath}" *`, { cwd: buildDir });
-    } else {
-      const psSourceDir = escapePowerShellSingleQuoted(buildDir);
-      const psZipPath = escapePowerShellSingleQuoted(zipPath);
-      run(
-        `powershell -NoProfile -Command "` +
-          `$src='${psSourceDir}'; ` +
-          `$dst='${psZipPath}'; ` +
-          `if (Test-Path $dst) { Remove-Item -Force $dst }; ` +
-          `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
-          `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
-          `$src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false)` +
-          `"`,
-      );
-    }
-  } finally {
-    removeIfExists(portableMarkerPath);
-  }
-  console.log(`  ✓ ${zipName}`);
+  console.log("  ✓ Dacx-Windows-x64.msi (portable ZIP not packaged)");
 }
 
 function buildWindowsMsiInstaller(buildDir, audioIconFileName) {
-  // Prefer WiX v4+ (wix build), fall back to WiX v3 (candle + light).
+  // WiX v4+ only (release VMs use the .NET global `wix` tool).
   const wixV4Path = resolveWixV4PlusTool();
   if (wixV4Path) {
     buildWindowsMsiInstallerV4(buildDir, wixV4Path, audioIconFileName);
     return;
   }
 
-  const wixV3Paths = resolveWixV3ToolPaths();
-  if (wixV3Paths) {
-    buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName);
-    return;
-  }
-
-  console.error("WiX tools were not found.");
+  console.error("WiX v4+ tools were not found (WiX v3 fallback removed).");
   console.error("Install WiX v7 (.NET global tool):");
   console.error("  dotnet tool install -g wix --version 7.0.0");
   console.error("  wix eula accept wix7");
   console.error("Or set WIX_BIN to the directory containing wix.exe.");
-  console.error("Alternatively, install WiX v3.14 (candle/light):");
-  console.error("  https://github.com/wixtoolset/wix3/releases");
-  console.error("Or set WIX_V3_BIN to the directory containing candle.exe and light.exe.");
   process.exit(1);
 }
 
@@ -779,34 +637,12 @@ function buildWindowsMsiInstallerV4(buildDir, wixPath, audioIconFileName) {
   console.log(`  ✓ ${outName}`);
 }
 
-function buildWindowsMsiInstallerV3(buildDir, wixV3Paths, audioIconFileName) {
-  const outName = "Dacx-Windows-x64.msi";
-  const outPath = path.join(releaseDir, outName);
-  removeIfExists(outPath);
-
-  const installerDir = path.join(root, "build", "win-installer");
-  fs.mkdirSync(installerDir, { recursive: true });
-  const wxsPath = path.join(installerDir, "dacx-installer.wxs");
-  const wixobjPath = path.join(installerDir, "dacx-installer.wixobj");
-
-  writeWindowsWixSource(buildDir, wxsPath, audioIconFileName);
-
-  run(`"${wixV3Paths.candlePath}" -nologo -arch x64 -out "${wixobjPath}" "${wxsPath}"`);
-  run(`"${wixV3Paths.lightPath}" -nologo -spdb -out "${outPath}" "${wixobjPath}"`);
-
-  if (!fs.existsSync(outPath)) {
-    console.error(`WiX did not produce expected output: ${outPath}`);
-    process.exit(1);
-  }
-  signWindowsArtifact(outPath);
-  console.log(`  ✓ ${outName}`);
-}
-
 function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
   const files = listFilesRecursive(buildDir)
     .map((absolutePath) => {
       const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
-      const relDir = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
+      const relDir =
+        path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
       return { absolutePath, rel, relDir };
     })
     .sort((a, b) => a.rel.localeCompare(b.rel));
@@ -862,7 +698,7 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
     const fileId = `FIL_${idx}`;
     fileComponentIds.push(componentId);
 
-    // WiX v4+: no Win64="yes" — platform is inferred from -arch x64 at build time.
+    // WiX v4+: no Win64="yes"; platform is inferred from -arch x64 at build time.
     const componentLines = [
       `<Component Id="${componentId}" Guid="*">`,
       `  <File Id="${fileId}" Source="${escapeXmlAttr(toWindowsPath(file.absolutePath))}" KeyPath="yes" />`,
@@ -898,7 +734,13 @@ function writeWindowsWixV4Source(buildDir, wxsPath, audioIconFileName) {
     return lines;
   }
 
-  const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
+  const appIconPath = path.join(
+    root,
+    "windows",
+    "runner",
+    "resources",
+    "app_icon.ico",
+  );
   const hasAppIcon = fs.existsSync(appIconPath);
   const msiVersion = toMsiVersion(VERSION);
   const iconBlock = hasAppIcon
@@ -961,166 +803,17 @@ ${renderWixApplicationSearchRegistrationComponent({ indent: "      " })}
   fs.writeFileSync(wxsPath, wixSource);
 }
 
-function writeWindowsWixSource(buildDir, wxsPath, audioIconFileName) {
-  const files = listFilesRecursive(buildDir)
-    .map((absolutePath) => {
-      const rel = path.relative(buildDir, absolutePath).replace(/\\/g, "/");
-      const relDir = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
-      return { absolutePath, rel, relDir };
-    })
-    .sort((a, b) => a.rel.localeCompare(b.rel));
-
-  const relDirs = new Set([""]);
-  for (const file of files) {
-    const parts = file.relDir ? file.relDir.split("/") : [];
-    let acc = "";
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part;
-      relDirs.add(acc);
-    }
-  }
-
-  const dirIdByRel = new Map([["", "INSTALLFOLDER"]]);
-  let dirCounter = 1;
-  for (const relDir of Array.from(relDirs).sort((a, b) => a.localeCompare(b))) {
-    if (!relDir) continue;
-    dirIdByRel.set(relDir, `DIR_${String(dirCounter).padStart(4, "0")}`);
-    dirCounter += 1;
-  }
-
-  const rootNode = {
-    name: "",
-    relDir: "",
-    id: "INSTALLFOLDER",
-    children: new Map(),
-  };
-  for (const relDir of Array.from(relDirs).sort((a, b) => a.localeCompare(b))) {
-    if (!relDir) continue;
-    const parts = relDir.split("/");
-    let node = rootNode;
-    let acc = "";
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part;
-      if (!node.children.has(part)) {
-        node.children.set(part, {
-          name: part,
-          relDir: acc,
-          id: dirIdByRel.get(acc),
-          children: new Map(),
-        });
-      }
-      node = node.children.get(part);
-    }
-  }
-
-  const componentsByDir = new Map();
-  const fileComponentIds = [];
-  files.forEach((file, index) => {
-    const idx = String(index + 1).padStart(4, "0");
-    const componentId = `CMP_FILE_${idx}`;
-    const fileId = `FIL_${idx}`;
-    fileComponentIds.push(componentId);
-
-    const componentLines = [
-      `<Component Id="${componentId}" Guid="*" Win64="yes">`,
-      `  <File Id="${fileId}" Source="${escapeXmlAttr(toWindowsPath(file.absolutePath))}" KeyPath="yes" />`,
-      `</Component>`,
-    ];
-
-    const list = componentsByDir.get(file.relDir) || [];
-    list.push(componentLines);
-    componentsByDir.set(file.relDir, list);
-  });
-
-  function renderDirectoryContents(node, indent) {
-    const lines = [];
-
-    const components = componentsByDir.get(node.relDir) || [];
-    for (const block of components) {
-      for (const line of block) {
-        lines.push(`${indent}${line}`);
-      }
-    }
-
-    const children = Array.from(node.children.values()).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-    for (const child of children) {
-      lines.push(
-        `${indent}<Directory Id="${child.id}" Name="${escapeXmlAttr(child.name)}">`,
-      );
-      lines.push(...renderDirectoryContents(child, `${indent}  `));
-      lines.push(`${indent}</Directory>`);
-    }
-
-    return lines;
-  }
-
-  const appIconPath = path.join(root, "windows", "runner", "resources", "app_icon.ico");
-  const hasAppIcon = fs.existsSync(appIconPath);
-  const msiVersion = toMsiVersion(VERSION);
-  const iconBlock = hasAppIcon
-    ? [
-        `    <Icon Id="AppIcon.ico" SourceFile="${escapeXmlAttr(toWindowsPath(appIconPath))}" />`,
-        `    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />`,
-      ].join("\n")
-    : "";
-
-  const componentRefs = [
-    ...fileComponentIds.map((id) => `      <ComponentRef Id="${id}" />`),
-    '      <ComponentRef Id="CMP_FILE_ASSOC" />',
-    '      <ComponentRef Id="CMP_START_MENU_SHORTCUT" />',
-    '      <ComponentRef Id="CMP_APP_SEARCH_REGISTRATION" />',
-  ].join("\n");
-
-  const wixSource = `<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product
-    Id="*"
-    Name="Dacx"
-    Language="1033"
-    Version="${msiVersion}"
-    Manufacturer="run.rosie"
-    UpgradeCode="{D8D4A9F8-084A-4A7C-9713-3BC4F78E2A93}">
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-    <MediaTemplate EmbedCab="yes" />
-${iconBlock}
-    <Feature Id="ProductFeature" Title="Dacx" Level="1">
-${componentRefs}
-    </Feature>
-  </Product>
-
-  <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="Dacx">
-${renderWixV3FileAssociationComponent(audioIconFileName)}
-${renderDirectoryContents(rootNode, "          ").join("\n")}
-        </Directory>
-      </Directory>
-      <Directory Id="ProgramMenuFolder">
-${renderWixStartMenuShortcutTree({ indent: "        ", includeIcon: hasAppIcon })}
-      </Directory>
-    </Directory>
-  </Fragment>
-
-  <Fragment>
-    <DirectoryRef Id="INSTALLFOLDER">
-${renderWixApplicationSearchRegistrationComponent({ indent: "      " })}
-    </DirectoryRef>
-  </Fragment>
-</Wix>
-`;
-
-  fs.writeFileSync(wxsPath, wixSource);
-}
-
 // ── macOS ──────────────────────────────────────────────────────
 
 function packageMac() {
   const appBundle = path.join(
-    root, "build", "macos", "Build", "Products", "Release", "Dacx.app",
+    root,
+    "build",
+    "macos",
+    "Build",
+    "Products",
+    "Release",
+    "Dacx.app",
   );
   if (!fs.existsSync(appBundle)) {
     console.error(`App bundle not found: ${appBundle}`);
@@ -1134,7 +827,9 @@ function packageMac() {
 
   // 1. Zip (may already exist from mac-codesign.sh)
   const codesignZipPattern = /^dacx-(?:.*-)?macos\.zip$/i;
-  const existing = fs.readdirSync(releaseDir).filter((f) => codesignZipPattern.test(f));
+  const existing = fs
+    .readdirSync(releaseDir)
+    .filter((f) => codesignZipPattern.test(f));
   if (existing.length > 0) {
     console.log(`  ✓ ${existing[0]} (from mac-codesign.sh)`);
   } else {
@@ -1164,7 +859,7 @@ function packageMac() {
   // Create DMG
   run(
     `hdiutil create -volname "Dacx" -srcfolder "${dmgStage}" ` +
-    `-ov -format UDZO "${dmgPath}"`,
+      `-ov -format UDZO "${dmgPath}"`,
   );
 
   // Clean up staging
@@ -1184,7 +879,14 @@ function packageMac() {
 // ── Linux ──────────────────────────────────────────────────────
 
 function packageLinux() {
-  const buildDir = path.join(root, "build", "linux", "x64", "release", "bundle");
+  const buildDir = path.join(
+    root,
+    "build",
+    "linux",
+    "x64",
+    "release",
+    "bundle",
+  );
   if (!fs.existsSync(buildDir)) {
     console.error(`Build directory not found: ${buildDir}`);
     console.error("Run 'npm run build:linux' first.");
@@ -1201,7 +903,9 @@ function packageLinux() {
   const tarName = "Dacx-Linux-x86_64.tar.gz";
   const tarPath = path.join(releaseDir, tarName);
   removeIfExists(tarPath);
-  run(`tar -czf "${tarPath}" -C "${path.dirname(buildDir)}" "${path.basename(buildDir)}"`);
+  run(
+    `tar -czf "${tarPath}" -C "${path.dirname(buildDir)}" "${path.basename(buildDir)}"`,
+  );
   console.log(`  ✓ ${tarName}`);
 
   // 2. .deb
@@ -1232,14 +936,35 @@ function findIcon() {
   }
 
   // If no icon found, warn and return null
-  console.warn("  ⚠ No icon.png found — .deb/.rpm/.AppImage will lack an icon.");
+  console.warn("  ⚠ No icon.png found; .deb/.rpm/.AppImage will lack an icon.");
   console.warn("    Place a 256x256+ PNG at assets/icon/icon.png");
   return null;
 }
 
+/** Install all sizes under linux/packaging/icons/hicolor into a share root. */
+function installHicolorIcons(shareRoot, fallbackIconFile) {
+  const hicolorSrc = path.join(root, "linux", "packaging", "icons", "hicolor");
+  let installed = 0;
+  if (fs.existsSync(hicolorSrc)) {
+    for (const size of fs.readdirSync(hicolorSrc)) {
+      const src = path.join(hicolorSrc, size, "apps", "dacx.png");
+      if (!fs.existsSync(src)) continue;
+      const destDir = path.join(shareRoot, "icons", "hicolor", size, "apps");
+      fs.mkdirSync(destDir, { recursive: true });
+      fs.copyFileSync(src, path.join(destDir, "dacx.png"));
+      installed++;
+    }
+  }
+  if (installed > 0) return;
+  if (!fallbackIconFile) return;
+  const destDir = path.join(shareRoot, "icons", "hicolor", "256x256", "apps");
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(fallbackIconFile, path.join(destDir, "dacx.png"));
+}
+
 function buildDeb(buildDir, desktopFile, iconFile) {
   if (!hasCommand("dpkg-deb")) {
-    console.warn("  ⚠ dpkg-deb not found — skipping .deb");
+    console.warn("  ⚠ dpkg-deb not found; skipping .deb");
     return;
   }
 
@@ -1250,14 +975,13 @@ function buildDeb(buildDir, desktopFile, iconFile) {
   const optDir = path.join(debRoot, "opt", "dacx");
   const binDir = path.join(debRoot, "usr", "bin");
   const appsDir = path.join(debRoot, "usr", "share", "applications");
-  const iconDir = path.join(debRoot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const shareRoot = path.join(debRoot, "usr", "share");
   const docDir = path.join(debRoot, "usr", "share", "doc", "dacx");
   const debianDir = path.join(debRoot, "DEBIAN");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
-  fs.mkdirSync(iconDir, { recursive: true });
   fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(debianDir, { recursive: true });
 
@@ -1279,18 +1003,23 @@ function buildDeb(buildDir, desktopFile, iconFile) {
     fs.writeFileSync(path.join(appsDir, "dacx.desktop"), desktop);
   }
 
-  // Copy icon
-  if (iconFile) {
-    fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
-  }
+  installHicolorIcons(shareRoot, iconFile);
 
   installLegalFilesInDir(docDir);
 
   // Generate control file from template
-  const controlTemplate = path.join(root, "linux", "packaging", "control.template");
+  const controlTemplate = path.join(
+    root,
+    "linux",
+    "packaging",
+    "control.template",
+  );
   if (fs.existsSync(controlTemplate)) {
     let control = fs.readFileSync(controlTemplate, "utf-8");
-    control = control.replace(/\{\{VERSION\}\}/g, semverToDebianVersion(VERSION));
+    control = control.replace(
+      /\{\{VERSION\}\}/g,
+      semverToDebianVersion(VERSION),
+    );
     // Remove the shebang line if present (it's a template marker, not a real script)
     control = control.replace(/^#!.*\n/, "");
     // Calculate installed size in KB
@@ -1310,7 +1039,7 @@ function buildDeb(buildDir, desktopFile, iconFile) {
 }
 
 function semverToRpmVersionRelease(semver) {
-  // Strip semver build metadata (after '+') — RPM disallows '+' in Version.
+  // Strip semver build metadata (after '+'); RPM disallows '+' in Version.
   const stripped = semver.split("+")[0];
   const dashIdx = stripped.indexOf("-");
   if (dashIdx < 0) {
@@ -1323,7 +1052,7 @@ function semverToRpmVersionRelease(semver) {
 
 function buildRpm(buildDir, desktopFile, iconFile) {
   if (!hasCommand("rpmbuild")) {
-    console.warn("  ⚠ rpmbuild not found — skipping .rpm");
+    console.warn("  ⚠ rpmbuild not found; skipping .rpm");
     return;
   }
 
@@ -1345,13 +1074,12 @@ function buildRpm(buildDir, desktopFile, iconFile) {
   const optDir = path.join(buildroot, "opt", "dacx");
   const binDir = path.join(buildroot, "usr", "bin");
   const appsDir = path.join(buildroot, "usr", "share", "applications");
-  const iconDir = path.join(buildroot, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const shareRoot = path.join(buildroot, "usr", "share");
   const docDir = path.join(buildroot, "usr", "share", "doc", "dacx");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
-  fs.mkdirSync(iconDir, { recursive: true });
   fs.mkdirSync(docDir, { recursive: true });
   fs.mkdirSync(specsDir, { recursive: true });
   fs.mkdirSync(rpmsDir, { recursive: true });
@@ -1373,15 +1101,17 @@ function buildRpm(buildDir, desktopFile, iconFile) {
     fs.writeFileSync(path.join(appsDir, "dacx.desktop"), desktop);
   }
 
-  // Icon
-  if (iconFile) {
-    fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
-  }
+  installHicolorIcons(shareRoot, iconFile);
 
   installLegalFilesInDir(docDir);
 
   // Generate spec from template
-  const specTemplate = path.join(root, "linux", "packaging", "dacx.spec.template");
+  const specTemplate = path.join(
+    root,
+    "linux",
+    "packaging",
+    "dacx.spec.template",
+  );
   if (fs.existsSync(specTemplate)) {
     let spec = fs.readFileSync(specTemplate, "utf-8");
     spec = spec.replace(/\{\{VERSION\}\}/g, rpmVersion);
@@ -1395,8 +1125,8 @@ function buildRpm(buildDir, desktopFile, iconFile) {
 
   run(
     `rpmbuild --define "_topdir ${rpmRoot}" ` +
-    `--define "buildroot ${buildroot}" ` +
-    `--target x86_64 -bb "${path.join(specsDir, "dacx.spec")}"`,
+      `--define "buildroot ${buildroot}" ` +
+      `--target x86_64 -bb "${path.join(specsDir, "dacx.spec")}"`,
   );
 
   // Find the built RPM and move it
@@ -1419,8 +1149,10 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
   const appimageToolCmd = envTool || toolName;
 
   if (!appimageToolCmd) {
-    console.warn("  ⚠ appimagetool not found — skipping .AppImage");
-    console.warn("    Install from: https://github.com/AppImage/appimagetool/releases");
+    console.warn("  ⚠ appimagetool not found; skipping .AppImage");
+    console.warn(
+      "    Install from: https://github.com/AppImage/appimagetool/releases",
+    );
     console.warn("    Or set APPIMAGETOOL=/path/to/appimagetool in .env");
     return;
   }
@@ -1432,12 +1164,11 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
   const optDir = path.join(appDir, "opt", "dacx");
   const binDir = path.join(appDir, "usr", "bin");
   const appsDir = path.join(appDir, "usr", "share", "applications");
-  const iconDir = path.join(appDir, "usr", "share", "icons", "hicolor", "256x256", "apps");
+  const shareRoot = path.join(appDir, "usr", "share");
 
   fs.mkdirSync(optDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(appsDir, { recursive: true });
-  fs.mkdirSync(iconDir, { recursive: true });
 
   // Copy bundle
   copyDirSync(buildDir, optDir);
@@ -1457,10 +1188,22 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
     fs.writeFileSync(path.join(appsDir, "dacx.desktop"), desktop);
   }
 
-  // Icon at root and in hicolor
+  // Icon at root and full hicolor set
+  installHicolorIcons(shareRoot, iconFile);
   if (iconFile) {
     fs.copyFileSync(iconFile, path.join(appDir, "dacx.png"));
-    fs.copyFileSync(iconFile, path.join(iconDir, "dacx.png"));
+  } else {
+    const hicolor256 = path.join(
+      shareRoot,
+      "icons",
+      "hicolor",
+      "256x256",
+      "apps",
+      "dacx.png",
+    );
+    if (fs.existsSync(hicolor256)) {
+      fs.copyFileSync(hicolor256, path.join(appDir, "dacx.png"));
+    }
   }
 
   // AppRun entry point
@@ -1492,13 +1235,17 @@ exec "$HERE/opt/dacx/dacx" "$@"
 
 function buildFlatpak() {
   if (process.platform !== "linux") {
-    console.warn("  ⚠ Flatpak bundling requires a Linux host — skipping .flatpak");
+    console.warn(
+      "  ⚠ Flatpak bundling requires a Linux host; skipping .flatpak",
+    );
     return;
   }
 
   if (!hasCommand("flatpak-builder") || !hasCommand("flatpak")) {
-    console.warn("  ⚠ flatpak/flatpak-builder not found — skipping .flatpak");
-    console.warn("    Install: sudo apt-get install -y flatpak flatpak-builder");
+    console.warn("  ⚠ flatpak/flatpak-builder not found; skipping .flatpak");
+    console.warn(
+      "    Install: sudo apt-get install -y flatpak flatpak-builder",
+    );
     console.warn("    Then re-run: npm run setup:linux");
     return;
   }
@@ -1510,7 +1257,7 @@ function buildFlatpak() {
     run(`node "${path.join(root, "scripts", "flatpak-bundle.js")}"`);
   } catch {
     console.warn(
-      "  ⚠ Flatpak bundling failed — skipping .flatpak (other artifacts unaffected).",
+      "  ⚠ Flatpak bundling failed; skipping .flatpak (other artifacts unaffected).",
     );
   }
 }

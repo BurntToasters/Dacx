@@ -5,14 +5,14 @@ Summary: Quick, lightweight cross-platform media player
 License: GPL-3.0-only
 URL: https://github.com/BurntToasters/Dacx
 
-Requires: gtk3, mpv-libs
+Requires: gtk3, mpv-libs, libayatana-appindicator-gtk3
 
 %description
 Dacx is a desktop media player built with Flutter and libmpv.
 Supports audio and video playback with drag-and-drop, minimal UI,
 and cross-platform consistency.
 
-# Spec is used as a template — rpmbuild invoked by package-release.js
+# Spec is used as a template; rpmbuild invoked by package-release.js
 # with pre-populated BUILDROOT. No %build or %install sections needed.
 
 %files
@@ -21,5 +21,5 @@ and cross-platform consistency.
 %doc /usr/share/doc/dacx/THIRD_PARTY_NOTICES.txt
 %doc /usr/share/doc/dacx/NATIVE_DEPENDENCIES.md
 /usr/share/applications/dacx.desktop
-/usr/share/icons/hicolor/256x256/apps/dacx.png
+/usr/share/icons/hicolor/*/apps/dacx.png
 /usr/bin/dacx

@@ -8,9 +8,9 @@
  * Source:  assets/icon/icon.png  (1024×1024 recommended)
  *
  * Outputs:
- *   Windows — windows/runner/resources/app_icon.ico  (multi-size ICO)
- *   macOS   — macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_*.png
- *   Linux   — linux/packaging/icons/  (hicolor sizes)
+ *   Windows: windows/runner/resources/app_icon.ico  (multi-size ICO)
+ *   macOS:   macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_*.png
+ *   Linux:   linux/packaging/icons/  (hicolor sizes)
  */
 
 import fs from "fs";
@@ -45,7 +45,7 @@ function hasMagick() {
   }
 }
 
-// ── Windows — multi-size .ico via ImageMagick ────────────────
+// Windows: multi-size .ico via ImageMagick
 
 function generateWindows() {
   console.log("\n── Windows ──");
@@ -72,7 +72,7 @@ function generateWindows() {
   console.log(`  ✓ ${path.relative(root, ico)}`);
 }
 
-// ── macOS — individual PNGs for AppIcon.appiconset ───────────
+// macOS: individual PNGs for AppIcon.appiconset
 
 function generateMacOS() {
   console.log("\n── macOS ──");
@@ -95,7 +95,7 @@ function generateMacOS() {
   }
 }
 
-// ── Linux — hicolor icon theme PNGs ──────────────────────────
+// Linux: hicolor icon theme PNGs
 
 function generateLinux() {
   console.log("\n── Linux ──");
@@ -118,7 +118,7 @@ function generateLinux() {
   }
 }
 
-// ── macOS — document type icns ───────────────────────────────
+// macOS: document type icns
 
 function generateMacOSDocumentIcons() {
   console.log("\n── macOS document icons ──");

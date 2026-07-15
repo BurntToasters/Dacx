@@ -16,9 +16,9 @@ void main() {
       expect(v.blurEnabled, isTrue);
       expect(v.blurStrength, 0.5);
       expect(v.windowTopColor.a, lessThan(1.0));
-      expect(v.barColor.a, lessThan(1.0));
-      expect(v.contentColor.a, lessThan(1.0));
-      expect(v.overlayColor.a, lessThan(1.0));
+      expect(v.chromeTopColor.a, lessThan(1.0));
+      expect(v.panelTopColor.a, lessThan(1.0));
+      expect(v.overlayTopColor.a, lessThan(1.0));
     });
 
     test('blur disabled produces opaque shell colors', () {
@@ -30,7 +30,7 @@ void main() {
       expect(v.blurEnabled, isFalse);
       expect(v.windowTopColor.a, 1.0);
       expect(v.windowBottomColor.a, 1.0);
-      expect(v.barColor.a, 1.0);
+      expect(v.chromeTopColor.a, 1.0);
     });
 
     test('blurStrength is clamped to [0,1]', () {
@@ -86,7 +86,7 @@ void main() {
       final c = v.copyWith(blurEnabled: false, blurStrength: 0.9);
       expect(c.blurEnabled, isFalse);
       expect(c.blurStrength, 0.9);
-      expect(c.barColor, v.barColor);
+      expect(c.chromeTopColor, v.chromeTopColor);
     });
 
     test('copyWith keeps blur settings when not overridden', () {
@@ -100,7 +100,7 @@ void main() {
 
       expect(c.blurEnabled, v.blurEnabled);
       expect(c.blurStrength, v.blurStrength);
-      expect(c.barColor, v.barColor);
+      expect(c.chromeTopColor, v.chromeTopColor);
     });
 
     test('lerp interpolates between two visuals', () {

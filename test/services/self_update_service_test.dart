@@ -189,53 +189,43 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
       expect(parsed.thumbprint, '');
       expect(parsed.message, 'No signature | present');
     });
-  });
 
-  group('SelfUpdateService Windows watchdog', () {
-    test(
-      'uses hidden PowerShell-friendly commands instead of cmd find loop',
-      () {
-        final script = SelfUpdateService.buildWindowsWatchdogPowerShellScript();
-
-        expect(script, contains('Get-Process -Id \$DacxPid'));
-        expect(script, contains('WaitForExit(600000)'));
-        expect(
-          script,
-          contains('[Microsoft.PowerShell.Commands.ProcessCommandException]'),
-        );
-        expect(script, contains('Add-Content'));
-        expect(script, isNot(contains('Start-Sleep -Seconds 1')));
-        expect(script, contains('Get-FileHash -Algorithm SHA256'));
-        expect(
-          script,
-          contains(
-            r"Start-Process -FilePath 'C:\Windows\System32\msiexec.exe'",
-          ),
-        );
-        expect(script, contains('-Verb RunAs'));
-        expect(script, isNot(contains('-UseShellExecute')));
-        expect(script, isNot(contains('tasklist')));
-        expect(script, isNot(contains('find "%DACX_PID%"')));
-      },
-    );
-  });
-
-  group('SelfUpdateService.buildBootstrapCommandLine', () {
-    test('launches powershell hidden with a quoted script path', () {
-      final cmd = SelfUpdateService.buildBootstrapCommandLine(
-        r'C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1',
+    test('parses Artifact Signing publisher identity', () {
+      final parsed = SelfUpdateService.parseAuthenticodeStatus(
+        'Valid|ABCD1234|publisher:BurntToasters LLC|ok',
       );
+      expect(parsed.publisher, 'BurntToasters LLC');
+      expect(parsed.message, 'ok');
+    });
+  });
+
+  group('SelfUpdateService Windows update helper', () {
+    test('launch command uses EncodedCommand without on-disk scripts', () {
+      final encoded = SelfUpdateService.encodePowerShellCommand(
+        SelfUpdateService.buildWindowsHelperWmiBootstrapScript(
+          r'"C:\Dacx\dacx-update-helper.exe" --pid 1 --msi "m.msi" --sha256 aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899 --thumbprint ""',
+        ),
+      );
+      final cmd = SelfUpdateService.buildWindowsHelperLaunchCommandLine(
+        encoded,
+      );
+
+      expect(cmd, contains('-EncodedCommand'));
+      expect(cmd, isNot(contains('-File')));
+      expect(cmd, isNot(contains('apply-update.ps1')));
+      expect(cmd, isNot(contains('spawn-watchdog.ps1')));
+    });
+  });
+
+  group('SelfUpdateService.buildWindowsHelperLaunchCommandLine', () {
+    test('launches powershell hidden with EncodedCommand', () {
+      final cmd = SelfUpdateService.buildWindowsHelperLaunchCommandLine('Zm9v');
 
       expect(cmd, isNot(contains('powershell.exe')));
       expect(cmd, contains('-NoProfile'));
       expect(cmd, contains('-ExecutionPolicy Bypass'));
       expect(cmd, contains('-WindowStyle Hidden'));
-      expect(
-        cmd,
-        contains(
-          r'-File "C:\Users\Test User\AppData\Local\Dacx\updates\spawn-watchdog.ps1"',
-        ),
-      );
+      expect(cmd, contains('-EncodedCommand Zm9v'));
     });
   });
 
@@ -286,7 +276,7 @@ abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234  Dacx.msi
   group('SelfUpdateService.isSupported', () {
     test('matches host platform expectations', () {
       // Windows or macOS hosts → true; Linux/other → false. Just check the
-      // value is consistent with Platform — no assumption about test runner.
+      // value is consistent with Platform; no assumption about test runner.
       final result = SelfUpdateService.isSupported();
       expect(result, isA<bool>());
     });

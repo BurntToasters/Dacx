@@ -82,7 +82,7 @@ void main() {
 
     test('cancelAll on empty bag does not throw', () {
       final bag = SubscriptionBag();
-      expect(() => bag.cancelAll(), returnsNormally);
+      expect(bag.cancelAll, returnsNormally);
     });
 
     test('multiple subscriptions are all cancelled', () async {
@@ -120,7 +120,7 @@ void main() {
 
       bag.cancelAll();
       // Second cancelAll should not throw or double-cancel.
-      expect(() => bag.cancelAll(), returnsNormally);
+      expect(bag.cancelAll, returnsNormally);
 
       await controller.close();
     });

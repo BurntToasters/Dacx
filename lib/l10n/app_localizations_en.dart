@@ -30,6 +30,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAlwaysOnTop => 'Always on top';
 
   @override
+  String get settingsMinimizeToTray => 'Minimize to system tray';
+
+  @override
+  String get settingsMinimizeToTraySubtitle =>
+      'Close button hides Dacx instead of quitting. Use Quit from the tray menu to exit.';
+
+  @override
+  String get trayShow => 'Show Dacx';
+
+  @override
+  String get trayQuit => 'Quit';
+
+  @override
   String get settingsRememberWindow => 'Remember window size & position';
 
   @override
@@ -58,7 +71,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHardwareAccelerationRestartNote =>
-      'Requires restart to take effect';
+      'Applies immediately to the player; a new file open picks up VideoController changes';
 
   @override
   String get settingsPlaybackSpeed => 'Playback speed';
@@ -79,11 +92,58 @@ class AppLocalizationsEn extends AppLocalizations {
       'Publish playback to MPRIS / SMTC / Now Playing';
 
   @override
-  String get settingsAudioWaveform => 'Audio spectrum visualizer';
+  String get settingsMultiAudioMixSubtitle =>
+      'Play every audio track at once (Experimental)';
 
   @override
-  String get settingsAudioWaveformSubtitle =>
-      'Show audio-reactive bars (Broken/Experimental: enabling may cause issues)';
+  String get settingsSeekPreview => 'Seek thumbnails';
+
+  @override
+  String get settingsSeekPreviewSubtitle =>
+      'Preview frames while scrubbing (uses extra memory)';
+
+  @override
+  String get settingsExperimentalStoredPrefsHint =>
+      'Stored experimental options (mix, Linux compositor blur) turn back on when you re-enable this';
+
+  @override
+  String get snackDropPathInaccessible =>
+      'Some dropped files are outside the sandbox or inaccessible';
+
+  @override
+  String get snackScreenshotDirInaccessible =>
+      'Screenshot folder is not writable';
+
+  @override
+  String get tooltipMute => 'Mute';
+
+  @override
+  String get tooltipUnmute => 'Unmute';
+
+  @override
+  String get tooltipCycleSpeed => 'Cycle playback speed';
+
+  @override
+  String get tooltipShuffle => 'Shuffle queue';
+
+  @override
+  String get queueReorderSemantic => 'Reorder';
+
+  @override
+  String get mediaInfoArtist => 'Artist';
+
+  @override
+  String get mediaInfoAlbum => 'Album';
+
+  @override
+  String get mediaInfoTitle => 'Title';
+
+  @override
+  String get audioPlaybackLabel => 'Audio playback';
+
+  @override
+  String get flatpakSandboxHint =>
+      'Flatpak can only open files from Music, Videos, Downloads, and Pictures unless you use the file picker.';
 
   @override
   String get settingsAllowMultipleWindowsSubtitle =>
@@ -185,7 +245,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsExperimentalUnstable =>
-      'Experimental features are very unstable.';
+      'Work-in-progress features; may be incomplete or change.';
 
   @override
   String get settingsRecentFiles => 'Recent files';
@@ -303,30 +363,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackDebugModeDisabled => 'Debug mode disabled.';
 
   @override
-  String get settingsShortcutOpenFile => 'Open File';
-
-  @override
-  String get settingsShortcutReopenLast => 'Reopen Last';
-
-  @override
-  String get settingsShortcutPlayPause => 'Play / Pause';
-
-  @override
-  String get settingsShortcutSeek => 'Seek ±5 seconds';
-
-  @override
-  String get settingsShortcutVolume => 'Volume ±5%';
-
-  @override
-  String get settingsShortcutMute => 'Mute / Unmute';
-
-  @override
-  String get settingsShortcutFullscreen => 'Toggle Fullscreen';
-
-  @override
-  String get settingsShortcutExitFullscreen => 'Exit Fullscreen';
-
-  @override
   String get snackCouldNotReadDroppedFile =>
       'Could not read dropped file path.';
 
@@ -419,13 +455,73 @@ class AppLocalizationsEn extends AppLocalizations {
   String get emptyStateMessage => 'Drop a file here or click Open';
 
   @override
+  String get emptyStateFlatpakMessage =>
+      'Use Open File or Open Folder; drag-and-drop only works for Music, Videos, Downloads, and Pictures';
+
+  @override
+  String get emptyStateTipReopenLast =>
+      'Tip: Reopen Last (Ctrl/Cmd+R) reopens your previous file; with Resume on, it continues near where you left off';
+
+  @override
+  String get actionDismissTip => 'Got it';
+
+  @override
+  String get dropOverlayHint => 'Drop media files to play or enqueue';
+
+  @override
+  String get keyCaptureWaiting => 'Waiting…';
+
+  @override
   String get buttonOpenFile => 'Open File';
 
   @override
   String get buttonOpenFolder => 'Open Folder';
 
   @override
+  String get buttonOpenPlaylist => 'Open Playlist';
+
+  @override
+  String get buttonSavePlaylist => 'Save Playlist';
+
+  @override
   String get buttonOpenUrl => 'Open URL';
+
+  @override
+  String get snackPlaylistEmptyOrInvalid =>
+      'Playlist is empty or could not be read';
+
+  @override
+  String get snackPlaylistImportFailed => 'Could not import playlist';
+
+  @override
+  String get snackPlaylistExportSaved => 'Playlist saved';
+
+  @override
+  String get snackPlaylistExportFailed => 'Could not save playlist';
+
+  @override
+  String get linuxUpdateGuidanceFlatpak =>
+      'Install the new .flatpak from the release page (flatpak install --user …), or remove and reinstall the sideloaded package. Not published on Flathub.';
+
+  @override
+  String get linuxUpdateGuidanceAppImage =>
+      'Recommended: manage this AppImage with AppManager (github.com/kem-a/AppManager) for desktop install + updates. Or download the new AppImage from the release page and replace this file.';
+
+  @override
+  String get linuxUpdateGuidanceDebRpm =>
+      'Install the new package (.deb / .rpm) from the release page.';
+
+  @override
+  String get linuxUpdateGuidancePortable =>
+      'Download the latest Linux build from the release page and replace this install.';
+
+  @override
+  String get linuxUpdateGuidanceGeneric =>
+      'Download the latest Linux build from the release page.';
+
+  @override
+  String get settingsLinuxUpdateHint =>
+      'Linux self-update is not built in; use your package type’s update path.';
 
   @override
   String get buttonReopenLast => 'Reopen Last';
@@ -519,11 +615,69 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuTakeScreenshot => 'Take screenshot';
 
   @override
+  String get menuLoadExternalAudio => 'Load external audio…';
+
+  @override
+  String get menuLoadExternalSubtitle => 'Load external subtitle…';
+
+  @override
   String get menuMixAllAudioTracks => 'Mix all audio tracks';
 
   @override
-  String get menuSeekThumbnailsBeta =>
-      'Seek thumbnails (beta: uses more resources)';
+  String get menuSleepTimer => 'Sleep timer';
+
+  @override
+  String get menuSleepTimerOff => 'Off';
+
+  @override
+  String menuSleepTimerMinutes(int minutes) {
+    return '$minutes minutes';
+  }
+
+  @override
+  String snackSleepTimerSet(int minutes) {
+    return 'Sleep timer set for $minutes minutes.';
+  }
+
+  @override
+  String get snackSleepTimerCancelled => 'Sleep timer cancelled.';
+
+  @override
+  String get snackSleepTimerFired => 'Sleep timer ended; playback stopped.';
+
+  @override
+  String get osdExternalAudioLoaded => 'External audio loaded';
+
+  @override
+  String get osdExternalAudioFailed => 'Could not load external audio';
+
+  @override
+  String get osdExternalSubtitleLoaded => 'External subtitle loaded';
+
+  @override
+  String get osdExternalSubtitleFailed => 'Could not load external subtitle';
+
+  @override
+  String get settingsScreenshotDir => 'Screenshot folder';
+
+  @override
+  String get settingsScreenshotDirSubtitle =>
+      'Where video screenshots are saved';
+
+  @override
+  String get settingsScreenshotFormat => 'Screenshot format';
+
+  @override
+  String get settingsScreenshotFormatPng => 'PNG';
+
+  @override
+  String get settingsScreenshotFormatJpg => 'JPEG';
+
+  @override
+  String get settingsChooseScreenshotDir => 'Choose folder…';
+
+  @override
+  String get settingsResetScreenshotDir => 'Use default (Pictures/DACX)';
 
   @override
   String get menuQueueEmpty => 'Queue (empty)';
@@ -674,7 +828,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipOpenFolder => 'Open folder';
 
   @override
-  String get tooltipOpenUrl => 'Open URL';
+  String get tooltipOpenUrl => 'Open URL (Ctrl/Cmd+U)';
 
   @override
   String get tooltipRecentFiles => 'Recent files';
@@ -683,10 +837,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipMediaInfo => 'Media info';
 
   @override
-  String get tooltipPreviousTrack => 'Previous Track (PageUp)';
+  String get tooltipPreviousTrack => 'Previous Track (Shift+P)';
 
   @override
-  String get tooltipNextTrack => 'Next Track (PageDown)';
+  String get tooltipNextTrack => 'Next Track (Shift+N)';
 
   @override
   String get tooltipPlayQueue => 'Play Queue';
@@ -772,6 +926,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateOutcomeUnsupportedPlatform =>
       'Self-update is not supported on this platform.';
+
+  @override
+  String updateOutcomeUnsupportedPlatformLinux(String guidance) {
+    return 'Self-update is not available on Linux. $guidance';
+  }
 
   @override
   String get updateOutcomeMissingAsset =>
@@ -922,6 +1081,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutNewWindow => 'Open new window';
+
+  @override
+  String get shortcutSpeedSlower => 'Decrease playback speed';
+
+  @override
+  String get shortcutSpeedFaster => 'Increase playback speed';
+
+  @override
+  String get shortcutCycleSpeed => 'Cycle playback speed';
+
+  @override
+  String get shortcutOpenUrl => 'Open URL';
 
   @override
   String get eqPresetFlat => 'Flat';

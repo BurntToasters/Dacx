@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Advisory: surface any direct Dart dependencies that have a newer
- * resolvable version available. Never fails the suite — purely a
+ * resolvable version available. Never fails the suite; purely a
  * heads-up for the maintainer between releases.
  *
- * Skipped silently if `flutter` is not on PATH.
+ * Skipped silently if FVM is not on PATH.
  */
 import { spawnSync } from "node:child_process";
 import crossSpawn from "cross-spawn";
@@ -29,7 +29,7 @@ const r = crossSpawn.sync(
 );
 
 const out = (r.stdout || "") + (r.stderr || "");
-// `flutter pub outdated` exits 65 when newer versions exist; treat as
+// `fvm flutter pub outdated` exits 65 when newer versions exist; treat as
 // informational, not failing.
 const trimmed = out.trim();
 if (!trimmed) {

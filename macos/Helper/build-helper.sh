@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Builds run.rosie.dacx.UpdateHelper.xpc — a bundled XPC service that performs
+# Builds run.rosie.dacx.UpdateHelper.xpc; a bundled XPC service that performs
 # the self-update swap on behalf of the sandboxed main app.
 #
 # Usage:

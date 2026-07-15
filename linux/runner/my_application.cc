@@ -354,7 +354,7 @@ static GtkWindow* my_application_create_window(MyApplication* self,
   GdkRGBA background_color;
   gdk_rgba_parse(&background_color, "#00000000");
   fl_view_set_background_color(view, &background_color);
-  // Do NOT gtk_widget_show(view/window) here — flutter_acrylic's plugin
+  // Do NOT gtk_widget_show(view/window) here; flutter_acrylic's plugin
   // registrant shows them after wiring the transparent draw callback.
   // Early show locks in a non-RGBA path on some compositors.
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));

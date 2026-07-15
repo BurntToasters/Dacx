@@ -64,7 +64,7 @@ final class UpdateBridge {
         // Backstop: fires if XPC service never replies. Timeout must be generous
         // because the helper now downloads the zip (~100 MB) before replying.
         DispatchQueue.main.asyncAfter(deadline: .now() + timeoutSeconds) {
-            sendOnce(["accepted": false, "error": "XPC update helper timed out after \(Int(timeoutSeconds))s — check that the .xpc bundle is present inside the app"])
+            sendOnce(["accepted": false, "error": "XPC update helper timed out after \(Int(timeoutSeconds))s; check that the .xpc bundle is present inside the app"])
         }
 
         return (connection, sendOnce)

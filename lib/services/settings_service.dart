@@ -73,7 +73,7 @@ class SettingsService extends ChangeNotifier {
   /// Each migration is a synchronous function `(prefs) => void` that takes
   /// the schema from version `i` to version `i + 1`, where `i` is the
   /// migration's index in [_migrations].
-  static const int currentSchemaVersion = 2;
+  static const int currentSchemaVersion = 4;
   static const String _kSchemaVersion = 'settings_schema_version';
 
   /// `_migrations[i]` upgrades from version `i` to version `i + 1`.
@@ -115,10 +115,17 @@ class SettingsService extends ChangeNotifier {
             prefs.remove('resume_positions_v1');
           }
         },
+        // 2 -> 3: historically introduced playlist_queue_v1 (no transform;
+        // stamped schema only). Queue persistence was removed in 3 -> 4.
+        (prefs) {},
+        // 3 -> 4: drop session queue restore; remove playlist_queue_v1.
+        (prefs) {
+          prefs.remove('playlist_queue_v1');
+        },
       ];
 
   void _runMigrationsIfNeeded() {
-    // Fresh install: no settings keys have been written yet — stamp the
+    // Fresh install: no settings keys have been written yet; stamp the
     // current schema version and skip running any migrations.
     final hasAnyKey = _prefs.getKeys().isNotEmpty;
     final stored = _prefs.getInt(_kSchemaVersion);
@@ -147,6 +154,7 @@ class SettingsService extends ChangeNotifier {
   static const _kTheme = 'appearance_theme';
   static const _kAccent = 'appearance_accent';
   static const _kAlwaysOnTop = 'appearance_always_on_top';
+  static const _kMinimizeToTray = 'appearance_minimize_to_tray';
   static const _kRememberWindow = 'appearance_remember_window';
   static const _kWindowWidth = 'window_width';
   static const _kWindowHeight = 'window_height';
@@ -172,7 +180,6 @@ class SettingsService extends ChangeNotifier {
   static const _kScreenshotFormat = 'screenshot_format';
   static const _kOsdEnabled = 'osd_enabled';
   static const _kSeekPreviewEnabled = 'seek_preview_enabled';
-  static const _kAudioWaveformEnabled = 'audio_waveform_enabled';
   static const _kMultiAudioMix = 'multi_audio_mix';
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
@@ -180,6 +187,7 @@ class SettingsService extends ChangeNotifier {
   static const _kResumePositions = 'resume_positions_v2';
   static const _kPlaylistShuffle = 'playlist_shuffle';
   static const _kAllowMultipleInstances = 'allow_multiple_instances';
+  static const _kEmptyStateTipDismissed = 'empty_state_tip_dismissed';
 
   /// Persisted preference keys. Renaming requires a migration; keep in sync with
   /// [test/services/frozen_identifiers_test.dart].
@@ -193,6 +201,7 @@ class SettingsService extends ChangeNotifier {
     _kTheme,
     _kAccent,
     _kAlwaysOnTop,
+    _kMinimizeToTray,
     _kRememberWindow,
     _kWindowWidth,
     _kWindowHeight,
@@ -217,7 +226,6 @@ class SettingsService extends ChangeNotifier {
     _kScreenshotFormat,
     _kOsdEnabled,
     _kSeekPreviewEnabled,
-    _kAudioWaveformEnabled,
     _kMultiAudioMix,
     _kMediaSession,
     _kKeybinds,
@@ -225,6 +233,7 @@ class SettingsService extends ChangeNotifier {
     _kResumePositions,
     _kPlaylistShuffle,
     _kAllowMultipleInstances,
+    _kEmptyStateTipDismissed,
   };
 
   /// Maximum playback-resume entries kept (per file). LRU pruned.
@@ -335,6 +344,13 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// When true, closing the window hides to the system tray instead of quitting.
+  bool get minimizeToTray => _prefs.getBool(_kMinimizeToTray) ?? false;
+  set minimizeToTray(bool v) {
+    _prefs.setBool(_kMinimizeToTray, v);
+    notifyListeners();
+  }
+
   bool get rememberWindow => _prefs.getBool(_kRememberWindow) ?? true;
   set rememberWindow(bool v) {
     _prefs.setBool(_kRememberWindow, v);
@@ -405,6 +421,13 @@ class SettingsService extends ChangeNotifier {
   bool _isSafeFilePath(String value) {
     if (value.isEmpty) return false;
     if (value.contains('\u0000')) return false;
+    final uri = Uri.tryParse(value);
+    if (uri != null &&
+        uri.hasScheme &&
+        (uri.scheme == 'http' || uri.scheme == 'https')) {
+      return PlayableSource.isSupportedUrl(value) &&
+          PlayableSource.isDisplaySafeUrl(value);
+    }
     if (PlayableSource.isSupportedUrl(value)) {
       return PlayableSource.isDisplaySafeUrl(value);
     }
@@ -695,19 +718,6 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Audio spectrum visualizer. Experimental — preference is preserved but
-  /// reported as `false` when Experimental Features is off (same pattern as
-  /// [multiAudioMix]).
-  bool get audioWaveformEnabled {
-    if (!experimentalFeaturesEnabled) return false;
-    return _prefs.getBool(_kAudioWaveformEnabled) ?? false;
-  }
-
-  set audioWaveformEnabled(bool v) {
-    _prefs.setBool(_kAudioWaveformEnabled, v);
-    notifyListeners();
-  }
-
   /// Mix all audio tracks into one output via mpv `lavfi-complex`.
   /// Marked experimental; the stored preference is preserved but
   /// reported as `false` whenever Experimental Features is disabled,
@@ -786,6 +796,13 @@ class SettingsService extends ChangeNotifier {
   bool get playlistShuffle => _prefs.getBool(_kPlaylistShuffle) ?? false;
   set playlistShuffle(bool v) {
     _prefs.setBool(_kPlaylistShuffle, v);
+    notifyListeners();
+  }
+
+  bool get emptyStateTipDismissed =>
+      _prefs.getBool(_kEmptyStateTipDismissed) ?? false;
+  set emptyStateTipDismissed(bool v) {
+    _prefs.setBool(_kEmptyStateTipDismissed, v);
     notifyListeners();
   }
 

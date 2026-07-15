@@ -24,6 +24,10 @@ enum PlayerShortcutAction {
   playlistPrev,
   toggleCompactMode,
   newWindow,
+  speedSlower,
+  speedFaster,
+  cycleSpeed,
+  openUrl,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -49,6 +53,10 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.playlistPrev: ['Shift+P'],
   PlayerShortcutAction.toggleCompactMode: ['Ctrl+Shift+M'],
   PlayerShortcutAction.newWindow: ['Ctrl+N'],
+  PlayerShortcutAction.speedSlower: ['['],
+  PlayerShortcutAction.speedFaster: [']'],
+  PlayerShortcutAction.cycleSpeed: ['\\'],
+  PlayerShortcutAction.openUrl: ['Ctrl+U'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -76,6 +84,10 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.playlistPrev => l10n.shortcutPlaylistPrev,
       PlayerShortcutAction.toggleCompactMode => l10n.shortcutToggleCompactMode,
       PlayerShortcutAction.newWindow => l10n.shortcutNewWindow,
+      PlayerShortcutAction.speedSlower => l10n.shortcutSpeedSlower,
+      PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
+      PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
+      PlayerShortcutAction.openUrl => l10n.shortcutOpenUrl,
     };
   }
   return switch (a) {
@@ -100,6 +112,10 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.playlistPrev => 'Previous in queue',
     PlayerShortcutAction.toggleCompactMode => 'Toggle mini-player',
     PlayerShortcutAction.newWindow => 'Open new window',
+    PlayerShortcutAction.speedSlower => 'Decrease playback speed',
+    PlayerShortcutAction.speedFaster => 'Increase playback speed',
+    PlayerShortcutAction.cycleSpeed => 'Cycle playback speed',
+    PlayerShortcutAction.openUrl => 'Open URL',
   };
 }
 
@@ -107,8 +123,10 @@ class PlayerShortcutsService {
   /// Resolves a key event into an action.
   ///
   /// Default behavior preserves the original built-in mapping. When
-  /// [customBindings] is provided (action name -> accelerator strings) it
-  /// overrides defaults entirely (only listed actions are matched).
+  /// [customBindings] is provided (action name -> accelerator strings), those
+  /// bindings are checked first and **overlay** the defaults: unlisted actions
+  /// still use built-in accelerators. A custom accelerator that collides with
+  /// a default wins (custom match is preferred).
   static PlayerShortcutAction? resolve({
     required KeyEvent event,
     required bool hasMedia,
@@ -142,7 +160,7 @@ class PlayerShortcutsService {
         }
         return action;
       }
-      return null;
+      // Fall through so unbound actions keep their defaults.
     }
 
     return _defaultResolve(
@@ -171,6 +189,11 @@ class PlayerShortcutsService {
     }
     if (event is KeyDownEvent &&
         primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyU) {
+      return PlayerShortcutAction.openUrl;
+    }
+    if (event is KeyDownEvent &&
+        primaryModifierPressed &&
         key == LogicalKeyboardKey.keyR) {
       return PlayerShortcutAction.reopenLast;
     }
@@ -183,6 +206,24 @@ class PlayerShortcutsService {
         primaryModifierPressed &&
         key == LogicalKeyboardKey.keyS) {
       return PlayerShortcutAction.screenshot;
+    }
+    if (event is KeyDownEvent &&
+        isShiftPressed &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyN) {
+      return PlayerShortcutAction.playlistNext;
+    }
+    if (event is KeyDownEvent &&
+        isShiftPressed &&
+        !primaryModifierPressed &&
+        key == LogicalKeyboardKey.keyP) {
+      return PlayerShortcutAction.playlistPrev;
+    }
+    if (event is KeyDownEvent &&
+        primaryModifierPressed &&
+        isShiftPressed &&
+        key == LogicalKeyboardKey.keyM) {
+      return PlayerShortcutAction.toggleCompactMode;
     }
     if (event is KeyDownEvent &&
         !primaryModifierPressed &&
@@ -239,6 +280,24 @@ class PlayerShortcutsService {
         key == LogicalKeyboardKey.keyM) {
       return PlayerShortcutAction.toggleMute;
     }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.bracketLeft) {
+      return PlayerShortcutAction.speedSlower;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.bracketRight) {
+      return PlayerShortcutAction.speedFaster;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.backslash) {
+      return PlayerShortcutAction.cycleSpeed;
+    }
     return null;
   }
 
@@ -270,6 +329,19 @@ class PlayerShortcutsService {
     if (shift) parts.add('Shift');
     parts.add(_keyLabel(key));
     return parts.join('+');
+  }
+
+  /// Formats a stored accelerator for UI (⌘ on macOS instead of Ctrl).
+  static String formatAcceleratorForDisplay(
+    String accelerator, {
+    required bool useMacSymbols,
+  }) {
+    if (!useMacSymbols) return accelerator;
+    return accelerator
+        .replaceAll('Ctrl+', '⌘')
+        .replaceAll('Meta+', '⌘')
+        .replaceAll('Alt+', '⌥')
+        .replaceAll('Shift+', '⇧');
   }
 
   /// Public helper: translate a live key event into an accelerator string.

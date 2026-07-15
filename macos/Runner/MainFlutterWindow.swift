@@ -26,7 +26,7 @@ class MainFlutterWindow: NSWindow {
 
     let windowFrame = self.frame
     // MacOSWindowUtilsViewController hosts an NSVisualEffectView behind Flutter.
-    // Without this wrap, flutter_acrylic setMaterial has nothing to tint — window
+    // Without this wrap, flutter_acrylic setMaterial has nothing to tint; window
     // stays transparent with no blur (sharp desktop shows through).
     let macOSWindowUtilsViewController = MacOSWindowUtilsViewController()
     macOSWindowUtilsViewController.flutterViewController.backgroundColor = .clear
@@ -34,7 +34,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     MainFlutterWindowManipulator.start(mainFlutterWindow: self)
-    // start() resets titlebar/background to opaque defaults — undo that so
+    // start() resets titlebar/background to opaque defaults; undo that so
     // NSVisualEffectView can show through.
     restoreVibrancyWindowChrome()
 

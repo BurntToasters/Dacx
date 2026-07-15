@@ -46,6 +46,16 @@ function syncLinuxPackageTemplateVersion(label, text) {
   return text.replace(versionPattern, `$1${semverToDebianVersion(version)}`);
 }
 
+syncFile("package-lock.json", path.join(root, "package-lock.json"), (text) => {
+  const lock = JSON.parse(text);
+  if (lock.version === version && lock.packages?.[""]?.version === version) {
+    return null;
+  }
+  lock.version = version;
+  if (lock.packages?.[""]) lock.packages[""].version = version;
+  return `${JSON.stringify(lock, null, 2)}\n`;
+});
+
 syncFile("pubspec.yaml", path.join(root, "pubspec.yaml"), (text) => {
   const versionPattern = /^(version:\s*)(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\+(\d+))?/m;
   const match = text.match(versionPattern);

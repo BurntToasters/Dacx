@@ -67,6 +67,10 @@
     <mediatype>audio/opus</mediatype>
     <mediatype>audio/x-ms-wma</mediatype>
     <mediatype>audio/x-ape</mediatype>
+    <mediatype>audio/aiff</mediatype>
+    <mediatype>audio/x-aiff</mediatype>
+    <mediatype>audio/x-wavpack</mediatype>
+    <mediatype>audio/x-musepack</mediatype>
     <mediatype>video/mp4</mediatype>
     <mediatype>video/x-matroska</mediatype>
     <mediatype>video/webm</mediatype>
@@ -74,8 +78,23 @@
     <mediatype>video/x-msvideo</mediatype>
     <mediatype>video/x-ms-wmv</mediatype>
     <mediatype>video/x-flv</mediatype>
+    <mediatype>video/mp2t</mediatype>
+    <mediatype>video/mpeg</mediatype>
+    <mediatype>video/ogg</mediatype>
+    <mediatype>audio/x-mpegurl</mediatype>
+    <mediatype>audio/mpegurl</mediatype>
+    <mediatype>audio/x-scpls</mediatype>
+    <mediatype>application/pls+xml</mediatype>
   </provides>
   <releases>
+    <release version="0.11.0" date="2026-07-15"/>
+    <release version="0.11.0-beta.6" date="2026-07-12"/>
+    <release version="0.11.0-beta.5" date="2026-07-12"/>
+    <release version="0.11.0-beta.4" date="2026-07-12"/>
+    <release version="0.11.0-beta.3" date="2026-07-12"/>
+    <release version="0.11.0-beta.2" date="2026-07-12"/>
+    <release version="0.11.0-beta.1" date="2026-07-11"/>
+    <release version="0.10.1-beta.1" date="2026-07-10"/>
     <release version="0.10.0" date="2026-07-10"/>
     <release version="0.10.0-beta.10" date="2026-07-10"/>
     <release version="0.10.0-beta.9" date="2026-07-10"/>
@@ -86,7 +105,7 @@
     <release version="0.10.0-beta.4" date="2026-07-09"/>
     <release version="0.10.0-beta.3" date="2026-07-09"/>
     <release version="0.10.0-beta.2" date="2026-07-09"/>
-    <release version="0.10.0-beta.1" date="2026-07-09"/>
+    <release version="0.10.0-beta.1" date="2026-07-10"/>
     <release version="0.9.1" date="2026-07-07"/>
     <release version="0.9.0" date="2026-07-04"/>
     <release version="0.9.0-beta.7" date="2026-07-04"/>

@@ -1,4 +1,4 @@
-# x-version: 0.10.0
+# x-version: 0.11.0
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
@@ -17,6 +17,7 @@ finish-args:
   - --filesystem=xdg-pictures:create
   # Arbitrary paths use the Freedesktop file portal (file_picker).
   - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.ScreenSaver
   - --talk-name=org.mpris.MediaPlayer2.dacx
   - --own-name=org.mpris.MediaPlayer2.dacx
 
@@ -27,7 +28,13 @@ modules:
       - install -d /app/bin
       - install -d /app/lib/dacx
       - install -d /app/share/applications
+      - install -d /app/share/icons/hicolor/16x16/apps
+      - install -d /app/share/icons/hicolor/32x32/apps
+      - install -d /app/share/icons/hicolor/48x48/apps
+      - install -d /app/share/icons/hicolor/64x64/apps
+      - install -d /app/share/icons/hicolor/128x128/apps
       - install -d /app/share/icons/hicolor/256x256/apps
+      - install -d /app/share/icons/hicolor/512x512/apps
       - install -d /app/share/metainfo
       - install -d /app/share/doc/dacx
       - cp -r bundle/. /app/lib/dacx/
@@ -37,7 +44,13 @@ modules:
       - install -m 755 flatpak-dacx-launcher.sh /app/bin/dacx
       - install -m 644 run.rosie.dacx.desktop /app/share/applications/run.rosie.dacx.desktop
       - install -m 644 run.rosie.dacx.metainfo.xml /app/share/metainfo/run.rosie.dacx.metainfo.xml
-      - install -m 644 run.rosie.dacx.png /app/share/icons/hicolor/256x256/apps/run.rosie.dacx.png
+      - install -m 644 icon-16.png /app/share/icons/hicolor/16x16/apps/run.rosie.dacx.png
+      - install -m 644 icon-32.png /app/share/icons/hicolor/32x32/apps/run.rosie.dacx.png
+      - install -m 644 icon-48.png /app/share/icons/hicolor/48x48/apps/run.rosie.dacx.png
+      - install -m 644 icon-64.png /app/share/icons/hicolor/64x64/apps/run.rosie.dacx.png
+      - install -m 644 icon-128.png /app/share/icons/hicolor/128x128/apps/run.rosie.dacx.png
+      - install -m 644 icon-256.png /app/share/icons/hicolor/256x256/apps/run.rosie.dacx.png
+      - install -m 644 run.rosie.dacx.png /app/share/icons/hicolor/512x512/apps/run.rosie.dacx.png
     sources:
       - type: dir
         path: build/linux/x64/release/bundle
@@ -53,8 +66,27 @@ modules:
         path: build/flatpak-icon-512.png
         dest-filename: run.rosie.dacx.png
       - type: file
+        path: linux/packaging/icons/hicolor/16x16/apps/dacx.png
+        dest-filename: icon-16.png
+      - type: file
+        path: linux/packaging/icons/hicolor/32x32/apps/dacx.png
+        dest-filename: icon-32.png
+      - type: file
+        path: linux/packaging/icons/hicolor/48x48/apps/dacx.png
+        dest-filename: icon-48.png
+      - type: file
+        path: linux/packaging/icons/hicolor/64x64/apps/dacx.png
+        dest-filename: icon-64.png
+      - type: file
+        path: linux/packaging/icons/hicolor/128x128/apps/dacx.png
+        dest-filename: icon-128.png
+      - type: file
+        path: linux/packaging/icons/hicolor/256x256/apps/dacx.png
+        dest-filename: icon-256.png
+      - type: file
         path: build/THIRD_PARTY_NOTICES.txt
       - type: file
         path: LICENSE
       - type: file
         path: docs/NATIVE_DEPENDENCIES.md
+        dest-filename: NATIVE_DEPENDENCIES.md

@@ -111,7 +111,7 @@ function printMacXcodeInstallHelp() {
 // Win
 
 function setupWindows() {
-  header('Dacx — Windows setup');
+  header('Dacx: Windows setup');
 
   // Flutter
   if (!resolveFlutterOnWindowsPath()) {
@@ -125,12 +125,10 @@ function setupWindows() {
   console.log('   "Desktop development with C++" workload. If not installed:');
   console.log('   winget install Microsoft.VisualStudio.2022.BuildTools');
   console.log('   Then add the C++ desktop workload via the VS Installer.');
-  console.log('   For the release MSI installer, also install:');
-  console.log('   WiX v7 (.NET global tool, preferred):');
+  console.log('   For the release MSI installer, install WiX v7 (.NET global tool):');
   console.log('     dotnet tool install -g wix --version 7.0.0');
   console.log('     wix eula accept wix7');
-  console.log('   Or WiX v3.14 (candle/light, legacy fallback):');
-  console.log('     https://github.com/wixtoolset/wix3/releases');
+  console.log('   (WiX v3 candle/light is no longer supported.)');
 
   // Common steps
   commonSetup();
@@ -143,7 +141,7 @@ function setupWindows() {
 // macOS
 
 function setupMac() {
-  header('Dacx — macOS setup');
+  header('Dacx: macOS setup');
 
   // Xcode CLI tools
   console.log('\nChecking Xcode command-line tools...');
@@ -205,12 +203,13 @@ function setupMac() {
 // Linux
 
 function setupLinux() {
-  header('Dacx — Linux setup (apt-based)');
+  header('Dacx: Linux setup (apt-based)');
 
   // System packages for Flutter desktop + media_kit (libmpv)
   const packages = [
     'clang', 'cmake', 'ninja-build', 'pkg-config',
     'libgtk-3-dev', 'libepoxy-dev', 'libmpv-dev', 'mpv',
+    'libayatana-appindicator3-dev',
     'libunwind-dev',
     'curl', 'git', 'unzip', 'xz-utils', 'zip',
     'flatpak', 'flatpak-builder',
@@ -252,7 +251,7 @@ function setupLinux() {
   try {
     machineArch = execSync('uname -m', { encoding: 'utf8' }).trim();
   } catch {
-    // uname unavailable — default to x86_64
+    // uname unavailable; default to x86_64
   }
   const appimageArch = machineArch === 'aarch64' ? 'aarch64' : 'x86_64';
   const appimageUrl = `https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-${appimageArch}.AppImage`;
@@ -266,7 +265,7 @@ function setupLinux() {
     if (appimageInstalled) {
       console.log('✔ appimagetool installed → /usr/local/bin/appimagetool');
     } else {
-      console.warn('⚠ appimagetool install failed — .AppImage builds will be skipped.');
+      console.warn('⚠ appimagetool install failed; .AppImage builds will be skipped.');
       console.warn('  Install manually from a trusted release asset and verify checksum/signature first.');
     }
   } else {
@@ -289,7 +288,7 @@ function setupLinux() {
   if (flatpakRuntimeInstalled) {
     console.log('✔ Freedesktop Platform/SDK 25.08 ready');
   } else {
-    console.warn('⚠ Flatpak runtime install failed — flatpak:bundle builds will be skipped.');
+    console.warn('⚠ Flatpak runtime install failed; flatpak:bundle builds will be skipped.');
     console.warn('  Run manually: sudo flatpak install flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08');
   }
 

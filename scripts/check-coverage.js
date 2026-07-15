@@ -13,8 +13,6 @@ const minOverallCoverage = Number.parseFloat(
   process.env.MIN_OVERALL_COVERAGE ?? "40",
 );
 const requiredSources = [
-  "lib/services/audio_spectrum_service.dart",
-  "lib/widgets/audio_spectrum_visualizer.dart",
   "lib/screens/player_screen.dart",
 ];
 

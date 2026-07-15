@@ -89,6 +89,39 @@ void main() {
       expect(action, PlayerShortcutAction.newWindow);
     });
 
+    test('Shift+N triggers playlistNext', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyN),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        isShiftPressed: true,
+      );
+      expect(action, PlayerShortcutAction.playlistNext);
+    });
+
+    test('Shift+P triggers playlistPrev', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyP),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        isShiftPressed: true,
+      );
+      expect(action, PlayerShortcutAction.playlistPrev);
+    });
+
+    test('Ctrl+Shift+M triggers toggleCompactMode', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyM),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: true,
+        isShiftPressed: true,
+      );
+      expect(action, PlayerShortcutAction.toggleCompactMode);
+    });
+
     test('Ctrl+S triggers screenshot', () {
       final action = PlayerShortcutsService.resolve(
         event: _keyDown(LogicalKeyboardKey.keyS),
@@ -334,6 +367,103 @@ void main() {
       // Empty map is treated as "no custom bindings" → defaults apply
       expect(action, PlayerShortcutAction.playPause);
     });
+
+    test('partial custom bindings still allow default Space playPause', () {
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.space),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'screenshot': ['Ctrl+P'],
+        },
+      );
+      expect(action, PlayerShortcutAction.playPause);
+    });
+
+    test('custom binding collision with default prefers custom', () {
+      // Default M is toggleMute; custom maps M to screenshot.
+      final action = PlayerShortcutsService.resolve(
+        event: _keyDown(LogicalKeyboardKey.keyM),
+        hasMedia: true,
+        isMetaPressed: false,
+        isControlPressed: false,
+        customBindings: {
+          'screenshot': ['M'],
+        },
+      );
+      expect(action, PlayerShortcutAction.screenshot);
+    });
+
+    test('bracket keys adjust speed', () {
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.bracketLeft),
+          hasMedia: true,
+          isMetaPressed: false,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.speedSlower,
+      );
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.bracketRight),
+          hasMedia: true,
+          isMetaPressed: false,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.speedFaster,
+      );
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.backslash),
+          hasMedia: true,
+          isMetaPressed: false,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.cycleSpeed,
+      );
+    });
+
+    test('Ctrl/Cmd+U opens URL', () {
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.keyU),
+          hasMedia: false,
+          isMetaPressed: false,
+          isControlPressed: true,
+        ),
+        PlayerShortcutAction.openUrl,
+      );
+      expect(
+        PlayerShortcutsService.resolve(
+          event: _keyDown(LogicalKeyboardKey.keyU),
+          hasMedia: false,
+          isMetaPressed: true,
+          isControlPressed: false,
+        ),
+        PlayerShortcutAction.openUrl,
+      );
+    });
+  });
+
+  group('formatAcceleratorForDisplay', () {
+    test('maps Ctrl to command symbol on mac style', () {
+      expect(
+        PlayerShortcutsService.formatAcceleratorForDisplay(
+          'Ctrl+O',
+          useMacSymbols: true,
+        ),
+        '⌘O',
+      );
+      expect(
+        PlayerShortcutsService.formatAcceleratorForDisplay(
+          'Ctrl+O',
+          useMacSymbols: false,
+        ),
+        'Ctrl+O',
+      );
+    });
   });
 
   group('shortcutActionLabel', () {
@@ -345,7 +475,7 @@ void main() {
 
     test('each action has a unique label', () {
       final labels = PlayerShortcutAction.values
-          .map((a) => shortcutActionLabel(a))
+          .map(shortcutActionLabel)
           .toSet();
       expect(labels.length, PlayerShortcutAction.values.length);
     });

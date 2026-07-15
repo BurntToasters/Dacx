@@ -59,5 +59,20 @@ void main() {
       SettingsService(prefs);
       expect(prefs.getInt('settings_schema_version'), future);
     });
+
+    test('schema 3 to 4 removes playlist_queue_v1', () async {
+      SharedPreferences.setMockInitialValues({
+        'settings_schema_version': 3,
+        'playlist_queue_v1':
+            '{"items":["/a.mp3","https://example.com/b.mp3"],"index":1}',
+        'playback_volume': 50.0,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      expect(service.schemaVersion, SettingsService.currentSchemaVersion);
+      expect(prefs.getString('playlist_queue_v1'), isNull);
+      expect(service.volume, 50.0);
+    });
   });
 }

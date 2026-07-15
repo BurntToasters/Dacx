@@ -830,7 +830,25 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
             }
             dacxLog("installFromUrl: SHA256 verified; extracting")
 
-            // 3. Extract with ditto (un-sandboxed — no com.apple.provenance stamped)
+            // 2b. Zip containment: reject absolute paths and path traversal.
+            let (zipinfoCode, zipinfoOutput) = runCommand("/usr/bin/zipinfo", [
+                "-1",
+                zipFileUrl.path,
+            ])
+            if zipinfoCode != 0 {
+                reply(false, "zip containment check failed: zipinfo exited \(zipinfoCode): \(zipinfoOutput)")
+                return
+            }
+            for entry in zipinfoOutput.split(separator: "\n", omittingEmptySubsequences: false) {
+                let name = String(entry)
+                if name.isEmpty { continue }
+                if name.contains("..") || name.hasPrefix("/") {
+                    reply(false, "zip containment check failed: unsafe entry '\(name)'")
+                    return
+                }
+            }
+
+            // 3. Extract with ditto (un-sandboxed; no com.apple.provenance stamped)
             let extractDir = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("dacx-extract-\(UUID().uuidString)", isDirectory: true)
             do {
@@ -875,7 +893,7 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
             if abortIfExpired("bundle validation") { return }
             dacxLog("installFromUrl: bundle valid; spawning worker")
 
-            // 5. Spawn detached worker — it waits for parent PID exit, then swaps
+            // 5. Spawn detached worker; it waits for parent PID exit, then swaps
             let env: [String: String] = [
                 "DACX_UPDATE_WORKER": "1",
                 "DACX_NEW_APP": extractedAppPath,

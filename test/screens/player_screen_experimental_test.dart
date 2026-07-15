@@ -1,0 +1,80 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:dacx/l10n/app_localizations.dart';
+import 'package:dacx/screens/player_screen.dart';
+import 'package:dacx/services/debug_log_service.dart';
+import 'package:dacx/services/headless_player_service.dart';
+import 'package:dacx/services/settings_service.dart';
+import 'package:dacx/services/update_service.dart';
+import 'package:dacx/widgets/transport_controls.dart';
+
+import '../support/player_screen_harness.dart';
+
+/// Widget-level checks for player UI gating without libmpv.
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(PlayerScreenHarness.installChannelMocks);
+  tearDown(PlayerScreenHarness.uninstallChannelMocks);
+
+  Future<SettingsService> settingsWith(Map<String, Object> prefs) async {
+    SharedPreferences.setMockInitialValues(prefs);
+    final shared = await SharedPreferences.getInstance();
+    return SettingsService(shared);
+  }
+
+  Widget wrapTransport({VoidCallback? onOpenUrl}) {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey);
+    return MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: ThemeData(colorScheme: scheme, useMaterial3: true),
+      home: Scaffold(
+        body: TransportControls(
+          isPlaying: false,
+          volume: 100,
+          hasMedia: false,
+          speed: 1,
+          loopMode: LoopMode.none,
+          recentFiles: const [],
+          onPlayPause: () {},
+          onStop: () {},
+          onOpenFile: () {},
+          onReopenLast: () {},
+          onVolumeChanged: (_) {},
+          onLoopModeChanged: (_) {},
+          onRecentFileSelected: (_) {},
+          onSettingsPressed: () {},
+          onOpenUrl: onOpenUrl,
+        ),
+      ),
+    );
+  }
+
+  group('PlayerScreen experimental UI gating', () {
+    testWidgets('Open URL transport chrome stays hidden by default', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapTransport());
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Open URL'), findsNothing);
+    });
+
+    test('accepts injected IPlayerService reference', () async {
+      final fake = HeadlessPlayerService();
+      final settings = await settingsWith({});
+      final screen = PlayerScreen(
+        settings: settings,
+        debugLog: DebugLogService(isEnabled: () => false),
+        updateService: UpdateService(
+          debugLog: DebugLogService(isEnabled: () => false),
+          debugSource: 'harness',
+        ),
+        playerService: fake,
+      );
+      expect(screen.playerService, same(fake));
+    });
+  });
+}

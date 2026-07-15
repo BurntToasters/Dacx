@@ -615,7 +615,7 @@ async function uploadAssetWithReplace(release, filePath) {
 // ── Main ─────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`\nDacx ${VERSION} — release pipeline\n`);
+  console.log(`\nDacx ${VERSION}: release pipeline\n`);
 
   console.log("[1/4] Checking GPG...");
   if (!GPG_KEY_ID) {
@@ -646,7 +646,7 @@ async function main() {
   }
 
   if (!GH_TOKEN) {
-    console.log("\n[4/4] GH_TOKEN not set — skipping GitHub upload.");
+    console.log("\n[4/4] GH_TOKEN not set; skipping GitHub upload.");
     console.log(`Artifacts staged in: ${releaseDir}\n`);
     return;
   }
@@ -665,7 +665,7 @@ async function main() {
     console.log(`  ^ ${path.basename(f)}`);
   }
 
-  console.log(`\nDone — ${TAG} uploaded as ${release.draft ? "draft" : "published"}.\n`);
+  console.log(`\nDone; ${TAG} uploaded as ${release.draft ? "draft" : "published"}.\n`);
 }
 
 main().catch((err) => {

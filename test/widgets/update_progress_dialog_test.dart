@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -113,8 +114,6 @@ void main() {
       tester,
     ) async {
       const cases = <SelfUpdateOutcome, String>{
-        SelfUpdateOutcome.unsupportedPlatform:
-            'Self-update is not supported on this platform.',
         SelfUpdateOutcome.missingAsset:
             'The release does not include an installer for this platform.',
         SelfUpdateOutcome.missingChecksums:
@@ -166,6 +165,35 @@ void main() {
         }
 
         await tester.pumpWidget(const SizedBox.shrink());
+      }
+
+      // unsupportedPlatform is package-aware on Linux.
+      final unsupportedService = _FakeSelfUpdateService(
+        (info, onProgress) async =>
+            const SelfUpdateResult(SelfUpdateOutcome.unsupportedPlatform),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          UpdateProgressDialog(
+            key: const ValueKey('unsupported'),
+            info: _info,
+            service: unsupportedService,
+            onFallbackToBrowser: () {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Update failed'), findsOneWidget);
+      if (Platform.isLinux) {
+        expect(
+          find.textContaining('Self-update is not available on Linux'),
+          findsOneWidget,
+        );
+      } else {
+        expect(
+          find.text('Self-update is not supported on this platform.'),
+          findsOneWidget,
+        );
       }
     });
 

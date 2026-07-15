@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography_plus/cryptography_plus.dart' as cryptography;
@@ -9,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import 'allowed_get_redirect.dart';
 import 'debug_log_service.dart';
 import 'trusted_http.dart';
 import 'update_trust_config.dart';
@@ -24,6 +26,30 @@ typedef WindowsSpawnFn =
     Future<WindowsSpawnResult> Function(
       String commandLine, {
       String? applicationName,
+    });
+typedef SelfUpdateDownloadFn =
+    Future<void> Function(
+      String url,
+      File outFile, {
+      void Function(SelfUpdateProgress)? onProgress,
+    });
+typedef SelfUpdateFetchTextFn = Future<String> Function(String url);
+typedef SelfUpdateFetchBytesFn = Future<List<int>> Function(String url);
+typedef ValidateWindowsManifestFn =
+    Future<SelfUpdateResult> Function({
+      required List<int> manifestBytes,
+      required List<int> signatureBytes,
+      required String version,
+      required String assetName,
+    });
+typedef MacUpdateInstallFn =
+    Future<Map<String, dynamic>?> Function({
+      required String zipUrl,
+      required String checksumHex,
+      required String installedAppPath,
+      required String expectedTeamId,
+      required String expectedVersion,
+      required bool relaunch,
     });
 
 enum SelfUpdateOutcome {
@@ -61,7 +87,7 @@ class SelfUpdateProgress {
 class SelfUpdateService {
   /// Expected Apple Developer Team ID, baked in at build time via
   /// `--dart-define=DACX_APPLE_TEAM_ID=...`. Sourced from APPLE_TEAM_ID in
-  /// `.env` by `scripts/flutter-build-macos.js`. Empty means unconfigured —
+  /// `.env` by `scripts/flutter-build-macos.js`. Empty means unconfigured;
   /// macOS self-update is disabled in that case (returns
   /// `gatekeeperRejected` with a clear message).
   static const String expectedTeamId = String.fromEnvironment(
@@ -70,6 +96,10 @@ class SelfUpdateService {
   );
   static const String expectedWindowsSignerThumbprint = String.fromEnvironment(
     'DACX_WINDOWS_SIGNER_THUMBPRINT',
+    defaultValue: '',
+  );
+  static const String expectedWindowsSignerPublisher = String.fromEnvironment(
+    'DACX_WINDOWS_SIGNER_PUBLISHER',
     defaultValue: '',
   );
   static const String _macInstallPath = '/Applications/Dacx.app';
@@ -91,16 +121,45 @@ class SelfUpdateService {
   final HttpStreamFn _httpStream;
   final ProcessRunFn _processRun;
   final WindowsSpawnFn _windowsSpawn;
+  final SelfUpdateDownloadFn? _downloadToOverride;
+  final SelfUpdateFetchTextFn? _fetchTextOverride;
+  final SelfUpdateFetchBytesFn? _fetchBytesOverride;
+  final ValidateWindowsManifestFn? _validateWindowsManifestOverride;
+  final MacUpdateInstallFn? _macUpdateInstallOverride;
+  final String? _expectedTeamIdOverride;
+  final String? _windowsManifestPublicKeyOverride;
+  final String? _expectedWindowsSignerThumbprintOverride;
+  final String? _expectedWindowsSignerPublisherOverride;
 
   SelfUpdateService({
     DebugLogService? debugLog,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
     WindowsSpawnFn? windowsSpawn,
+    @visibleForTesting SelfUpdateDownloadFn? downloadTo,
+    @visibleForTesting SelfUpdateFetchTextFn? fetchText,
+    @visibleForTesting SelfUpdateFetchBytesFn? fetchBytes,
+    @visibleForTesting ValidateWindowsManifestFn? validateWindowsManifest,
+    @visibleForTesting MacUpdateInstallFn? macUpdateInstall,
+    @visibleForTesting String? expectedTeamIdOverride,
+    @visibleForTesting String? windowsManifestPublicKeyOverride,
+    @visibleForTesting String? expectedWindowsSignerThumbprintOverride,
+    @visibleForTesting String? expectedWindowsSignerPublisherOverride,
   }) : _debugLog = debugLog,
        _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
-       _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn;
+       _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn,
+       _downloadToOverride = downloadTo,
+       _fetchTextOverride = fetchText,
+       _fetchBytesOverride = fetchBytes,
+       _validateWindowsManifestOverride = validateWindowsManifest,
+       _macUpdateInstallOverride = macUpdateInstall,
+       _expectedTeamIdOverride = expectedTeamIdOverride,
+       _windowsManifestPublicKeyOverride = windowsManifestPublicKeyOverride,
+       _expectedWindowsSignerThumbprintOverride =
+           expectedWindowsSignerThumbprintOverride,
+       _expectedWindowsSignerPublisherOverride =
+           expectedWindowsSignerPublisherOverride;
 
   static Future<WindowsSpawnResult> _defaultWindowsSpawn(
     String commandLine, {
@@ -125,7 +184,7 @@ class SelfUpdateService {
     );
   }
 
-  /// Returns true on Windows or macOS only — the platforms where self-update
+  /// Returns true on Windows or macOS only; the platforms where self-update
   /// is implemented. Linux and others fall back to the existing "View" link.
   /// Portable Windows builds (marked by a `portable.txt` file next to the
   /// executable) also return false: there is no MSI install state to upgrade,
@@ -202,30 +261,30 @@ class SelfUpdateService {
     return h == 'githubusercontent.com' || h.endsWith('.githubusercontent.com');
   }
 
-  static bool _isRedirectStatus(int statusCode) =>
-      statusCode == 301 ||
-      statusCode == 302 ||
-      statusCode == 303 ||
-      statusCode == 307 ||
-      statusCode == 308;
-
   static String normalizeCertificateThumbprint(String value) {
     return value.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
   }
 
-  static ({String status, String thumbprint, String message})
+  static ({String status, String thumbprint, String publisher, String message})
   parseAuthenticodeStatus(String text) {
     final line = const LineSplitter()
         .convert(text)
         .map((s) => s.trim())
         .firstWhere((s) => s.isNotEmpty, orElse: () => '');
     final parts = line.split('|');
+    final hasPublisherField =
+        parts.length > 3 && parts[2].startsWith('publisher:');
     return (
       status: parts.isNotEmpty ? parts[0].trim() : '',
       thumbprint: parts.length > 1
           ? normalizeCertificateThumbprint(parts[1])
           : '',
-      message: parts.length > 2 ? parts.sublist(2).join('|').trim() : '',
+      publisher: hasPublisherField
+          ? parts[2].substring('publisher:'.length).trim()
+          : '',
+      message: hasPublisherField
+          ? parts.sublist(3).join('|').trim()
+          : (parts.length > 2 ? parts.sublist(2).join('|').trim() : ''),
     );
   }
 
@@ -276,9 +335,90 @@ class SelfUpdateService {
     return Directory(p.join(Directory.systemTemp.path, 'dacx-updates'));
   }
 
+  /// Test hook for the Windows self-update pipeline without relying on
+  /// [Platform.isWindows] in unit tests.
+  @visibleForTesting
+  Future<SelfUpdateResult> applyWindowsUpdate(
+    UpdateInfo info, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) {
+    return _applyWindows(info, onProgress: onProgress);
+  }
+
+  /// Test hook for the macOS self-update pipeline without relying on
+  /// [Platform.isMacOS] or the native XPC helper.
+  @visibleForTesting
+  Future<SelfUpdateResult> applyMacosUpdate(
+    UpdateInfo info, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) {
+    return _applyMacos(info, onProgress: onProgress);
+  }
+
+  /// Maps an XPC helper rejection message to a [SelfUpdateOutcome].
+  @visibleForTesting
+  static SelfUpdateResult mapMacInstallRejection(String message) {
+    if (message.contains('codesign:') || message.contains('gatekeeper:')) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message: message,
+      );
+    }
+    if (message.contains('SHA256 mismatch') ||
+        message.contains('checksumHex')) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.checksumMismatch,
+        message: message,
+      );
+    }
+    if (message.contains('ditto')) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.extractionFailed,
+        message: message,
+      );
+    }
+    return SelfUpdateResult(SelfUpdateOutcome.spawnFailed, message: message);
+  }
+
+  /// Test hook for [_validateWindowsManifestImpl] without download orchestration.
+  @visibleForTesting
+  Future<SelfUpdateResult> validateWindowsManifestForTesting({
+    required List<int> manifestBytes,
+    required List<int> signatureBytes,
+    required String version,
+    required String assetName,
+  }) {
+    return _validateWindowsManifestImpl(
+      manifestBytes: manifestBytes,
+      signatureBytes: signatureBytes,
+      version: version,
+      assetName: assetName,
+    );
+  }
+
+  /// Test hook for [_validateWindowsInstallerSignature] without MSI download.
+  @visibleForTesting
+  Future<SelfUpdateResult> validateWindowsInstallerSignatureForTesting(
+    File file,
+  ) {
+    return _validateWindowsInstallerSignature(file);
+  }
+
   /// Downloads [url] to [outFile] streaming, calling [onProgress] periodically.
   /// Throws on HTTP error.
   Future<void> _downloadTo(
+    String url,
+    File outFile, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) {
+    final override = _downloadToOverride;
+    if (override != null) {
+      return override(url, outFile, onProgress: onProgress);
+    }
+    return _downloadToImpl(url, outFile, onProgress: onProgress);
+  }
+
+  Future<void> _downloadToImpl(
     String url,
     File outFile, {
     void Function(SelfUpdateProgress)? onProgress,
@@ -313,7 +453,13 @@ class SelfUpdateService {
   }
 
   /// Fetches [url] as text. Throws on HTTP error.
-  Future<String> _fetchText(String url) async {
+  Future<String> _fetchText(String url) {
+    final override = _fetchTextOverride;
+    if (override != null) return override(url);
+    return _fetchTextImpl(url);
+  }
+
+  Future<String> _fetchTextImpl(String url) async {
     final resp = await _sendAllowedGet(
       url,
       timeout: const Duration(seconds: 30),
@@ -324,7 +470,13 @@ class SelfUpdateService {
     return utf8.decode(await resp.stream.toBytes());
   }
 
-  Future<List<int>> _fetchBytes(String url) async {
+  Future<List<int>> _fetchBytes(String url) {
+    final override = _fetchBytesOverride;
+    if (override != null) return override(url);
+    return _fetchBytesImpl(url);
+  }
+
+  Future<List<int>> _fetchBytesImpl(String url) async {
     final resp = await _sendAllowedGet(
       url,
       timeout: const Duration(seconds: 30),
@@ -338,40 +490,18 @@ class SelfUpdateService {
   Future<http.StreamedResponse> _sendAllowedGet(
     String url, {
     required Duration timeout,
-  }) async {
-    var uri = Uri.parse(url);
-    for (
-      var redirectCount = 0;
-      redirectCount <= _maxDownloadRedirects;
-      redirectCount++
-    ) {
-      if (!isAllowedDownloadUrl(uri.toString())) {
-        throw StateError('Refusing to fetch from non-allowlisted host: $uri');
-      }
-      final request = http.Request('GET', uri)..followRedirects = false;
-      final response = await _httpStream(request).timeout(timeout);
-      if (!_isRedirectStatus(response.statusCode)) {
-        return response;
-      }
-
-      final location = response.headers['location'];
-      await response.stream.drain<void>();
-      if (location == null || location.trim().isEmpty) {
-        throw StateError(
-          'HTTP ${response.statusCode} redirect missing Location',
-        );
-      }
-      final next = uri.resolve(location);
-      if (!isAllowedDownloadUrl(next.toString())) {
-        throw StateError('Refusing redirect to non-allowlisted host: $next');
-      }
-      uri = next;
-    }
-    throw StateError('Too many redirects from $url');
+  }) {
+    return fetchAllowedGetFollowingRedirects(
+      url: url,
+      timeout: timeout,
+      httpStream: _httpStream,
+      isAllowedUrl: isAllowedDownloadUrl,
+      maxRedirects: _maxDownloadRedirects,
+    );
   }
 
   /// Top-level orchestrator. On success returns [SelfUpdateOutcome.spawned]
-  /// — caller should then call `exit(0)` (the spawned helper/watchdog has
+  /// Caller should then call `exit(0)` (the spawned helper/watchdog has
   /// taken over).
   Future<SelfUpdateResult> applyUpdate(
     UpdateInfo info, {
@@ -476,7 +606,7 @@ class SelfUpdateService {
     }
 
     final cacheDir = updateCacheDir();
-    final msiPath = File(p.join(cacheDir.path, asset.name));
+    final msiPath = File(p.join(cacheDir.path, p.basename(asset.name)));
 
     String checksumsBody;
     List<int> manifestBytes;
@@ -535,32 +665,46 @@ class SelfUpdateService {
       );
     }
 
-    if (expectedWindowsSignerThumbprint.isNotEmpty) {
+    final signerThumbprint = normalizeCertificateThumbprint(
+      _expectedWindowsSignerThumbprintOverride ??
+          expectedWindowsSignerThumbprint,
+    );
+    final signerPublisher =
+        (_expectedWindowsSignerPublisherOverride ??
+                expectedWindowsSignerPublisher)
+            .trim();
+    if (signerThumbprint.isNotEmpty || signerPublisher.isNotEmpty) {
       final signature = await _validateWindowsInstallerSignature(msiPath);
       if (signature.outcome != SelfUpdateOutcome.spawned) {
         return signature;
       }
     }
 
-    final scriptPath = File(p.join(cacheDir.path, 'apply-update.ps1'));
-    await scriptPath.writeAsString(buildWindowsWatchdogPowerShellScript());
-
-    final thumb = normalizeCertificateThumbprint(
-      expectedWindowsSignerThumbprint,
-    );
-    final bootstrapPath = File(p.join(cacheDir.path, 'spawn-watchdog.ps1'));
-    await bootstrapPath.writeAsString(
-      buildWindowsBootstrapPowerShellScript(
-        scriptPath: scriptPath.path,
-        dacxPid: pid,
-        msiPath: msiPath.path,
-        thumbprint: thumb,
-        sha256: actualHash,
-      ),
-    );
+    final helperPath = resolveWindowsUpdateHelperPath();
+    if (helperPath == null || helperPath.isEmpty) {
+      return const SelfUpdateResult(
+        SelfUpdateOutcome.spawnFailed,
+        message:
+            'dacx-update-helper.exe is missing next to the application. '
+            'Reinstall Dacx from the official MSI.',
+      );
+    }
 
     try {
-      final commandLine = buildBootstrapCommandLine(bootstrapPath.path);
+      final helperCmd = buildWindowsUpdateHelperCommandLine(
+        helperPath: helperPath,
+        dacxPid: pid,
+        msiPath: msiPath.path,
+        sha256: actualHash,
+        thumbprint: signerThumbprint,
+        publisher: signerPublisher,
+        exePath: Platform.resolvedExecutable,
+        relaunch: true,
+      );
+      final encoded = encodePowerShellCommand(
+        buildWindowsHelperWmiBootstrapScript(helperCmd),
+      );
+      final commandLine = buildWindowsHelperLaunchCommandLine(encoded);
       final spawn = await _windowsSpawn(
         commandLine,
         applicationName: WindowsSystemPaths.powershell(),
@@ -574,7 +718,7 @@ class SelfUpdateService {
       if (spawn.exitCode != null && spawn.exitCode != 0) {
         return SelfUpdateResult(
           SelfUpdateOutcome.spawnFailed,
-          message: 'bootstrap exit ${spawn.exitCode}',
+          message: 'helper bootstrap exit ${spawn.exitCode}',
         );
       }
     } catch (e) {
@@ -588,6 +732,7 @@ class SelfUpdateService {
       detailsBuilder: () => {
         'platform': 'windows',
         'msi': msiPath.path,
+        'helper': helperPath,
         'pid': pid,
       },
     );
@@ -599,8 +744,34 @@ class SelfUpdateService {
     required List<int> signatureBytes,
     required String version,
     required String assetName,
+  }) {
+    final override = _validateWindowsManifestOverride;
+    if (override != null) {
+      return override(
+        manifestBytes: manifestBytes,
+        signatureBytes: signatureBytes,
+        version: version,
+        assetName: assetName,
+      );
+    }
+    return _validateWindowsManifestImpl(
+      manifestBytes: manifestBytes,
+      signatureBytes: signatureBytes,
+      version: version,
+      assetName: assetName,
+    );
+  }
+
+  Future<SelfUpdateResult> _validateWindowsManifestImpl({
+    required List<int> manifestBytes,
+    required List<int> signatureBytes,
+    required String version,
+    required String assetName,
   }) async {
-    final publicKey = UpdateTrustConfig.windowsManifestPublicKeyBase64.trim();
+    final publicKey =
+        (_windowsManifestPublicKeyOverride ??
+                UpdateTrustConfig.windowsManifestPublicKeyBase64)
+            .trim();
     if (publicKey.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
@@ -696,20 +867,28 @@ class SelfUpdateService {
 
   Future<SelfUpdateResult> _validateWindowsInstallerSignature(File file) async {
     final expected = normalizeCertificateThumbprint(
-      expectedWindowsSignerThumbprint,
+      _expectedWindowsSignerThumbprintOverride ??
+          expectedWindowsSignerThumbprint,
     );
-    if (expected.isEmpty) {
+    final expectedPublisher =
+        (_expectedWindowsSignerPublisherOverride ??
+                expectedWindowsSignerPublisher)
+            .trim();
+    if (expected.isEmpty && expectedPublisher.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message:
-            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT was not set at build time.',
+            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT or DACX_WINDOWS_SIGNER_PUBLISHER was not set at build time.',
       );
     }
 
     final authenticodeCommand = [
+      r"$securityModule = Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1';",
+      r"Import-Module -Name $securityModule -Force -ErrorAction Stop;",
       r"$sig = Get-AuthenticodeSignature -LiteralPath $args[0];",
       r"$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' };",
-      r"Write-Output ($sig.Status.ToString() + '|' + $thumb + '|' + $sig.StatusMessage)",
+      r"$publisher = if ($sig.SignerCertificate) { $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } else { '' };",
+      r"Write-Output ($sig.Status.ToString() + '|' + $thumb + '|publisher:' + $publisher + '|' + $sig.StatusMessage)",
     ].join(' ');
     final result = await _processRun(WindowsSystemPaths.powershell(), [
       '-NoProfile',
@@ -735,7 +914,15 @@ class SelfUpdateService {
             : 'Authenticode status: ${parsed.status}',
       );
     }
-    if (parsed.thumbprint != expected) {
+    if (expectedPublisher.isNotEmpty &&
+        parsed.publisher.toLowerCase() != expectedPublisher.toLowerCase()) {
+      return SelfUpdateResult(
+        SelfUpdateOutcome.signatureInvalid,
+        message:
+            'expected publisher $expectedPublisher, got "${parsed.publisher}"',
+      );
+    }
+    if (expectedPublisher.isEmpty && parsed.thumbprint != expected) {
       return SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message: 'expected signer $expected, got "${parsed.thumbprint}"',
@@ -744,127 +931,77 @@ class SelfUpdateService {
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
-  /// Builds the full command line passed to `CreateProcessW` to launch the
-  /// bootstrap script with no console window. The script path is quoted so
-  /// spaces in `%LOCALAPPDATA%` are handled.
+  /// Builds the full command line passed to `CreateProcessW` to launch a
+  /// PowerShell `-EncodedCommand` bootstrap with no console window.
   @visibleForTesting
-  static String buildBootstrapCommandLine(String bootstrapPath) {
+  static String buildWindowsHelperLaunchCommandLine(String encodedCommand) {
     return '-NoProfile -ExecutionPolicy Bypass '
-        '-WindowStyle Hidden -File "$bootstrapPath"';
+        '-WindowStyle Hidden -EncodedCommand $encodedCommand';
   }
+
+  /// Resolves `dacx-update-helper.exe` next to the running binary.
+  @visibleForTesting
+  static String? windowsUpdateHelperPathOverride;
 
   @visibleForTesting
-  static String buildWindowsWatchdogPowerShellScript() {
-    return r'''
-param(
-  [Parameter(Mandatory=$true)][int]$DacxPid,
-  [Parameter(Mandatory=$true)][string]$DacxMsi,
-  [Parameter(Mandatory=$false)][AllowEmptyString()][string]$ExpectedThumbprint = '',
-  [Parameter(Mandatory=$true)][string]$ExpectedSha256
-)
-
-$ErrorActionPreference = 'Stop'
-
-$LogDir = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'Dacx', 'updates')
-$null = [System.IO.Directory]::CreateDirectory($LogDir)
-$LogFile = [System.IO.Path]::Combine($LogDir, 'watchdog.log')
-function Log($msg) {
-  $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  Add-Content -LiteralPath $LogFile -Value "$ts $msg" -ErrorAction SilentlyContinue
-}
-
-trap {
-  Log "fatal: $_"
-  exit 99
-}
-
-Log "started pid=$DacxPid msi=$DacxMsi thumb=$ExpectedThumbprint sha=$ExpectedSha256"
-
-try {
-  $dacxProc = Get-Process -Id $DacxPid -ErrorAction Stop
-  if (-not $dacxProc.WaitForExit(600000)) { Log "timeout waiting for pid=$DacxPid"; exit 5 }
-} catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
-  Log "pid=$DacxPid already gone"
-} catch {
-  Log "wait-error: $_"
-  exit 2
-}
-
-Log "dacx exited, verifying sha256"
-$actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $DacxMsi).Hash.ToLowerInvariant()
-if ($actualSha256 -ine $ExpectedSha256) {
-  Log "sha256 mismatch expected=$ExpectedSha256 actual=$actualSha256"
-  exit 12
-}
-
-if ($ExpectedThumbprint -ne '') {
-  $sig = Get-AuthenticodeSignature -LiteralPath $DacxMsi
-  if ($sig.Status -ne 'Valid') {
-    Log "authenticode status=$($sig.Status)"
-    exit 10
-  }
-  $thumb = $sig.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', ''
-  $expected = $ExpectedThumbprint -replace '[^0-9A-Fa-f]', ''
-  if ($thumb -ine $expected) {
-    Log "authenticode thumbprint mismatch expected=$expected actual=$thumb"
-    exit 11
-  }
-}
-
-Log "launching msiexec"
-$msiArgs = @('/i', $DacxMsi, '/passive', '/norestart')
-try {
-  $install = Start-Process -FilePath '@@MSIEXEC@@' -ArgumentList $msiArgs -Verb RunAs -Wait -PassThru
-} catch {
-  Log "msiexec launch failed: $_"
-  exit 1223
-}
-if ($null -eq $install) { Log "msiexec process was null"; exit 1 }
-Log "msiexec exited code=$($install.ExitCode)"
-exit $install.ExitCode
-'''
-        .replaceAll(
-          '@@MSIEXEC@@',
-          WindowsSystemPaths.msiexec().replaceAll("'", "''"),
-        );
+  static String? resolveWindowsUpdateHelperPath() {
+    final override = windowsUpdateHelperPathOverride;
+    if (override != null) return override.isEmpty ? null : override;
+    try {
+      final helper = File(
+        p.join(
+          File(Platform.resolvedExecutable).parent.path,
+          'dacx-update-helper.exe',
+        ),
+      );
+      if (helper.existsSync()) return helper.path;
+    } catch (_) {}
+    return null;
   }
 
-  /// Bootstrap script: spawns the watchdog via WMI `Win32_Process.Create` so it
-  /// runs as a child of the WMI service and escapes any Windows Job Object the
-  /// parent app belongs to. Without this, `dacx.exe`'s job (Windows GUI Process
-  /// Lifetime Management) would kill the watchdog the moment we call `exit(0)`.
+  /// UTF-16LE base64 for PowerShell `-EncodedCommand`.
   @visibleForTesting
-  static String buildWindowsBootstrapPowerShellScript({
-    required String scriptPath,
+  static String encodePowerShellCommand(String script) {
+    final units = script.codeUnits;
+    final bytes = Uint8List(units.length * 2);
+    for (var i = 0; i < units.length; i++) {
+      bytes[i * 2] = units[i] & 0xff;
+      bytes[i * 2 + 1] = (units[i] >> 8) & 0xff;
+    }
+    return base64Encode(bytes);
+  }
+
+  /// Win32 command line for [dacx-update-helper.exe].
+  @visibleForTesting
+  static String buildWindowsUpdateHelperCommandLine({
+    required String helperPath,
     required int dacxPid,
     required String msiPath,
-    required String thumbprint,
     required String sha256,
+    required String thumbprint,
+    String publisher = '',
+    String? exePath,
+    bool relaunch = true,
   }) {
-    String esc(String s) => s.replaceAll('"', '\\"');
-    final powershellPath = esc(WindowsSystemPaths.powershell());
-    final cmd =
-        '"$powershellPath" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden '
-        '-File "${esc(scriptPath)}" '
-        '-DacxPid $dacxPid '
-        '-DacxMsi "${esc(msiPath)}" '
-        '-ExpectedThumbprint "${esc(thumbprint)}" '
-        '-ExpectedSha256 $sha256';
-    final cmdLiteral = cmd.replaceAll("'", "''");
+    String quote(String value) => '"${value.replaceAll('"', r'\"')}"';
+    final exe = (exePath == null || exePath.isEmpty)
+        ? ''
+        : ' --exe ${quote(exePath)}';
+    return '${quote(helperPath)} --pid $dacxPid --msi ${quote(msiPath)} '
+        '--sha256 $sha256 --thumbprint ${quote(thumbprint)} '
+        '--publisher ${quote(publisher)}'
+        '$exe --relaunch ${relaunch ? 1 : 0}';
+  }
+
+  /// Tiny WMI bootstrap so the helper escapes Dacx's Job Object.
+  /// No script files are written to disk (closes the PS1 TOCTOU window).
+  @visibleForTesting
+  static String buildWindowsHelperWmiBootstrapScript(String helperCommandLine) {
+    final escaped = helperCommandLine.replaceAll("'", "''");
     return '''
 \$ErrorActionPreference = 'Stop'
-\$LogDir = [System.IO.Path]::Combine(\$env:LOCALAPPDATA, 'Dacx', 'updates')
-\$null = [System.IO.Directory]::CreateDirectory(\$LogDir)
-\$LogFile = [System.IO.Path]::Combine(\$LogDir, 'bootstrap.log')
-function Log(\$msg) {
-  \$ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  Add-Content -LiteralPath \$LogFile -Value "\$ts \$msg" -ErrorAction SilentlyContinue
-}
-trap { Log "fatal: \$_"; exit 99 }
-\$cmd = '$cmdLiteral'
-Log "spawning via WMI: \$cmd"
+\$cmd = '$escaped'
 \$result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = \$cmd }
-Log "WMI ReturnValue=\$(\$result.ReturnValue) ProcessId=\$(\$result.ProcessId)"
 if (\$result.ReturnValue -ne 0) { exit \$result.ReturnValue }
 exit 0
 ''';
@@ -876,7 +1013,8 @@ exit 0
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
-    if (expectedTeamId.isEmpty) {
+    final teamId = _expectedTeamIdOverride ?? expectedTeamId;
+    if (teamId.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.gatekeeperRejected,
         message:
@@ -899,8 +1037,8 @@ exit 0
     }
 
     // Fetch the small checksums file in Dart (fast, testable) to get the
-    // expected SHA256 hex. The heavy work — download, verify, extract,
-    // codesign, swap — all happens in the unsandboxed XPC helper so that no
+    // expected SHA256 hex. The heavy work, download, verify, extract,
+    // codesign, swap, all happens in the unsandboxed XPC helper so that no
     // files are stamped with com.apple.provenance from our sandbox.
     final String checksumsBody;
     try {
@@ -921,44 +1059,22 @@ exit 0
     }
 
     try {
-      final reply = await _macUpdateChannel
-          .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
-            'zipUrl': asset.downloadUrl,
-            'checksumHex': expectedHash,
-            'installedAppPath': _macInstallPath,
-            'expectedTeamId': expectedTeamId,
-            'expectedVersion': info.version,
-            'relaunch': true,
-          });
+      final install = _macUpdateInstallOverride ?? _defaultMacUpdateInstall;
+      final reply = await install(
+        zipUrl: asset.downloadUrl,
+        checksumHex: expectedHash,
+        installedAppPath: _macInstallPath,
+        expectedTeamId: teamId,
+        expectedVersion: info.version,
+        relaunch: true,
+      );
       final accepted = reply?['accepted'] == true;
       if (!accepted) {
         final err = reply?['error']?.toString();
         final message = (err != null && err.trim().isNotEmpty)
             ? err
             : 'XPC update helper rejected install';
-        if (message.contains('codesign:') || message.contains('gatekeeper:')) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.signatureInvalid,
-            message: message,
-          );
-        }
-        if (message.contains('SHA256 mismatch') ||
-            message.contains('checksumHex')) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.checksumMismatch,
-            message: message,
-          );
-        }
-        if (message.contains('ditto')) {
-          return SelfUpdateResult(
-            SelfUpdateOutcome.extractionFailed,
-            message: message,
-          );
-        }
-        return SelfUpdateResult(
-          SelfUpdateOutcome.spawnFailed,
-          message: message,
-        );
+        return mapMacInstallRejection(message);
       }
     } on PlatformException catch (e) {
       return SelfUpdateResult(
@@ -982,8 +1098,28 @@ exit 0
     return const SelfUpdateResult(SelfUpdateOutcome.spawned);
   }
 
+  Future<Map<String, dynamic>?> _defaultMacUpdateInstall({
+    required String zipUrl,
+    required String checksumHex,
+    required String installedAppPath,
+    required String expectedTeamId,
+    required String expectedVersion,
+    required bool relaunch,
+  }) {
+    return _macUpdateChannel
+        .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
+          'zipUrl': zipUrl,
+          'checksumHex': checksumHex,
+          'installedAppPath': installedAppPath,
+          'expectedTeamId': expectedTeamId,
+          'expectedVersion': expectedVersion,
+          'relaunch': relaunch,
+        });
+  }
+
+  static const macUpdateChannelName = 'run.rosie.dacx/update';
   static const MethodChannel _macUpdateChannel = MethodChannel(
-    'run.rosie.dacx/update',
+    macUpdateChannelName,
   );
 }
 

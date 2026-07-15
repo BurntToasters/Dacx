@@ -6,8 +6,9 @@ import 'package:flutter/foundation.dart';
 
 import '../models/playable_source.dart';
 
-/// In-memory playback queue. Persistence is intentionally omitted: queue lives
-/// for the session. The `index` is `-1` when the queue is empty.
+/// In-memory playback queue. Snapshot persistence lives in [SettingsService];
+/// this class itself only holds the live session state. The `index` is `-1`
+/// when the queue is empty.
 class PlaylistService extends ChangeNotifier {
   /// Maximum tracks kept in memory for one session (bulk folder drops).
   static const int maxQueueItems = 1000;
@@ -104,8 +105,52 @@ class PlaylistService extends ChangeNotifier {
     if (_items.isEmpty) {
       _items.add(source);
       _index = 0;
+    } else if (_items.length >= maxQueueItems) {
+      // Cap reached: drop the farthest item from the insert point (tail),
+      // then insert so the queue never grows past [maxQueueItems].
+      if (_index + 1 >= _items.length) {
+        _items.removeLast();
+      } else {
+        _items.removeAt(_items.length - 1);
+      }
+      _items.insert(_index + 1, source);
     } else {
       _items.insert(_index + 1, source);
+    }
+    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+    notifyListeners();
+  }
+
+  /// Makes [source] the current queue item.
+  ///
+  /// If it is already in the queue, jumps to it. Otherwise replaces the queue
+  /// with a single-item queue containing [source] so Open File / Open With /
+  /// single-drop stays coherent with prev/next and completion advance.
+  void setPlayingSource(PlayableSource source) {
+    if (source.value.trim().isEmpty) return;
+    final existing = _items.indexWhere((item) => item == source);
+    if (existing >= 0) {
+      jumpTo(existing);
+      return;
+    }
+    replaceSources([source]);
+  }
+
+  /// Moves item at [oldIndex] to [newIndex] (ReorderableListView semantics).
+  /// Reorders queue for [ReorderableListView.onReorderItem] (already-adjusted
+  /// [newIndex]; no manual `newIndex -= 1` when moving downward).
+  void moveItem(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _items.length) return;
+    if (newIndex < 0 || newIndex >= _items.length) return;
+    if (newIndex == oldIndex) return;
+    final item = _items.removeAt(oldIndex);
+    _items.insert(newIndex, item);
+    if (_index == oldIndex) {
+      _index = newIndex;
+    } else if (oldIndex < _index && newIndex >= _index) {
+      _index--;
+    } else if (oldIndex > _index && newIndex <= _index) {
+      _index++;
     }
     if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
     notifyListeners();

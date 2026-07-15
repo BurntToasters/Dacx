@@ -150,8 +150,7 @@ void main() {
       final svc = await _services();
       await tester.pumpWidget(_wrap(svc.settings, svc.debugLog));
       await tester.pumpAndSettle();
-      // Window opacity is part of the experimental cluster.
-      expect(find.text('Window opacity'), findsNothing);
+      expect(find.text('Mix all audio tracks'), findsNothing);
     });
 
     testWidgets('experimental panels appear after toggling experiments on', (
@@ -162,9 +161,8 @@ void main() {
       );
       await tester.pumpWidget(_wrap(svc.settings, svc.debugLog));
       await tester.pumpAndSettle();
-      // Reveal experimental controls.
-      await _scrollTo(tester, find.text('Window opacity'));
-      expect(find.text('Window opacity'), findsOneWidget);
+      await _scrollTo(tester, find.text('Mix all audio tracks'));
+      expect(find.text('Mix all audio tracks'), findsOneWidget);
     });
   });
 }

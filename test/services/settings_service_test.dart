@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:dacx/services/settings_service.dart';
+import 'package:dacx/services/instance_mode_service.dart';
 
 void main() {
   group('SettingsService.recentFiles', () {
@@ -181,6 +182,7 @@ void main() {
       expect(service.themeMode, ThemeMode.dark);
       expect(service.accentColor, AccentColor.blueGrey);
       expect(service.alwaysOnTop, isFalse);
+      expect(service.minimizeToTray, isFalse);
       expect(service.rememberWindow, isTrue);
       expect(service.windowSize, isNull);
       expect(service.windowPosition, isNull);
@@ -208,6 +210,7 @@ void main() {
       service.themeMode = ThemeMode.system;
       service.accentColor = AccentColor.teal;
       service.alwaysOnTop = true;
+      service.minimizeToTray = true;
       service.rememberWindow = false;
       service.saveWindowSize(const Size(1280, 720));
       service.saveWindowPosition(const Offset(55, 77));
@@ -228,6 +231,7 @@ void main() {
       expect(service.themeMode, ThemeMode.system);
       expect(service.accentColor, AccentColor.teal);
       expect(service.alwaysOnTop, isTrue);
+      expect(service.minimizeToTray, isTrue);
       expect(service.rememberWindow, isFalse);
       expect(service.windowSize, const Size(1280, 720));
       expect(service.windowPosition, const Offset(55, 77));
@@ -425,6 +429,114 @@ void main() {
       service.clearAllResumePositions();
       expect(service.resumePositionFor('/a.mp3'), isNull);
       expect(service.resumePositionFor('/b.mp3'), isNull);
+    });
+  });
+
+  group('SettingsService.shouldCheckForUpdate', () {
+    test('returns false when check is disabled', () async {
+      SharedPreferences.setMockInitialValues({
+        'update_check_enabled': false,
+        'update_last_check': 0,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.shouldCheckForUpdate, isFalse);
+    });
+
+    test('returns false when last check is inside 24 hour window', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      SharedPreferences.setMockInitialValues({
+        'update_check_enabled': true,
+        'update_last_check':
+            now - const Duration(hours: 23, minutes: 59).inMilliseconds,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.shouldCheckForUpdate, isFalse);
+    });
+
+    test('returns true when last check is older than 24 hours', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      SharedPreferences.setMockInitialValues({
+        'update_check_enabled': true,
+        'update_last_check':
+            now - const Duration(hours: 24, milliseconds: 1).inMilliseconds,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      expect(service.shouldCheckForUpdate, isTrue);
+    });
+  });
+
+  group('SettingsService.allowMultipleInstances', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = Directory.systemTemp.createTempSync('dacx_settings_instance_');
+      InstanceModeService.setFlagDirForTesting(tempDir.path);
+      await InstanceModeService.setAllowMultipleInstances(false);
+    });
+
+    tearDown(() async {
+      await InstanceModeService.setAllowMultipleInstances(false);
+      InstanceModeService.setFlagDirForTesting(null);
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    test('setter writes flag file via InstanceModeService', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      service.allowMultipleInstances = true;
+      await service.syncInstanceModeFlag();
+      expect(InstanceModeService.isAllowMultipleInstancesEnabled(), isTrue);
+      expect(service.allowMultipleInstances, isTrue);
+
+      service.allowMultipleInstances = false;
+      await service.syncInstanceModeFlag();
+      expect(InstanceModeService.isAllowMultipleInstancesEnabled(), isFalse);
+    });
+
+    test('syncInstanceModeFlag propagates stored value', () async {
+      SharedPreferences.setMockInitialValues({
+        'allow_multiple_instances': true,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      await service.syncInstanceModeFlag();
+      expect(InstanceModeService.isAllowMultipleInstancesEnabled(), isTrue);
+    });
+  });
+
+  group('SettingsService.dispose', () {
+    test('flushes debounced resume positions on dispose', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.saveResumePosition('/track.mp3', 42_000);
+      service.dispose();
+      expect(prefs.getString('resume_positions_v2'), isNotNull);
+      expect(service.resumePositionFor('/track.mp3'), 42_000);
+    });
+  });
+
+  group('SettingsService.volume', () {
+    test('does not notify listeners when value is unchanged', () async {
+      SharedPreferences.setMockInitialValues({'volume': 80.0});
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+      service.volume = 80.0;
+      var notifications = 0;
+      service.addListener(() => notifications++);
+
+      service.volume = 80.0;
+      expect(notifications, 0);
+      service.volume = 85.0;
+      expect(notifications, 1);
     });
   });
 }
