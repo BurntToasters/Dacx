@@ -883,6 +883,8 @@ class SelfUpdateService {
     }
 
     final authenticodeCommand = [
+      r"$securityModule = Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1';",
+      r"Import-Module -Name $securityModule -Force -ErrorAction Stop;",
       r"$sig = Get-AuthenticodeSignature -LiteralPath $args[0];",
       r"$thumb = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { '' };",
       r"$publisher = if ($sig.SignerCertificate) { $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } else { '' };",

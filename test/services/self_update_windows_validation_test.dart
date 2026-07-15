@@ -269,9 +269,11 @@ void main() {
 
     test('returns spawned when Artifact Signing publisher matches', () async {
       final msi = File('${tempDir.path}/publisher.msi')..writeAsStringSync('x');
+      List<String>? invokedArguments;
       final svc = SelfUpdateService(
         expectedWindowsSignerPublisherOverride: 'BurntToasters LLC',
-        processRun: (_, _) async {
+        processRun: (_, arguments) async {
+          invokedArguments = arguments;
           return ProcessResult(
             0,
             0,
@@ -282,6 +284,12 @@ void main() {
       );
       final result = await svc.validateWindowsInstallerSignatureForTesting(msi);
       expect(result.outcome, SelfUpdateOutcome.spawned);
+      expect(
+        invokedArguments?.join(' '),
+        contains(
+          r'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1',
+        ),
+      );
     });
 
     test('returns signatureInvalid when PowerShell exits non-zero', () async {

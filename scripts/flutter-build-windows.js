@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import crossSpawn from "cross-spawn";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadLocalDotEnv } from "./xcode-env.js";
@@ -56,28 +57,36 @@ if (result.status !== 0) process.exit(result.status ?? 1);
 if (skipWindowsCodeSigning) process.exit(0);
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const executable = path.join(
+const releaseDir = path.join(
   root,
   "build",
   "windows",
   "x64",
   "runner",
   "Release",
-  "dacx.exe",
 );
-const sign = crossSpawn.sync(
-  "powershell.exe",
-  [
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    path.join(root, "scripts", "windows-artifact-sign.ps1"),
-    "-FilePath",
-    executable,
-  ],
-  { stdio: "inherit", env },
-);
-if (sign.error) throw sign.error;
-process.exit(sign.status ?? 1);
+const executables = readdirSync(releaseDir, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".exe"))
+  .map((entry) => path.join(releaseDir, entry.name));
+if (!executables.length)
+  throw new Error(`No Windows runtime executables found under ${releaseDir}`);
+
+for (const executable of executables) {
+  console.log(`[flutter-build-windows] Signing runtime: ${executable}`);
+  const sign = crossSpawn.sync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      path.join(root, "scripts", "windows-artifact-sign.ps1"),
+      "-FilePath",
+      executable,
+    ],
+    { stdio: "inherit", env },
+  );
+  if (sign.error) throw sign.error;
+  if (sign.status !== 0) process.exit(sign.status ?? 1);
+}
