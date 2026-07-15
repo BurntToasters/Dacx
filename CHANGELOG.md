@@ -170,6 +170,6 @@ Welcome to the first beta build of Dacx! I've pruned through the codebase enough
 
 - **GPG Signed:** My public key is attached to every release to ensure authenticity.
 - **GPG Key:** Public key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc .
-- **Code Signing:** macOS releases are fully signed and notarized. Windows MSIs are not Authenticode-signed by default; trust the GPG `.asc` plus the Ed25519-signed update manifest for self-update. Linux packages are GPG-signed the same way.
+- **Code Signing:** macOS releases are fully signed and notarized. Windows MSIs are fully signed using Azure Artifact Signing. Linux packages are signed with my GPG signature.
 - **Windows package:** Dacx ships MSI (not EXE) on Windows, including betas; that is intentional for the self-updater.
 - **More info:** See the [README](https://github.com/BurntToasters/Dacx/blob/main/README.md), [FAQ](https://help.rosie.run/dacx/en-us/faq), and [BCLS](https://github.com/BurntToasters/BCLS).

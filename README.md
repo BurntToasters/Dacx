@@ -100,7 +100,7 @@ npm run build:linux # Linux
 
 ### Signing model
 
-Only the macOS build is code-signed end-to-end (Apple Developer ID + notarization). Windows MSIs and Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key). Default GitHub Windows MSIs are not Authenticode-signed, so SmartScreen may warn; Ed25519 remains the primary self-update trust, and optional Authenticode is an additional release-machine pin (see `SECURITY.md`).
+macOS releases are fully code-signed and notarized. Windows releases are fully code-signed using Azure Artifact Signing. Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key). Ed25519 remains the primary self-update trust, and Authenticode signing provides OS-level trust verification (see `SECURITY.md`).
 
 This means:
 
@@ -108,7 +108,7 @@ This means:
   ```bash
   DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
   ```
-- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`) *optionally*. If unset, the MSI is unsigned at the OS level and **self-update trust is the Ed25519-signed update manifest** (Authenticode is not required). When set, the MSI is Authenticode-signed and the thumbprint is baked in as an **extra** runtime pin. On **release VMs that have a cert**, set the thumbprint and `DACX_REQUIRE_WINDOWS_SIGNER=1` so `npm run build:win` fails if it is missing (see `SECURITY.md`). The Windows build also ships `dacx-update-helper.exe` next to `dacx.exe` for post-exit MSI install (no on-disk PowerShell watchdog scripts).
+- `scripts/flutter-build-windows.js` accepts `WINDOWS_SIGNING_CERT_THUMBPRINT` (or `DACX_WINDOWS_SIGNER_THUMBPRINT`). In official release builds, the MSI is fully signed using Azure Artifact Signing and the thumbprint is baked in as a runtime pin. On **release VMs**, set the thumbprint and `DACX_REQUIRE_WINDOWS_SIGNER=1` so `npm run build:win` fails if it is missing (see `SECURITY.md`). The Windows build also ships `dacx-update-helper.exe` next to `dacx.exe` for post-exit MSI install (no on-disk PowerShell watchdog scripts).
 - `scripts/flutter-build-linux` is not affected by either.
 
 ### macOS support
