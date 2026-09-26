@@ -5,11 +5,11 @@
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-Windows-x64.msi) | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-Linux-x86_64.AppImage) |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-macOS.zip)** | **DEB (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-Linux-amd64.deb) |
-| | | **RPM (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-Linux-x86_64.rpm) |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.2/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Windows-x64.msi) | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.AppImage) |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-macOS.zip)** | **DEB (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-amd64.deb) |
+| | | **RPM (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.rpm) |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.flatpak) |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -17,6 +17,9 @@
 > ⚠️ Arm64 Linux and Windows Binaries are NOT available at the moment. Its something I may get around to in the future but its not a priority.
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
+
+## Changes in `v0.11.3:`
+* **PKG:** Updated dependencies.
 
 ## Changes in `v0.11.2:`
 - **NEW - Paused video frame stepping:** `Ctrl/Cmd+Left/Right Arrow` moves backward or forward by one frame. During playback, the same shortcuts keep navigating chapters.
