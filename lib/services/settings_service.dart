@@ -66,6 +66,7 @@ class SettingsService extends ChangeNotifier {
   Map<String, _ResumeEntry>? _resumePositionsCache;
   Timer? _resumePersistTimer;
   int _resumeAccessCounter = 0;
+  int _lastResumeTouchWallMs = 0;
   static const Duration _resumePersistDebounce = Duration(milliseconds: 800);
 
   /// Bump this and append a new entry to [_migrations] whenever a stored
@@ -889,18 +890,22 @@ class SettingsService extends ChangeNotifier {
     // Touch the access timestamp so frequently-replayed files survive LRU
     // eviction even when many other files are saved between visits.
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - entry.lastAccessMs > 1000) {
-      final nextAccess = entry.lastAccessMs >= _resumeAccessCounter
-          ? entry.lastAccessMs + 1
-          : ++_resumeAccessCounter;
-      _resumeAccessCounter = nextAccess;
-      positions[normalized] = _ResumeEntry(
-        positionMs: entry.positionMs,
-        lastAccessMs: nextAccess,
-      );
-      _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
-      _scheduleResumePersist();
+    final alreadyNewest =
+        entry.lastAccessMs > 0 && entry.lastAccessMs == _resumeAccessCounter;
+    if (alreadyNewest && now - _lastResumeTouchWallMs <= 1000) {
+      return entry.positionMs;
     }
+    _lastResumeTouchWallMs = now;
+    final nextAccess = entry.lastAccessMs >= _resumeAccessCounter
+        ? entry.lastAccessMs + 1
+        : ++_resumeAccessCounter;
+    _resumeAccessCounter = nextAccess;
+    positions[normalized] = _ResumeEntry(
+      positionMs: entry.positionMs,
+      lastAccessMs: nextAccess,
+    );
+    _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
+    _scheduleResumePersist();
     return entry.positionMs;
   }
 
@@ -1002,6 +1007,10 @@ class SettingsService extends ChangeNotifier {
   bool _recentFilePathExists(String path) {
     if (PlayableSource.isSupportedUrl(path)) {
       return PlayableSource.isDisplaySafeUrl(path);
+    }
+    if (Platform.isMacOS &&
+        (fileBookmark(path) != null || coveringBookmarkKey(path) != null)) {
+      return true;
     }
     try {
       return File(path).existsSync();

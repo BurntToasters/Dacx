@@ -499,7 +499,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBlurLinuxExperimentalOff.
   ///
   /// In en, this message translates to:
-  /// **'Not available on Linux unless experimental mode is enabled'**
+  /// **'Turn on Linux compositor blur above'**
   String get settingsBlurLinuxExperimentalOff;
 
   /// No description provided for @settingsBlurNativeSubtitle.
@@ -1563,6 +1563,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'More'**
   String get tooltipMore;
+
+  /// No description provided for @tooltipMoreControls.
+  ///
+  /// In en, this message translates to:
+  /// **'More controls'**
+  String get tooltipMoreControls;
 
   /// No description provided for @tooltipSettings.
   ///

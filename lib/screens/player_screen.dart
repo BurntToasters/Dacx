@@ -48,6 +48,7 @@ import '../playback/player_settings_sync.dart';
 import '../playback/player_ui_policies.dart';
 import '../playback/chapter_navigation_policy.dart';
 import '../playback/drop_path_batch_policy.dart';
+import '../playback/flatpak_pictures_dir.dart';
 import '../playback/enqueue_policy.dart';
 import '../playback/file_picker_path.dart';
 import '../playback/linux_install_kind.dart';
@@ -494,7 +495,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
         if (_stopInProgress || _player.fileOpenInProgress) return;
-        _cacheTracksForCurrentLoad(tracks, refreshChapters: true);
+        _cacheTracksForCurrentLoad(
+          tracks,
+          refreshChapters: true,
+          gen: _playback.loadGeneration,
+        );
       }),
       _playerService.completedStream.listen((completed) {
         if (!mounted || _isDisposed || !completed) return;
@@ -525,9 +530,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _subscriptions.add(sub);
     }
     _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
-    final testCommands = widget.mediaSessionCommandsForTesting;
-    if (testCommands != null) {
-      _subscriptions.add(testCommands.stream.listen(_onMediaSessionCommand));
+    final testCommandStream = widget.mediaSessionCommandsForTesting?.stream;
+    if (testCommandStream != null) {
+      _subscriptions.add(testCommandStream.listen(_onMediaSessionCommand));
     }
 
     // Periodic resume-position saver (every 5s while playing).
@@ -1574,13 +1579,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     bool? playOverride,
   }) {
     return _playback.loadQueue.enqueue(
-      () => _loadSourceInternal(
-        source,
-        forcePlay: forcePlay,
-        syncPlaylist: syncPlaylist,
-        applyResume: applyResume,
-        playOverride: playOverride,
-      ),
+      () async {
+        await _loadSourceInternal(
+          source,
+          forcePlay: forcePlay,
+          syncPlaylist: syncPlaylist,
+          applyResume: applyResume,
+          playOverride: playOverride,
+        );
+      },
       onError: (Object e, StackTrace st) {
         _log(
           'load_queue_failed',
@@ -1645,9 +1652,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final bytes = await _playerService.screenshot(format: 'image/jpeg');
       if (exportGen != _mediaSessionArtExportGen) return null;
       if (bytes == null || bytes.isEmpty) return null;
-      final dir = Directory(
-        p.join(Directory.systemTemp.path, 'dacx-media-session'),
-      );
+      final dir = _mediaSessionArtDirectory();
       if (!dir.existsSync()) {
         dir.createSync(recursive: true);
       }
@@ -1738,14 +1743,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _playback.chapterGate.markFetched(path: _currentFile, chapterCount: count);
   }
 
-  Future<void> _loadSourceInternal(
+  Future<bool> _loadSourceInternal(
     PlayableSource source, {
     bool forcePlay = false,
     bool syncPlaylist = true,
     bool applyResume = true,
     bool? playOverride,
   }) async {
-    if (_isDisposed) return;
+    if (_isDisposed) return false;
     final requestedValue = source.value.trim();
     final normalizedSource = source.isUrl
         ? PlayableSource.url(requestedValue)
@@ -1771,11 +1776,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           _ => {'path': requestedValue, 'source': source.value},
         },
       );
-      return;
+      return false;
     }
 
+    final priorQueue = syncPlaylist ? _playlist.capture() : null;
     if (syncPlaylist) {
       _playlist.setPlayingSource(normalizedSource);
+    }
+    final queueRevision = _playlist.revision;
+    void restoreQueue() {
+      if (priorQueue == null) return;
+      if (_playlist.revision != queueRevision) return;
+      _playlist.restore(priorQueue);
     }
 
     final ext = normalizedSource.extension ?? '';
@@ -1813,7 +1825,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       mounted: mounted,
       isDisposed: _isDisposed,
     )) {
-      return;
+      restoreQueue();
+      return false;
     }
     _persistResumePosition();
     _playback.chapterGate.invalidate();
@@ -1855,8 +1868,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             ? DebugSeverity.warn
             : DebugSeverity.error,
       );
-      if (!failureReaction.shouldUpdateUi) return;
-      if (!mounted) return;
+      restoreQueue();
+      if (!failureReaction.shouldUpdateUi) return false;
+      if (!mounted) return false;
       setState(_player.clearSourceOnLoadFailure);
       unawaited(_seekPreviewService.setSource(null));
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1868,12 +1882,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           ),
         ),
       );
-      return;
+      return false;
     } finally {
       _player.fileOpenInProgress = false;
     }
 
-    if (_stopInProgress) return;
+    if (_stopInProgress) return true;
 
     final postOpen = SourceLoadPostOpenPolicy.plan(
       isLoadCurrent: _playback.isLoadCurrent(gen),
@@ -1884,7 +1898,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     final followUp = SourceLoadPostOpenPolicy.followUpFor(postOpen);
     if (!postOpen.shouldProceed) {
-      return;
+      return true;
     }
     if (followUp.shouldCacheTracks) {
       _cacheTracksForCurrentLoad(_playerService.currentTracks, gen: gen);
@@ -1947,6 +1961,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (followUp.shouldUpdateMediaSessionMetadata) {
       unawaited(_pushMediaSessionMetadata(normalizedSource, gen: gen));
     }
+    return true;
   }
 
   void _cacheTracksForCurrentLoad(
@@ -3168,6 +3183,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                           : Semantics(
                               label: l10n.queueReorderSemantic,
                               child: ReorderableListView.builder(
+                                buildDefaultDragHandles: false,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 8,
                                 ),
@@ -3190,6 +3206,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                     playLabel: l10n.actionPlay,
                                     removeLabel: l10n.actionRemove,
                                     reorderLabel: l10n.queueReorderSemantic,
+                                    reorderIndex: index,
                                     colorScheme: colorScheme,
                                     onActivate: () {
                                       _playlist.jumpTo(index);
@@ -3810,7 +3827,50 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         '.';
+    if (LinuxInstallDetector.isFlatpak) {
+      String? userDirs;
+      try {
+        final configHome = Platform.environment['XDG_CONFIG_HOME'];
+        final userDirsPath = p.join(
+          configHome ?? p.join(home, '.config'),
+          'user-dirs.dirs',
+        );
+        final file = File(userDirsPath);
+        if (file.existsSync()) userDirs = file.readAsStringSync();
+      } catch (_) {
+        userDirs = null;
+      }
+      final pictures = FlatpakPicturesDir.resolve(
+        environment: Platform.environment,
+        userDirsContents: userDirs,
+        directoryExists: (path) => Directory(path).existsSync(),
+      );
+      if (pictures != null) return p.join(pictures, 'DACX');
+    }
     return p.join(home, 'Pictures', 'DACX');
+  }
+
+  Directory _mediaSessionArtDirectory() {
+    if (LinuxInstallDetector.isFlatpak) {
+      final cacheHome = Platform.environment['XDG_CACHE_HOME'];
+      final home = Platform.environment['HOME'];
+      if (cacheHome != null && cacheHome.startsWith('/')) {
+        return Directory(p.join(cacheHome, 'dacx-media-session'));
+      }
+      if (home != null && home.startsWith('/')) {
+        return Directory(
+          p.join(
+            home,
+            '.var',
+            'app',
+            'run.rosie.dacx',
+            'cache',
+            'dacx-media-session',
+          ),
+        );
+      }
+    }
+    return Directory(p.join(Directory.systemTemp.path, 'dacx-media-session'));
   }
 
   // ── Equalizer ─────────────────────────────────────────────
@@ -4212,22 +4272,45 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       playlistEmpty: _playlist.isEmpty,
     )) {
       case EnqueueMode.replaceAndPlay:
-        final dropped = _playlist.replaceSources(sources);
-        if (dropped > 0 && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(
-                  context,
-                ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
-              ),
-            ),
-          );
-        }
-        final first = _playlist.current;
-        if (first != null) {
-          unawaited(_loadSource(first, syncPlaylist: false));
-        }
+        final candidates = sources
+            .where((source) => source.value.trim().isNotEmpty)
+            .toList(growable: false);
+        final attemptLimit = math.min(
+          candidates.length,
+          PlaylistService.maxQueueItems,
+        );
+        unawaited(
+          _playback.loadQueue.enqueue(() async {
+            var openedIndex = -1;
+            for (var i = 0; i < attemptLimit; i++) {
+              if (_isDisposed) return;
+              if (await _loadSourceInternal(
+                candidates[i],
+                syncPlaylist: false,
+              )) {
+                openedIndex = i;
+                break;
+              }
+            }
+            if (openedIndex < 0 || _isDisposed) return;
+            final dropped = _playlist.replaceSources(
+              candidates,
+              startIndex: openedIndex,
+            );
+            if (dropped > 0 && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    AppLocalizations.of(context).snackQueueTruncated(
+                      PlaylistService.maxQueueItems,
+                      dropped,
+                    ),
+                  ),
+                ),
+              );
+            }
+          }),
+        );
       case EnqueueMode.append:
         final dropped = _playlist.addAllSources(sources);
         _showOsdMessage(

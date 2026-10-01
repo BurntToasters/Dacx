@@ -57,8 +57,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
         }
       }
       ::CoUninitialize();
-      return EXIT_SUCCESS;
+      return forwarded ? EXIT_SUCCESS : EXIT_FAILURE;
     }
+    dacx::StartOpenFilePipe();
   }
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));

@@ -990,7 +990,7 @@ class SelfUpdateService {
             'expected publisher $expectedPublisher, got "${parsed.publisher}"',
       );
     }
-    if (expectedPublisher.isEmpty && parsed.thumbprint != expected) {
+    if (expected.isNotEmpty && parsed.thumbprint != expected) {
       return SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message: 'expected signer $expected, got "${parsed.thumbprint}"',

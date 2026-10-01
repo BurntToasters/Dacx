@@ -35,8 +35,8 @@ Dacx is a lightweight desktop music and video player focused on speed and low ov
 | <img height="20" src="https://github.com/user-attachments/assets/340d360e-79b1-4c70-bfab-d944085f75df" /> Windows | <img height="20" src="https://github.com/user-attachments/assets/42d7e887-4616-4e8c-b1d3-e44e01340f8c" /> MacOS | <img height="20" src="https://github.com/user-attachments/assets/e0cc4f33-4516-408b-9c5c-be71a3ac316b" /> Linux |
 | :--- | :--- | :--- |
 | **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Windows-x64.msi) | **DMG:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.dmg) | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.AppImage) |
-| | **ZIP:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.zip) | **DEB:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb) |
-| | | **RPM:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm) |
+| | **ZIP:** [Universal](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-macOS.zip) | **DEB (deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb) |
+| | | **RPM (deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm) |
 | | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.flatpak) |
 | | | **TAR.GZ:** [x64](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.tar.gz) |
 
@@ -53,6 +53,9 @@ Dacx is a lightweight desktop music and video player focused on speed and low ov
 - Audio + video playback for MP3, FLAC, WAV, OGG, AAC, Opus, MP4, MKV, AVI, WebM, and more (anything libmpv handles).
 - Playlist files (`.m3u` / `.pls` import + save queue as `.m3u`); HLS `.m3u8` streams via mpv.
 - Playback speed control (transport chip + `[` / `]` / `\` shortcuts).
+- Sleep timer (15 / 30 / 45 / 60 minutes) from the more menu.
+- Optional minimize to tray (Appearance, off by default).
+- Hardware decode changes apply while the app is running.
 - External audio / subtitle track load from the more menu.
 - 10-band equalizer with presets.
 - Experimental Features (off by default): unfinished ideas such as Linux compositor blur. Multi-audio mix is implemented but withdrawn from the UI until linked libmpv has `amix`/`aformat` on every platform (`docs/ideas/multi-audio-mix.md`).
@@ -100,7 +103,7 @@ npm run build:linux # Linux
 
 ### Signing model
 
-macOS releases are fully code-signed and notarized. Windows releases are fully code-signed using Azure Artifact Signing. Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key). Ed25519 remains the primary self-update trust, and Authenticode signing provides OS-level trust verification (see `SECURITY.md`).
+macOS releases are fully code-signed and notarized. Windows releases are fully code-signed using Azure Artifact Signing. Linux DEB/RPM/TAR.GZ artifacts are signed with a **GPG detached signature** (the project's release key). Ed25519 is the primary self-update trust on Windows. macOS self-update trusts Developer ID and Gatekeeper, not an Ed25519 manifest. Authenticode is an extra Windows check (see `SECURITY.md`).
 
 This means:
 
@@ -109,7 +112,7 @@ This means:
   DACX_BUILD_DEV_NO_TEAM_ID=1 npm run build:mac
   ```
 - `scripts/flutter-build-windows.js` signs official MSIs with Azure Artifact Signing when `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`, `AZURE_ARTIFACT_SIGNING_PROFILE`, and `AZURE_ARTIFACT_SIGNING_PUBLISHER` are set. The publisher string is baked in as `--dart-define=DACX_WINDOWS_SIGNER_PUBLISHER=...`. Set `SKIP_WIN_CODESIGN=1` for local unsigned builds. The Windows build also ships `dacx-update-helper.exe` next to `dacx.exe` for post-exit MSI install.
-- `scripts/flutter-build-linux` is not affected by either.
+- `npm run build:linux` does not use Apple or Azure signing.
 
 ### macOS support
 

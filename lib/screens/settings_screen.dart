@@ -814,13 +814,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'experimental_features_changed',
             detailsBuilder: () => {'value': v},
           );
-          // Win/mac blur + opacity live under Appearance (graduated). Only
-          // clear them on Linux, where they remain experimental-gated.
-          if (!v && Platform.isLinux) {
-            _s.windowBlurEnabled = false;
-            _s.windowOpacity = 1.0;
-            _s.linuxCompositorBlurExperimental = false;
-          }
         });
       },
     );

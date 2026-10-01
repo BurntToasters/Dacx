@@ -234,7 +234,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsBlurLinuxExperimentalOff =>
-      'Not available on Linux unless experimental mode is enabled';
+      'Turn on Linux compositor blur above';
 
   @override
   String get settingsBlurNativeSubtitle =>
@@ -846,6 +846,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tooltipMore => 'More';
+
+  @override
+  String get tooltipMoreControls => 'More controls';
 
   @override
   String get tooltipSettings => 'Settings';

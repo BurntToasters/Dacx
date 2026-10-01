@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:anni_mpris_service/anni_mpris_service.dart';
+import 'package:dbus/dbus.dart';
 import 'package:flutter/services.dart';
+
+import '../playback/playback_speed_policy.dart';
 
 import 'debug_log_service.dart';
 import 'idle_inhibit_service.dart';
@@ -402,5 +405,24 @@ class _MprisAdapter extends MPRISService {
   void pushRate(double r) {
     if (!_enabled) return;
     playbackRate = r;
+  }
+
+  @override
+  Future<DBusMethodResponse> getProperty(String interface, String name) {
+    if (interface == 'org.mpris.MediaPlayer2.Player' && name == 'MinimumRate') {
+      return Future.value(
+        DBusGetPropertyResponse(
+          const DBusDouble(PlaybackSpeedPolicy.minimumRate),
+        ),
+      );
+    }
+    if (interface == 'org.mpris.MediaPlayer2.Player' && name == 'MaximumRate') {
+      return Future.value(
+        DBusGetPropertyResponse(
+          const DBusDouble(PlaybackSpeedPolicy.maximumRate),
+        ),
+      );
+    }
+    return super.getProperty(interface, name);
   }
 }

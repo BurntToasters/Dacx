@@ -32,9 +32,10 @@ constexpr const char kOpenFileMethodChannel[] =
 constexpr const char kOpenFileEventChannel[] =
     "run.rosie.dacx/open_file/events";
 constexpr const char kNewInstanceFlag[] = "--new-instance";
-constexpr DWORD kPipeBufferSize = 64 * 1024;
+constexpr DWORD kPipeBufferSize = 1024 * 1024;
 constexpr DWORD kPipeWaitMs = 1000;
-constexpr uint32_t kMaxMessageBytes = 32 * 1024;
+constexpr uint32_t kMaxMessageBytes = 1024 * 1024;
+std::atomic_bool g_pipe_started{false};
 
 HANDLE g_singleton_mutex = nullptr;
 
@@ -354,16 +355,15 @@ bool AcquireSingletonMutex() {
   return true;
 }
 
-void StartOpenFileServer(flutter::BinaryMessenger* messenger) {
-  // Pipe server is process-wide; start once.
-  static std::atomic_bool pipe_initialized{false};
+void StartOpenFilePipe() {
   bool expected = false;
-  if (pipe_initialized.compare_exchange_strong(expected, true)) {
-    EnsureDispatchWindow();
-    std::thread(PipeServerLoop).detach();
-  } else {
-    EnsureDispatchWindow();
-  }
+  if (!g_pipe_started.compare_exchange_strong(expected, true)) return;
+  EnsureDispatchWindow();
+  std::thread(PipeServerLoop).detach();
+}
+
+void StartOpenFileServer(flutter::BinaryMessenger* messenger) {
+  StartOpenFilePipe();
 
   // Method/event channels register per engine. Dedupe by messenger pointer.
   static std::mutex registry_mutex;

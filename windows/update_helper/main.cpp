@@ -191,10 +191,7 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
   return true;
 }
 
-bool VerifyAuthenticode(const std::wstring& path,
-                        const std::wstring& expected_thumbprint,
-                        const std::wstring& expected_publisher,
-                        int* exit_code) {
+LONG RunWinVerifyTrust(const std::wstring& path, bool check_revocation) {
   WINTRUST_FILE_INFO file_info{};
   file_info.cbStruct = sizeof(file_info);
   file_info.pcwszFilePath = path.c_str();
@@ -203,15 +200,37 @@ bool VerifyAuthenticode(const std::wstring& path,
   WINTRUST_DATA data{};
   data.cbStruct = sizeof(data);
   data.dwUIChoice = WTD_UI_NONE;
-  data.fdwRevocationChecks = WTD_REVOKE_NONE;
+  data.fdwRevocationChecks =
+      check_revocation ? WTD_REVOKE_WHOLECHAIN : WTD_REVOKE_NONE;
   data.dwUnionChoice = WTD_CHOICE_FILE;
   data.pFile = &file_info;
   data.dwStateAction = WTD_STATEACTION_VERIFY;
-  data.dwProvFlags = WTD_SAFER_FLAG;
+  data.dwProvFlags =
+      check_revocation
+          ? (WTD_SAFER_FLAG | WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT)
+          : (WTD_SAFER_FLAG | WTD_REVOCATION_CHECK_NONE);
 
   const LONG status = WinVerifyTrust(nullptr, &action, &data);
   data.dwStateAction = WTD_STATEACTION_CLOSE;
   WinVerifyTrust(nullptr, &action, &data);
+  return status;
+}
+
+bool IsRevocationUnavailable(LONG status) {
+  return status == static_cast<LONG>(CRYPT_E_REVOCATION_OFFLINE) ||
+         status == static_cast<LONG>(CRYPT_E_NO_REVOCATION_CHECK) ||
+         status == static_cast<LONG>(CERT_E_REVOCATION_FAILURE);
+}
+
+bool VerifyAuthenticode(const std::wstring& path,
+                        const std::wstring& expected_thumbprint,
+                        const std::wstring& expected_publisher,
+                        int* exit_code) {
+  LONG status = RunWinVerifyTrust(path, true);
+  if (IsRevocationUnavailable(status)) {
+    LogLine(L"revocation server unreachable; verifying without revocation");
+    status = RunWinVerifyTrust(path, false);
+  }
 
   if (status != ERROR_SUCCESS) {
     LogLine(L"authenticode status not Valid");
@@ -258,8 +277,10 @@ bool VerifyAuthenticode(const std::wstring& path,
     return false;
   }
 
-  bool identity_matches = false;
+  bool identity_matches = true;
+  bool checked_identity = false;
   if (!expected_publisher.empty()) {
+    checked_identity = true;
     const DWORD name_len = CertGetNameStringW(
         cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, nullptr, 0);
     std::vector<wchar_t> name(name_len);
@@ -267,6 +288,7 @@ bool VerifyAuthenticode(const std::wstring& path,
         CertGetNameStringW(cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr,
                            name.data(), name_len) == 0) {
       LogLine(L"publisher read failed");
+      identity_matches = false;
     } else {
       const std::wstring actual_publisher(name.data());
       identity_matches =
@@ -276,13 +298,19 @@ bool VerifyAuthenticode(const std::wstring& path,
                 expected_publisher + L" actual=" + actual_publisher);
       }
     }
-  } else {
+  }
+  if (identity_matches && !expected_thumbprint.empty()) {
+    checked_identity = true;
     DWORD hash_len = 0;
     CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID, nullptr,
                                       &hash_len);
     std::vector<BYTE> hash(hash_len);
-    if (CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID,
-                                          hash.data(), &hash_len)) {
+    if (hash_len == 0 ||
+        !CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID,
+                                           hash.data(), &hash_len)) {
+      LogLine(L"thumbprint read failed");
+      identity_matches = false;
+    } else {
       const std::wstring actual =
           NormalizeThumbprint(ToHexLower(hash.data(), hash.size()));
       identity_matches =
@@ -291,10 +319,9 @@ bool VerifyAuthenticode(const std::wstring& path,
         LogLine(L"authenticode thumbprint mismatch expected=" +
                 expected_thumbprint + L" actual=" + actual);
       }
-    } else {
-      LogLine(L"thumbprint read failed");
     }
   }
+  if (!checked_identity) identity_matches = false;
   CertFreeCertificateContext(cert);
   CryptMsgClose(msg);
   CertCloseStore(store, 0);

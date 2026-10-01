@@ -2,6 +2,9 @@
 abstract final class PlaybackSpeedPolicy {
   static const List<double> presets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
+  static const double minimumRate = 0.25;
+  static const double maximumRate = 4.0;
+
   /// Next preset after [current] (wraps). Snaps to nearest preset first.
   static double cycleNext(double current) {
     final i = _nearestIndex(current);

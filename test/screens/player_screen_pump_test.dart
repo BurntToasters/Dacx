@@ -2661,4 +2661,80 @@ void main() {
     expect(find.text('Mix all audio tracks (Experimental)'), findsNothing);
     expect(services.settings.multiAudioMix, isFalse);
   });
+
+  testWidgets('next skips past a queue item that fails to open', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService()
+      ..failOpenPaths(['/media/broken.mp3']);
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialLoadedSource: PlayableSource.file('/media/first.mp3'),
+        initialPlaylistSources: [
+          PlayableSource.file('/media/first.mp3'),
+          PlayableSource.file('/media/broken.mp3'),
+          PlayableSource.file('/media/third.ogg'),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    for (var press = 0; press < 2; press++) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+
+    expect(player.openCalls.map((c) => c.path), contains('/media/third.ogg'));
+  });
+
+  testWidgets('dropped files play the first one that opens and keep the rest', (
+    tester,
+  ) async {
+    PlayerScreenHarness.configureDesktopViewport(tester);
+    final services = await PlayerScreenHarness.createServices();
+    final player = HeadlessPlayerService()
+      ..failOpenPaths(['/media/broken.mp3']);
+
+    await tester.pumpWidget(
+      PlayerScreenHarness.wrap(
+        settings: services.settings,
+        debugLog: services.debugLog,
+        updates: services.updates,
+        playerService: player,
+        headlessMediaSurface: true,
+        initialDropPaths: const [
+          '/media/broken.mp3',
+          '/media/good.flac',
+          '/media/later.ogg',
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(player.openCalls.map((c) => c.path), ['/media/good.flac']);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(player.openCalls.map((c) => c.path), [
+      '/media/good.flac',
+      '/media/later.ogg',
+    ]);
+  });
 }
