@@ -246,6 +246,10 @@ class HeadlessPlayerService implements IPlayerService {
   List<({String name, String value})> get propertyCalls =>
       List.unmodifiable(_propertyCalls);
 
+  /// Snapshot of mpv-style properties for desktop E2E/widget assertions.
+  @visibleForTesting
+  Map<String, String> get properties => Map.unmodifiable(_properties);
+
   @override
   Future<bool> setProperty(String name, String value) async {
     if (_disposed) return false;

@@ -12,13 +12,18 @@ import 'windows_system_paths.dart';
 /// AppUserModelID for Windows shell integration (Start search, taskbar).
 const String dacxAppUserModelId = 'run.rosie.dacx';
 
-typedef HttpGet =
-    Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
+typedef HttpGet = Future<http.Response> Function(
+  Uri uri, {
+  Map<String, String>? headers,
+});
 
-typedef HttpStreamFn =
-    Future<http.StreamedResponse> Function(http.BaseRequest request);
-typedef ProcessStarter =
-    Future<Process> Function(String executable, List<String> arguments);
+typedef HttpStreamFn = Future<http.StreamedResponse> Function(
+  http.BaseRequest request,
+);
+typedef ProcessStarter = Future<Process> Function(
+  String executable,
+  List<String> arguments,
+);
 
 const windowsCertificateStoreHydrationTimeout = Duration(seconds: 10);
 

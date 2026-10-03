@@ -148,7 +148,11 @@ function main() {
   // Skip dev/test SDK packages; include runtime SDK packages with a known SDK
   // license fallback so release notices do not report them as missing.
   const skippedSdkPackages = new Set(["flutter", "flutter_test", "flutter_web_plugins", "sky_engine", "flutter_driver"]);
-  const licensedSdkPackages = new Set(["flutter_localizations"]);
+  const licensedSdkPackages = new Set([
+    "flutter_localizations",
+    "fuchsia_remote_debug_protocol",
+    "integration_test",
+  ]);
 
   const licenses = [];
   let found = 0;

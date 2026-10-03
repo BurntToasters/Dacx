@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -101,6 +102,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsSeekPreviewSubtitle =>
       'Preview frames while scrubbing (uses extra memory)';
+
+  @override
+  String get settingsAdvancedPlaybackTools => 'Advanced playback tools';
+
+  @override
+  String get settingsAdvancedPlaybackToolsSubtitle =>
+      'Optional A-B repeat, synchronization, markers, and subtitle appearance. Off by default.';
+
+  @override
+  String get menuAdvancedPlayback => 'Advanced playback';
 
   @override
   String get settingsExperimentalStoredPrefsHint =>

@@ -1,11 +1,45 @@
 const fs = require('fs');
 const path = require('path');
 
-function readReleaseNotes(root = path.resolve(__dirname, '..')) {
-  return fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').trim();
+function readChangelog(root = path.resolve(__dirname, '..')) {
+  return fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
 }
 
-function validateReleaseNotes(notes, version) {
+function extractReleaseNotes(notes, version) {
+  const firstHeadingPattern = /^## Changes in `v[^`]+:`\s*$/mu;
+  const firstHeading = notes.search(firstHeadingPattern);
+  if (firstHeading < 0) {
+    throw new Error('CHANGELOG.md has no release heading');
+  }
+  const currentHeading = `## Changes in \`v${version}:\``;
+  const currentStart = notes.indexOf(currentHeading, firstHeading);
+  if (currentStart < 0 || currentStart !== firstHeading) {
+    throw new Error('CHANGELOG.md first release heading is not ' + currentHeading);
+  }
+  const afterCurrent = notes.slice(currentStart + currentHeading.length);
+  const nextHeadingRelative = afterCurrent.search(/^## Changes in `v[^`]+:`\s*$/mu);
+  const sectionEnd =
+    nextHeadingRelative < 0
+      ? notes.length
+      : currentStart + currentHeading.length + nextHeadingRelative;
+  const preamble = notes.slice(0, firstHeading).replace(/<!--[\s\S]*?-->/gu, '').trim();
+  const currentSection = notes.slice(currentStart, sectionEnd).trim();
+  return `${preamble}\n\n${currentSection}`.trim();
+}
+
+function readReleaseNotes(root = path.resolve(__dirname, '..'), version) {
+  const changelog = readChangelog(root);
+  if (!version) {
+    try {
+      version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+    } catch {
+      version = undefined;
+    }
+  }
+  return version ? extractReleaseNotes(changelog, version) : changelog.trim();
+}
+
+function validateReleaseNotes(notes, version, options = {}) {
   const visibleNotes = notes.replace(/<!--[\s\S]*?-->/g, '').trim();
   const failures = [];
   const expectedHeading = '## Changes in `v' + version + ':`';
@@ -33,6 +67,13 @@ function validateReleaseNotes(notes, version) {
   if (!currentRelease.startsWith(expectedHeading)) {
     failures.push('first changelog heading must be ' + expectedHeading);
   }
+  const currentBody = currentRelease
+    .slice(expectedHeading.length)
+    .replace(/<!--[\s\S]*?-->/gu, '')
+    .trim();
+  if (currentRelease.startsWith(expectedHeading) && !currentBody && !options.allowEmpty) {
+    failures.push('current release notes must contain at least one entry');
+  }
   if (!preamble.includes('/releases/download/v' + version + '/')) {
     failures.push('download table does not target v' + version);
   }
@@ -52,8 +93,8 @@ function validateReleaseNotes(notes, version) {
   return failures;
 }
 
-function assertValidReleaseNotes(notes, version) {
-  const failures = validateReleaseNotes(notes, version);
+function assertValidReleaseNotes(notes, version, options = {}) {
+  const failures = validateReleaseNotes(notes, version, options);
   if (failures.length) {
     throw new Error('Invalid release notes:\n  - ' + failures.join('\n  - '));
   }
@@ -61,6 +102,8 @@ function assertValidReleaseNotes(notes, version) {
 
 module.exports = {
   assertValidReleaseNotes,
+  extractReleaseNotes,
+  readChangelog,
   readReleaseNotes,
   validateReleaseNotes,
 };

@@ -218,7 +218,15 @@ function main() {
   runCommand(
     "format",
     "fvm",
-    ["dart", "format", "--set-exit-if-changed", "lib/", "test/"],
+    [
+      "dart",
+      "format",
+      "--output=none",
+      "--set-exit-if-changed",
+      "lib/",
+      "test/",
+      "integration_test/",
+    ],
     null,
     results,
   );

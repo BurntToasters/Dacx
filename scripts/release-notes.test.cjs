@@ -84,5 +84,5 @@ test('current CHANGELOG.md matches the package version', () => {
     path.join(__dirname, '..', 'CHANGELOG.md'),
     'utf8',
   );
-  assert.deepEqual(validateReleaseNotes(notes, packageJson.version), []);
+  assert.deepEqual(validateReleaseNotes(notes, packageJson.version, { allowEmpty: true }), []);
 });

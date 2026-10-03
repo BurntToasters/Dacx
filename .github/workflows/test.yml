@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - beta
+      - 'prepare-for-v*'
   pull_request:
     branches:
       - main
       - beta
+      - 'prepare-for-v*'
 
 jobs:
   test:
@@ -135,13 +137,47 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libepoxy-dev libmpv-dev mpv libayatana-appindicator3-dev libunwind-dev patchelf
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libx11-dev libxi-dev libepoxy-dev libmpv-dev mpv libunwind-dev patchelf xvfb
 
       - name: Build smoke
         shell: bash
         env:
           CI: "true"
         run: npm run check:build-smoke
+
+      - name: Generate deterministic desktop E2E fixtures
+        shell: bash
+        run: |
+          node scripts/platform-release-smoke.js fixtures \
+            --output "test-results/e2e/${{ matrix.os }}/fixtures" \
+            --report "test-results/e2e/${{ matrix.os }}/fixture-report.json"
+
+      - name: Run real desktop integration E2E
+        shell: bash
+        env:
+          DACX_E2E_FIXTURE: test-results/e2e/${{ matrix.os }}/fixtures/release-smoke.wav
+          DACX_E2E_REPORT: test-results/e2e/${{ matrix.os }}/desktop-playback.json
+        run: |
+          export DACX_E2E_VERSION="$(node -p \"require('./package.json').version\")"
+          export DACX_E2E_RUN_ID="desktop-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          E2E_LOG="test-results/e2e/${{ matrix.os }}/flutter-test.log"
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            xvfb-run -a fvm flutter test integration_test/platform_release_smoke_test.dart -d linux 2>&1 | tee "$E2E_LOG"
+          else
+            fvm flutter test integration_test/platform_release_smoke_test.dart -d "${{ matrix.os == 'windows-latest' && 'windows' || 'macos' }}" 2>&1 | tee "$E2E_LOG"
+          fi
+          grep -Eq 'All tests passed!?' "$E2E_LOG"
+          if grep -Eq 'Some tests failed|Failed to load|[+][0-9]+ -[1-9][0-9]*:' "$E2E_LOG"; then
+            exit 1
+          fi
+
+      - name: Upload desktop E2E evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-e2e-${{ matrix.os }}
+          path: test-results/e2e/${{ matrix.os }}
+          if-no-files-found: warn
 
       - name: Build macOS XPC update helper
         if: matrix.os == 'macos-latest'

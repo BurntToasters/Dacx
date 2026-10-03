@@ -57,4 +57,9 @@ are fully Authenticode-signed.
 
 macOS release builds should set `APPLE_TEAM_ID` (see `scripts/flutter-build-macos.js`).
 
-The `release:finalize` and related git reset scripts are **intentionally destructive** on the release machine; run only on dedicated VMs with a clean working tree.
+`release:prepare`, `release:mirror`, and `release:finalize` update generated
+metadata and release staging files. Run them on a clean release tree and review
+their output before uploading. They do not reset Git or delete unrelated local
+files. The `b`, `r`, and `vi` scripts do run `git reset --hard` / `git clean -fd`
+and can permanently remove local changes; use those only on dedicated VMs after
+confirming the working tree is disposable.

@@ -58,6 +58,7 @@ Dacx is a lightweight desktop music and video player focused on speed and low ov
 - Hardware decode changes apply while the app is running.
 - External audio / subtitle track load from the more menu.
 - 10-band equalizer with presets.
+- Advanced playback tools (off by default): per-file audio/subtitle delay, A-B repeat, playback markers, and subtitle appearance.
 - Experimental Features (off by default): unfinished ideas such as Linux compositor blur. Multi-audio mix is implemented but withdrawn from the UI until linked libmpv has `amix`/`aformat` on every platform (`docs/ideas/multi-audio-mix.md`).
 - Optional seek thumbnails (Playback settings; uses extra memory).
 - Window transparency / background blur on Windows and macOS (Appearance settings). Linux compositor blur remains experimental.
@@ -75,6 +76,7 @@ Dacx is a lightweight desktop music and video player focused on speed and low ov
 - **CPU arch:** Windows/Linux ship **x64** only (arm64 not a priority).
 - **Linux (recommended):** [AppImage](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.AppImage) + [AppManager](https://github.com/kem-a/AppManager) for desktop install and updates. **AppImage / tar / Flatpak bundle libmpv.** deb/rpm declare a distro `libmpv` dependency instead. **Flatpak** is GitHub-sideload only (not Flathub).
 - **Experimental Features:** Long-lived opt-in lane (off by default) for unfinished / in-progress ideas (Linux compositor blur, …). Multi-audio mix stays in code but is not user-facing. Features may graduate to stable settings (like Win/mac blur) or stay experimental indefinitely; not a blocker for `1.0`.
+- **Minimalist defaults:** Advanced playback tools, seek thumbnails, tray behavior, and experimental features remain opt-in.
 - **Windows portable ZIP:** No longer shipped; use the MSI.
 
 ## Development

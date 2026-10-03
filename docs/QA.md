@@ -1,5 +1,117 @@
 # Manual QA checklist (pre-stable)
 
+## Platform and package E2E failure inventory
+
+Write and run these checks before changing dependency or packaging code. A platform
+check fails closed: skipped host tools are reported as skipped, never as proof.
+
+- Dependency resolution can select an incompatible `dbus`, `file_picker`, or
+  `tray_manager` API while the lockfile still looks valid.
+- Tray initialization can compile but fail at runtime because icon paths,
+  listener callbacks, menu constructors, or destroy calls changed.
+- Linux MPRIS and idle-inhibit calls can compile but lose D-Bus connection
+  lifetime, property types, or command dispatch after a `dbus` upgrade.
+- File-picker open, directory, multi-file, and save flows can return changed
+  path/URI shapes or platform exceptions.
+- A package can contain the app binary but omit native media libraries, runtime
+  DLLs, update helper, desktop metadata, licenses, or Flatpak permissions.
+- A candidate package can have the wrong version, stale hash, missing signature,
+  invalid signature, or an artifact from another platform.
+- A release artifact can use a canonical unversioned filename while a harness
+  incorrectly treats the filename as the version source; version proof must
+  come from the required release argument plus checksum/manifest metadata.
+- A supplied executable can be unrelated to the inspected package, or a
+  Flatpak wrapper can lose repeated command arguments, producing a misleading
+  launch result.
+- Windows MSI can fail to install, launch, open a deterministic fixture, or pass
+  Authenticode/Ed25519 verification.
+- macOS DMG/ZIP can fail to mount, launch, pass codesign/Gatekeeper checks, or
+  open a deterministic fixture.
+- Linux AppImage/Flatpak can fail to launch without host `libmpv`, expose an
+  incorrect desktop entry, or lack required D-Bus/media permissions.
+- Smoke tooling can report success after a timeout, missing executable, missing
+  fixture, skipped trust command, child process crash, or process-tree leak.
+- An app can write a passing receipt and immediately crash, or report a later
+  playback error after initial success; both must invalidate package proof.
+- A process can remain alive without opening the fixture or entering a playing
+  state; process survival is not playback proof. A playback receipt must be
+  produced by the env-gated probe inside the candidate app and bound to this
+  run/version/fixture. Normal launches never activate the probe.
+- A macOS DMG can remain mounted after an extraction/copy failure if detach is
+  not in a finally path; a tarball can write outside staging through traversal
+  entries if archive paths are not checked before extraction.
+- E2E output can omit command lines, host/version data, fixture hashes, logs, or
+  failure exit codes, preventing repeatable release audit.
+- Repeated smoke runs can overwrite evidence or mix artifacts from different
+  versions/platforms.
+
+The deterministic fixture and platform smoke harness below must emit a JSON
+report plus raw command logs under `test-results/e2e/<os>/` or
+`test-results/release-proof/<version>/`.
+
+## Repeatable desktop E2E commands
+
+Generate one stable WAV/SRT pair per platform runner:
+
+```powershell
+node scripts/platform-release-smoke.js fixtures `
+  --output test-results/e2e/windows/fixtures `
+  --report test-results/e2e/windows/fixture-report.json
+```
+
+Run real-player proof on each desktop host. Set `DACX_E2E_REPORT` to a unique
+OS/version path; do not reuse another host's report.
+
+```text
+DACX_E2E_FIXTURE=<fixture>/release-smoke.wav
+DACX_E2E_VERSION=<version>
+DACX_E2E_RUN_ID=<unique-run-id>
+DACX_E2E_REPORT=test-results/e2e/<os>/desktop-playback.json
+fvm flutter test integration_test/platform_release_smoke_test.dart -d <windows|macos|linux>
+```
+
+Run package candidate smoke only with an executable extracted or installed
+from that exact candidate. `--no-launch` is inspection only and returns exit
+code 2. It never produces release proof.
+
+```text
+node scripts/platform-release-smoke.js package --platform <win|mac|linux> \
+  --artifact <release-artifact> \
+  --extract \
+  --fixture <fixture>/release-smoke.wav \
+  --expected-sha256 <64-hex-digest> \
+  --signature <detached-signature-if-required> \
+  --checksums <sha256sum-file> \
+  --proof-metadata <release-proof.json> \
+  --version <version> \
+  --playback-report test-results/e2e/<os>/desktop-playback.json \
+  --report test-results/release-proof/<version>/<os>.json
+```
+
+Use `--executable` instead of `--extract` when package installation happens
+outside the harness. Use `--launcher flatpak` plus repeated `--launch-arg`
+values for a Flatpak wrapper. A supplied external executable must be bound by
+the proof metadata executable hash; extracted binaries are bound to staging.
+
+Harness report records top-level version/schema, artifact bytes/hash, fixture
+hash, child command/output, process-tree cleanup, playback receipt, required
+runtime paths, and host trust commands. Windows runs PowerShell Authenticode
+validation; macOS runs `codesign` and `spctl`; Linux runs GPG validation when
+`--signature` is supplied. Missing host tools, missing trust inputs, or a
+process that merely survives the timeout leave report `incomplete`, not
+`passed`. Only a fresh receipt from the candidate app's env-gated probe, with
+duration, playing state, matching version/run ID/fixture, and no error, can
+complete playback proof.
+
+`--extract` prepares MSI administrative installs, macOS DMG/ZIP bundles, and
+Linux tarballs into report-local staging. Linux AppImage launches directly on
+Linux. Flatpak requires an explicit wrapper executable such as
+`flatpak run run.rosie.dacx`; deb/rpm install policy stays outside harness.
+
+Current dependency boundary: `dbus` remains on 0.7.15 because `desktop_drop`
+0.8.4 requires `dbus ^0.7.10`. Upgrade `dbus` only after a compatible
+`desktop_drop` release exists; do not force an override in release builds.
+
 Run on **Windows (MSI or debug)**, **macOS 15+**, and **Linux**: prefer **AppImage** (ideally via [AppManager](https://github.com/kem-a/AppManager)) plus optionally one deb/rpm. Use a short local audio file, a video file, and an `.m3u` / `.pls` with 2+ entries.
 
 Tick items as you go before a stable cut. Fix failures as they surface rather than stacking features.

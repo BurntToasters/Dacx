@@ -268,6 +268,24 @@ abstract class AppLocalizations {
   /// **'Preview frames while scrubbing (uses extra memory)'**
   String get settingsSeekPreviewSubtitle;
 
+  /// No description provided for @settingsAdvancedPlaybackTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced playback tools'**
+  String get settingsAdvancedPlaybackTools;
+
+  /// No description provided for @settingsAdvancedPlaybackToolsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional A-B repeat, synchronization, markers, and subtitle appearance. Off by default.'**
+  String get settingsAdvancedPlaybackToolsSubtitle;
+
+  /// No description provided for @menuAdvancedPlayback.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced playback'**
+  String get menuAdvancedPlayback;
+
   /// No description provided for @settingsExperimentalStoredPrefsHint.
   ///
   /// In en, this message translates to:

@@ -17,39 +17,38 @@ import 'update_service.dart';
 import 'windows_system_paths.dart';
 import 'windows_process_ffi.dart';
 
-typedef HttpStreamFn =
-    Future<http.StreamedResponse> Function(http.BaseRequest request);
-typedef ProcessRunFn =
-    Future<ProcessResult> Function(String executable, List<String> arguments);
-typedef WindowsSpawnFn =
-    Future<WindowsSpawnResult> Function(
-      String commandLine, {
-      String? applicationName,
-    });
-typedef SelfUpdateDownloadFn =
-    Future<void> Function(
-      String url,
-      File outFile, {
-      void Function(SelfUpdateProgress)? onProgress,
-    });
+typedef HttpStreamFn = Future<http.StreamedResponse> Function(
+  http.BaseRequest request,
+);
+typedef ProcessRunFn = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
+typedef WindowsSpawnFn = Future<WindowsSpawnResult> Function(
+  String commandLine, {
+  String? applicationName,
+});
+typedef SelfUpdateDownloadFn = Future<void> Function(
+  String url,
+  File outFile, {
+  void Function(SelfUpdateProgress)? onProgress,
+});
 typedef SelfUpdateFetchTextFn = Future<String> Function(String url);
 typedef SelfUpdateFetchBytesFn = Future<List<int>> Function(String url);
-typedef ValidateWindowsManifestFn =
-    Future<SelfUpdateResult> Function({
-      required List<int> manifestBytes,
-      required List<int> signatureBytes,
-      required String version,
-      required String assetName,
-    });
-typedef MacUpdateInstallFn =
-    Future<Map<String, dynamic>?> Function({
-      required String zipUrl,
-      required String checksumHex,
-      required String installedAppPath,
-      required String expectedTeamId,
-      required String expectedVersion,
-      required bool relaunch,
-    });
+typedef ValidateWindowsManifestFn = Future<SelfUpdateResult> Function({
+  required List<int> manifestBytes,
+  required List<int> signatureBytes,
+  required String version,
+  required String assetName,
+});
+typedef MacUpdateInstallFn = Future<Map<String, dynamic>?> Function({
+  required String zipUrl,
+  required String checksumHex,
+  required String installedAppPath,
+  required String expectedTeamId,
+  required String expectedVersion,
+  required bool relaunch,
+});
 
 enum SelfUpdateOutcome {
   unsupportedPlatform,
@@ -823,8 +822,7 @@ class SelfUpdateService {
     if (publicKey.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
-        message:
-            'Self-update is misconfigured: Windows update manifest public key is not set.',
+        message: 'Self-update is misconfigured: Windows update manifest public key is not set.',
       );
     }
 
@@ -953,8 +951,7 @@ class SelfUpdateService {
     if (expected.isEmpty && expectedPublisher.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
-        message:
-            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT or DACX_WINDOWS_SIGNER_PUBLISHER was not set at build time.',
+        message: 'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT or DACX_WINDOWS_SIGNER_PUBLISHER was not set at build time.',
       );
     }
 
@@ -1128,8 +1125,7 @@ exit 0
     if (teamId.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.gatekeeperRejected,
-        message:
-            'Self-update is misconfigured: DACX_APPLE_TEAM_ID was not set at build time.',
+        message: 'Self-update is misconfigured: DACX_APPLE_TEAM_ID was not set at build time.',
       );
     }
     final asset =
@@ -1217,15 +1213,17 @@ exit 0
     required String expectedVersion,
     required bool relaunch,
   }) {
-    return _macUpdateChannel
-        .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
-          'zipUrl': zipUrl,
-          'checksumHex': checksumHex,
-          'installedAppPath': installedAppPath,
-          'expectedTeamId': expectedTeamId,
-          'expectedVersion': expectedVersion,
-          'relaunch': relaunch,
-        });
+    return _macUpdateChannel.invokeMapMethod<String, dynamic>(
+      'installUpdateFromUrl',
+      {
+        'zipUrl': zipUrl,
+        'checksumHex': checksumHex,
+        'installedAppPath': installedAppPath,
+        'expectedTeamId': expectedTeamId,
+        'expectedVersion': expectedVersion,
+        'relaunch': relaunch,
+      },
+    );
   }
 
   static const macUpdateChannelName = 'run.rosie.dacx/update';

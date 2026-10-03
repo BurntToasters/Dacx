@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import '../services/player_service.dart';
+import '../services/advanced_playback_controller.dart';
 import '../services/player_shortcuts_service.dart';
 import '../services/instance_mode_service.dart';
 import '../services/settings_service.dart';
@@ -23,6 +24,7 @@ import '../services/idle_inhibit_service.dart';
 import '../services/debug_log_service.dart';
 import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
+import '../services/packaged_e2e_probe.dart';
 import '../services/playlist_service.dart';
 import '../services/bookmark_service.dart';
 import '../services/open_file_bridge.dart';
@@ -77,6 +79,7 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
+import '../widgets/advanced_playback_dialog.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
 
@@ -144,6 +147,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     skipTraversal: true,
   );
   late final IPlayerService _playerService;
+  late final AdvancedPlaybackController _advancedPlayback;
+  PackagedE2eProbe? _packagedE2eProbe;
   VideoController? _videoController;
   late final SeekPreviewService _seekPreviewService;
   late final PlayerAudioSession _audioSession;
@@ -255,6 +260,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     super.initState();
     _playback = PlaybackController();
     _playerService = widget.playerService ?? PlayerService();
+    _advancedPlayback = AdvancedPlaybackController(
+      settings: _settings,
+      player: _playerService,
+    );
     _seekPreviewService = SeekPreviewService();
     _audioSession = PlayerAudioSession(
       playerService: _playerService,
@@ -350,6 +359,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final streamSubs = <StreamSubscription>[
       _playerService.positionStream.listen((pos) {
         if (!mounted || _isDisposed) return;
+        _advancedPlayback.setPosition(pos);
         final update = _player.onPosition(pos);
         if (update == PositionUiUpdate.skip) return;
         if (update == PositionUiUpdate.notify) {
@@ -362,6 +372,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.durationStream.listen((dur) {
         if (!mounted || _isDisposed) return;
+        final packagedProbe = _packagedE2eProbe;
+        if (packagedProbe != null) {
+          unawaited(packagedProbe.recordDuration(dur));
+        }
+        _advancedPlayback.setDuration(dur);
         setState(() => _player.duration = dur);
         if (dur.inMilliseconds > 0 && _settings.mediaSessionEnabled) {
           final source = _player.currentSource;
@@ -384,6 +399,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.playingStream.listen((playing) {
         if (!mounted || _isDisposed) return;
+        final packagedProbe = _packagedE2eProbe;
+        if (packagedProbe != null) {
+          unawaited(packagedProbe.recordPlaying(playing));
+        }
         setState(() => _player.isPlaying = playing);
         unawaited(_idleInhibit.setPlaying(playing));
         if (!playing) {
@@ -474,6 +493,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.errorStream.listen((event) {
         if (!mounted || _isDisposed) return;
+        _packagedE2eProbe?.recordError(event);
         _log(
           'player_operation_failed',
           message: event.toString(),
@@ -529,6 +549,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     for (final sub in streamSubs) {
       _subscriptions.add(sub);
     }
+    unawaited(_initializePackagedE2eProbe());
     _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
     final testCommandStream = widget.mediaSessionCommandsForTesting?.stream;
     if (testCommandStream != null) {
@@ -589,6 +610,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             seededSource.extension ?? '',
           ),
         );
+        unawaited(_advancedPlayback.setSource(seededSource));
       });
     }
 
@@ -625,6 +647,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
+  Future<void> _initializePackagedE2eProbe() async {
+    final probe = await PackagedE2eProbe.fromEnvironment(
+      player: _playerService,
+    );
+    if (!mounted || _isDisposed || probe == null) return;
+    _packagedE2eProbe = probe;
+    await probe.recordDuration(_player.duration);
+    await probe.recordPlaying(_player.isPlaying);
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
@@ -632,9 +664,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _shortcutFocus.dispose();
     windowManager.removeListener(this);
     if (Platform.isMacOS) {
-      const MethodChannel(
-        InstanceModeService.windowMethodChannelName,
-      ).setMethodCallHandler(null);
+      const MethodChannel(InstanceModeService.windowMethodChannelName)
+          .setMethodCallHandler(null);
     }
     _osdHideTimer?.cancel();
     _fullscreenChromeHideTimer?.cancel();
@@ -646,6 +677,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _openFileBridge.dispose();
     _subscriptions.cancelAll();
     _sleepTimer.dispose();
+    _advancedPlayback.dispose();
     _playback.dispose();
     _player.dispose();
     _releaseActiveBookmark();
@@ -739,6 +771,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _onSettingsChanged() {
+    unawaited(
+      _advancedPlayback.setEnabled(_settings.advancedPlaybackToolsEnabled),
+    );
     _log(
       'settings_applied_to_player',
       category: DebugLogCategory.settings,
@@ -1127,9 +1162,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            AppLocalizations.of(
-              context,
-            ).snackUpdateMayHaveFailed(targetVersion),
+            AppLocalizations.of(context)
+                .snackUpdateMayHaveFailed(targetVersion),
           ),
         ),
       );
@@ -1317,9 +1351,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             ),
           );
         }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(parts.join(' '))));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(parts.join(' '))));
       }
     } on PlatformException catch (e) {
       final detail = (e.message == null || e.message!.trim().isEmpty)
@@ -1365,9 +1398,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (trimmed.isEmpty) return;
     if (!PlayableSource.isSupportedUrl(trimmed)) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.snackInvalidStreamUrl)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.snackInvalidStreamUrl)));
       }
       return;
     }
@@ -1482,9 +1514,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (path == null) return;
       _rememberLastOpenDirectory(path);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportSaved)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportSaved)));
       _log(
         'playlist_exported',
         detailsBuilder: () => {
@@ -1833,6 +1864,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     setState(() {
       _player.beginSourceLoad(normalizedSource, ext);
     });
+    await _advancedPlayback.setSource(normalizedSource);
     _log(
       'media_type_initial_state',
       detailsBuilder: () => {
@@ -1853,6 +1885,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         playOverride: playOverride,
       );
       await _playerService.open(open.path, play: open.play);
+      // Re-apply after open because libmpv may reset per-file properties.
+      await _advancedPlayback.applyForCurrentSource();
     } catch (e) {
       final failureKind = SourceLoadFailurePolicy.classify(e);
       final failureReaction = SourceLoadOpenPolicy.openFailureReaction(
@@ -1870,6 +1904,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
       restoreQueue();
       if (!failureReaction.shouldUpdateUi) return false;
+      await _advancedPlayback.setSource(null);
       if (!mounted) return false;
       setState(_player.clearSourceOnLoadFailure);
       unawaited(_seekPreviewService.setSource(null));
@@ -2306,7 +2341,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       return KeyEventResult.handled;
     }
     final custom = _settings.keybinds;
-    final shortcut = PlayerShortcutsService.resolve(
+    var shortcut = PlayerShortcutsService.resolve(
       event: event,
       hasMedia: _currentFile != null,
       isMetaPressed: metaPressed,
@@ -2315,6 +2350,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       isAltPressed: altPressed,
       customBindings: custom.isEmpty ? null : custom,
     );
+    if (shortcut == null && _settings.advancedPlaybackToolsEnabled) {
+      shortcut = PlayerShortcutsService.resolveAdvanced(
+        event: event,
+        isMetaPressed: metaPressed,
+        isControlPressed: controlPressed,
+        isShiftPressed: shiftPressed,
+      );
+    }
 
     final drawerOpen = _scaffoldKey.currentState?.isEndDrawerOpen ?? false;
     if (drawerOpen) {
@@ -2453,6 +2496,42 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       case PlayerShortcutAction.cycleSpeed:
         _log('shortcut_cycle_speed', category: DebugLogCategory.ui);
         _cyclePlaybackSpeed();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.cycleAdvancedLoop:
+        if (!_settings.advancedPlaybackToolsEnabled || _currentFile == null) {
+          return KeyEventResult.ignored;
+        }
+        unawaited(_advancedPlayback.cycleLoop());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.subtitleDelayBack:
+        if (!_settings.advancedPlaybackToolsEnabled || _currentFile == null) {
+          return KeyEventResult.ignored;
+        }
+        unawaited(_advancedPlayback.adjustSubtitleDelay(-100));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.subtitleDelayForward:
+        if (!_settings.advancedPlaybackToolsEnabled || _currentFile == null) {
+          return KeyEventResult.ignored;
+        }
+        unawaited(_advancedPlayback.adjustSubtitleDelay(100));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.audioDelayBack:
+        if (!_settings.advancedPlaybackToolsEnabled || _currentFile == null) {
+          return KeyEventResult.ignored;
+        }
+        unawaited(_advancedPlayback.adjustAudioDelay(-100));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.audioDelayForward:
+        if (!_settings.advancedPlaybackToolsEnabled || _currentFile == null) {
+          return KeyEventResult.ignored;
+        }
+        unawaited(_advancedPlayback.adjustAudioDelay(100));
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.addPlaybackMarker:
+        if (!_settings.advancedPlaybackToolsEnabled || _currentFile == null) {
+          return KeyEventResult.ignored;
+        }
+        _advancedPlayback.addMarker();
         return KeyEventResult.handled;
       case null:
         return KeyEventResult.ignored;
@@ -2899,22 +2978,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                             Icon(
                                               Icons.file_download,
                                               size: 64,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.primary,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary,
                                             ),
                                             const SizedBox(height: 16),
                                             Text(
-                                              AppLocalizations.of(
-                                                context,
-                                              ).dropOverlayHint,
+                                              AppLocalizations.of(context)
+                                                  .dropOverlayHint,
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .titleMedium
                                                   ?.copyWith(
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.onSurface,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurface,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                             ),
@@ -2945,7 +3023,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Widget _buildBottomDock() {
     return ListenableBuilder(
-      listenable: _sleepTimer,
+      listenable: Listenable.merge([_sleepTimer, _advancedPlayback]),
       builder: (context, _) {
         final remaining = _sleepTimer.remaining;
         return GlassChrome(
@@ -2991,6 +3069,26 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                       settings: _settings,
                                       isAudioFile: _player.isAudioFile,
                                     ),
+                                markerPositions:
+                                    _settings.advancedPlaybackToolsEnabled
+                                    ? _advancedPlayback.markers
+                                          .map(
+                                            (marker) => SeekMarker(
+                                              position: Duration(
+                                                milliseconds: marker.positionMs,
+                                              ),
+                                              label: marker.label,
+                                            ),
+                                          )
+                                          .toList(growable: false)
+                                    : const [],
+                                rangeStart:
+                                    _settings.advancedPlaybackToolsEnabled
+                                    ? _advancedPlayback.a
+                                    : null,
+                                rangeEnd: _settings.advancedPlaybackToolsEnabled
+                                    ? _advancedPlayback.b
+                                    : null,
                                 onSeekStart: () => _player.isSeeking = true,
                                 onSeekChange: (value) {
                                   setState(() {
@@ -3713,9 +3811,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         title: title,
         language: language,
         fallbackId: fallbackId,
-        fallbackLabel: AppLocalizations.of(
-          context,
-        ).trackFallbackLabel(fallbackId),
+        fallbackLabel: AppLocalizations.of(context)
+            .trackFallbackLabel(fallbackId),
       );
 
   // ── Chapters ──────────────────────────────────────────────
@@ -4021,9 +4118,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await _playerService.setProperty('lavfi-complex', '');
     if (!mounted || _isDisposed) return;
     _showOsdMessage(message);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _reloadCurrentForMixChange() async {
@@ -4139,6 +4235,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           await _playerService.setProperty('lavfi-complex', '');
           _player.mixActive = false;
           await _playerService.stop();
+          await _advancedPlayback.setSource(null);
           unawaited(_seekPreviewService.setSource(null));
           unawaited(_mediaSession.clear());
           if (!mounted || _isDisposed) return;
@@ -4316,9 +4413,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _showOsdMessage(
           sources.length == 1
               ? AppLocalizations.of(context).osdAddedToQueue
-              : AppLocalizations.of(
-                  context,
-                ).osdAddedMultipleToQueue(sources.length),
+              : AppLocalizations.of(context)
+                    .osdAddedMultipleToQueue(sources.length),
         );
         if (dropped > 0 && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -4620,8 +4716,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           required String label,
           required String action,
           Widget? trailing,
+          Key? key,
         }) {
           return InkWell(
+            key: key,
             onTap: () => Navigator.pop(ctx, action),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -4746,6 +4844,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                             label: l10n.dialogEqualizerTitle,
                             action: 'equalizer',
                           ),
+                          if (_settings.advancedPlaybackToolsEnabled)
+                            item(
+                              key: const ValueKey('advanced-playback-entry'),
+                              icon: Icons.tune,
+                              label: l10n.menuAdvancedPlayback,
+                              action: 'advanced-playback',
+                            ),
                           if (_currentFile != null)
                             item(
                               icon: Icons.photo_camera,
@@ -4915,6 +5020,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       case 'equalizer':
         unawaited(_showEqualizerDialog());
         break;
+      case 'advanced-playback':
+        unawaited(_showAdvancedPlaybackDialog());
+        break;
       case 'screenshot':
         unawaited(_takeScreenshot());
         break;
@@ -4951,6 +5059,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
+  Future<void> _showAdvancedPlaybackDialog() async {
+    if (!_settings.advancedPlaybackToolsEnabled) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AdvancedPlaybackDialog(
+        controller: _advancedPlayback,
+        settings: _settings,
+      ),
+    );
+  }
+
   Future<void> _pickExternalAudio() async {
     final l10n = AppLocalizations.of(context);
     try {
@@ -4975,9 +5094,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _cacheTracksForCurrentLoad(_playerService.currentTracks);
         setState(() {});
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
       }
     } catch (e) {
       _log(
@@ -4987,9 +5105,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
       if (mounted) {
         _showOsdMessage(l10n.osdExternalAudioFailed);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
       }
     }
   }
@@ -5089,9 +5206,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(
-                context,
-              ).snackPlaybackOperationFailed(selected.id),
+              AppLocalizations.of(context)
+                  .snackPlaybackOperationFailed(selected.id),
             ),
           ),
         );
@@ -5358,60 +5474,67 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                           style: Theme.of(ctx).textTheme.bodySmall,
                         ),
                       ),
-                      ...PlayerShortcutAction.values.map((a) {
-                        final accels =
-                            current[a.name] ??
-                            defaultKeybinds[a]?.toList(growable: true) ??
-                            const <String>[];
-                        return ListTile(
-                          dense: true,
-                          title: Text(
-                            shortcutActionLabel(
-                              a,
-                              l10n: AppLocalizations.of(ctx),
-                            ),
-                          ),
-                          subtitle: Text(
-                            accels.isEmpty
-                                ? AppLocalizations.of(ctx).keybindsNone
-                                : accels
-                                      .map(
-                                        (a) =>
-                                            PlayerShortcutsService.formatAcceleratorForDisplay(
-                                              a,
-                                              useMacSymbols: Platform.isMacOS,
-                                            ),
-                                      )
-                                      .join(', '),
-                            style: Theme.of(ctx).textTheme.bodySmall,
-                          ),
-                          trailing: Wrap(
-                            spacing: 4,
-                            children: [
-                              IconButton(
-                                tooltip: l10n.actionSetNewBinding,
-                                icon: const Icon(Icons.edit, size: 18),
-                                onPressed: () async {
-                                  final accel = await _captureKeybind(ctx);
-                                  if (accel == null) return;
-                                  current[a.name] = [accel];
-                                  _settings.keybinds = current;
-                                  setLocal(() {});
-                                },
+                      ...PlayerShortcutAction.values
+                          .where(
+                            (a) =>
+                                _settings.advancedPlaybackToolsEnabled ||
+                                !PlayerShortcutsService.isAdvancedAction(a),
+                          )
+                          .map((a) {
+                            final accels =
+                                current[a.name] ??
+                                defaultKeybinds[a]?.toList(growable: true) ??
+                                const <String>[];
+                            return ListTile(
+                              dense: true,
+                              title: Text(
+                                shortcutActionLabel(
+                                  a,
+                                  l10n: AppLocalizations.of(ctx),
+                                ),
                               ),
-                              IconButton(
-                                tooltip: l10n.actionResetToDefault,
-                                icon: const Icon(Icons.refresh, size: 18),
-                                onPressed: () {
-                                  current.remove(a.name);
-                                  _settings.keybinds = current;
-                                  setLocal(() {});
-                                },
+                              subtitle: Text(
+                                accels.isEmpty
+                                    ? AppLocalizations.of(ctx).keybindsNone
+                                    : accels
+                                          .map(
+                                            (a) =>
+                                                PlayerShortcutsService.formatAcceleratorForDisplay(
+                                                  a,
+                                                  useMacSymbols:
+                                                      Platform.isMacOS,
+                                                ),
+                                          )
+                                          .join(', '),
+                                style: Theme.of(ctx).textTheme.bodySmall,
                               ),
-                            ],
-                          ),
-                        );
-                      }),
+                              trailing: Wrap(
+                                spacing: 4,
+                                children: [
+                                  IconButton(
+                                    tooltip: l10n.actionSetNewBinding,
+                                    icon: const Icon(Icons.edit, size: 18),
+                                    onPressed: () async {
+                                      final accel = await _captureKeybind(ctx);
+                                      if (accel == null) return;
+                                      current[a.name] = [accel];
+                                      _settings.keybinds = current;
+                                      setLocal(() {});
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: l10n.actionResetToDefault,
+                                    icon: const Icon(Icons.refresh, size: 18),
+                                    onPressed: () {
+                                      current.remove(a.name);
+                                      _settings.keybinds = current;
+                                      setLocal(() {});
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                     ],
                   ),
                 ),

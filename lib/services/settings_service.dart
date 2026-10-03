@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/playable_source.dart';
 import '../models/update_channel.dart';
+import '../playback/advanced_playback_models.dart';
 import '../playback/bookmark_retention_policy.dart';
 import '../playback/playback_mix_policy.dart';
 import 'instance_mode_service.dart';
@@ -191,6 +192,15 @@ class SettingsService extends ChangeNotifier {
   static const _kPlaylistShuffle = 'playlist_shuffle';
   static const _kAllowMultipleInstances = 'allow_multiple_instances';
   static const _kEmptyStateTipDismissed = 'empty_state_tip_dismissed';
+  static const _kAdvancedPlaybackToolsEnabled =
+      'advanced_playback_tools_enabled';
+  static const _kPlaybackAdjustments = 'playback_adjustments_v1';
+  static const _kPlaybackMarkers = 'playback_markers_v1';
+  static const _kSubtitleFontSize = 'subtitle_font_size';
+  static const _kSubtitlePosition = 'subtitle_position';
+  static const _kSubtitleOutlineSize = 'subtitle_outline_size';
+  static const _kSubtitleTextColor = 'subtitle_text_color';
+  static const _kSubtitleOutlineColor = 'subtitle_outline_color';
 
   /// Persisted preference keys. Renaming requires a migration; keep in sync with
   /// [test/services/frozen_identifiers_test.dart].
@@ -237,6 +247,14 @@ class SettingsService extends ChangeNotifier {
     _kPlaylistShuffle,
     _kAllowMultipleInstances,
     _kEmptyStateTipDismissed,
+    _kAdvancedPlaybackToolsEnabled,
+    _kPlaybackAdjustments,
+    _kPlaybackMarkers,
+    _kSubtitleFontSize,
+    _kSubtitlePosition,
+    _kSubtitleOutlineSize,
+    _kSubtitleTextColor,
+    _kSubtitleOutlineColor,
   };
 
   /// Maximum playback-resume entries kept (per file). LRU pruned.
@@ -249,6 +267,17 @@ class SettingsService extends ChangeNotifier {
   static const int resumeTailIgnoreSeconds = 15;
 
   static const int maxRecentFiles = 20;
+  static const int maxPlaybackAdjustmentSources = 100;
+  static const int maxPlaybackMarkersPerSource = 50;
+  static const int maxPlaybackMarkerSources = 100;
+  static const int playbackDelayLimitMs = 10000;
+  static const int playbackDelayStepMs = 100;
+  static const int playbackMarkerPositionLimitMs = 24 * 60 * 60 * 1000;
+  static const int subtitleFontSizeDefault = 38;
+  static const int subtitlePositionDefault = 100;
+  static const double subtitleOutlineSizeDefault = 1.65;
+  static const String subtitleTextColorDefault = '#FFFFFFFF';
+  static const String subtitleOutlineColorDefault = '#000000FF';
   static const int eqBandCount = 10;
   static const List<int> eqBandFrequencies = [
     31,
@@ -262,6 +291,390 @@ class SettingsService extends ChangeNotifier {
     8000,
     16000,
   ];
+
+  /// Master gate for the non-minimal playback tools. Stored values remain
+  /// intact when this is disabled, but consumers must treat all tools as
+  /// inactive and restore mpv defaults.
+  bool get advancedPlaybackToolsEnabled =>
+      _prefs.getBool(_kAdvancedPlaybackToolsEnabled) ?? false;
+
+  set advancedPlaybackToolsEnabled(bool value) {
+    if (advancedPlaybackToolsEnabled == value) return;
+    _prefs.setBool(_kAdvancedPlaybackToolsEnabled, value);
+    notifyListeners();
+  }
+
+  PlaybackAdjustment playbackAdjustmentFor(String source) {
+    final normalized = source.trim();
+    if (!_isSafeFilePath(normalized)) return const PlaybackAdjustment();
+    final raw = _prefs.getString(_kPlaybackAdjustments);
+    if (raw == null || raw.isEmpty) return const PlaybackAdjustment();
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const PlaybackAdjustment();
+      if (decoded.length > maxPlaybackAdjustmentSources) {
+        return const PlaybackAdjustment();
+      }
+      final entry = decoded[normalized];
+      if (entry is! Map) return const PlaybackAdjustment();
+      final audio = entry['a'];
+      final subtitle = entry['s'];
+      final touched = entry['t'];
+      if (audio is! int ||
+          subtitle is! int ||
+          touched is! int ||
+          touched <= 0 ||
+          audio.abs() > playbackDelayLimitMs ||
+          subtitle.abs() > playbackDelayLimitMs ||
+          audio % playbackDelayStepMs != 0 ||
+          subtitle % playbackDelayStepMs != 0) {
+        return const PlaybackAdjustment();
+      }
+      return PlaybackAdjustment(audioMs: audio, subtitleMs: subtitle);
+    } catch (_) {
+      return const PlaybackAdjustment();
+    }
+  }
+
+  void setPlaybackAdjustment(
+    String source, {
+    required int audioMs,
+    required int subtitleMs,
+  }) {
+    final normalized = source.trim();
+    if (!_isSafeFilePath(normalized)) return;
+    final audio =
+        ((audioMs / playbackDelayStepMs).round().clamp(
+                  -playbackDelayLimitMs ~/ playbackDelayStepMs,
+                  playbackDelayLimitMs ~/ playbackDelayStepMs,
+                ) *
+                playbackDelayStepMs)
+            .toInt();
+    final subtitle =
+        ((subtitleMs / playbackDelayStepMs).round().clamp(
+                  -playbackDelayLimitMs ~/ playbackDelayStepMs,
+                  playbackDelayLimitMs ~/ playbackDelayStepMs,
+                ) *
+                playbackDelayStepMs)
+            .toInt();
+    final map = _readPlaybackAdjustmentMap();
+    if (audio == 0 && subtitle == 0) {
+      map.remove(normalized);
+    } else {
+      map[normalized] = {'a': audio, 's': subtitle, 't': _nowAccess()};
+    }
+    _pruneLruMap(map, maxPlaybackAdjustmentSources);
+    if (map.isEmpty) {
+      _prefs.remove(_kPlaybackAdjustments);
+    } else {
+      _prefs.setString(_kPlaybackAdjustments, jsonEncode(map));
+    }
+    notifyListeners();
+  }
+
+  Map<String, dynamic> _readPlaybackAdjustmentMap() {
+    final raw = _prefs.getString(_kPlaybackAdjustments);
+    if (raw == null || raw.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return <String, dynamic>{};
+      if (decoded.length > maxPlaybackAdjustmentSources) {
+        return <String, dynamic>{};
+      }
+      final result = <String, dynamic>{};
+      decoded.forEach((key, value) {
+        if (key is! String || !_isSafeFilePath(key) || value is! Map) return;
+        final a = value['a'];
+        final s = value['s'];
+        final t = value['t'];
+        if (a is int &&
+            s is int &&
+            t is int &&
+            a.abs() <= playbackDelayLimitMs &&
+            s.abs() <= playbackDelayLimitMs &&
+            a % playbackDelayStepMs == 0 &&
+            s % playbackDelayStepMs == 0 &&
+            t > 0) {
+          result[key] = {'a': a, 's': s, 't': t};
+        }
+      });
+      return result;
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  int _nowAccess() => DateTime.now().microsecondsSinceEpoch;
+
+  void _pruneLruMap(Map<String, dynamic> map, int limit) {
+    if (map.length <= limit) return;
+    final ordered = map.entries.toList()
+      ..sort((a, b) {
+        final at = (a.value is Map ? a.value['t'] : null) as int? ?? 0;
+        final bt = (b.value is Map ? b.value['t'] : null) as int? ?? 0;
+        return at.compareTo(bt);
+      });
+    for (var i = 0; i < map.length - limit; i++) {
+      map.remove(ordered[i].key);
+    }
+  }
+
+  List<PlaybackMarker> playbackMarkersFor(String source) {
+    final normalized = source.trim();
+    if (!_isSafeFilePath(normalized)) return const [];
+    final raw = _prefs.getString(_kPlaybackMarkers);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const [];
+      if (decoded.length > maxPlaybackMarkerSources) return const [];
+      final entry = decoded[normalized];
+      if (entry is! Map ||
+          entry['t'] is! int ||
+          (entry['t'] as int) <= 0 ||
+          entry['markers'] is! List ||
+          (entry['markers'] as List).length > maxPlaybackMarkersPerSource) {
+        return const [];
+      }
+      final markers = <PlaybackMarker>[];
+      for (final rawMarker in entry['markers'] as List) {
+        if (rawMarker is! Map) continue;
+        final id = rawMarker['id'];
+        final position = rawMarker['p'];
+        final label = rawMarker['label'];
+        if (id is! String ||
+            id.isEmpty ||
+            id.length > 128 ||
+            !_isSafeMarkerId(id) ||
+            position is! int ||
+            position < 0 ||
+            position > playbackMarkerPositionLimitMs ||
+            label is! String ||
+            !_isSafeMarkerLabel(label)) {
+          continue;
+        }
+        markers.add(PlaybackMarker(id: id, positionMs: position, label: label));
+        if (markers.length >= maxPlaybackMarkersPerSource) break;
+      }
+      return List<PlaybackMarker>.unmodifiable(markers);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  void addPlaybackMarker(String source, PlaybackMarker marker) {
+    final normalized = source.trim();
+    if (!_isSafeFilePath(normalized) ||
+        marker.positionMs < 0 ||
+        marker.positionMs > playbackMarkerPositionLimitMs ||
+        marker.id.isEmpty ||
+        marker.id.length > 128 ||
+        !_isSafeMarkerId(marker.id) ||
+        !_isSafeMarkerLabel(marker.label)) {
+      return;
+    }
+    final map = _readPlaybackMarkerMap();
+    final entry =
+        map[normalized] as Map<String, dynamic>? ??
+        <String, dynamic>{'t': _nowAccess(), 'markers': <dynamic>[]};
+    final markers = (entry['markers'] as List<dynamic>? ?? <dynamic>[])
+      ..removeWhere((value) => value is Map && value['id'] == marker.id);
+    markers.add({
+      'id': marker.id,
+      'p': marker.positionMs,
+      'label': marker.label,
+    });
+    if (markers.length > maxPlaybackMarkersPerSource) {
+      markers.removeRange(0, markers.length - maxPlaybackMarkersPerSource);
+    }
+    entry['t'] = _nowAccess();
+    entry['markers'] = markers;
+    map[normalized] = entry;
+    _pruneLruMap(map, maxPlaybackMarkerSources);
+    _writePlaybackMarkerMap(map);
+    notifyListeners();
+  }
+
+  void updatePlaybackMarker(
+    String source,
+    String id, {
+    String? label,
+    int? positionMs,
+  }) {
+    final markers = playbackMarkersFor(source);
+    final current = markers.where((marker) => marker.id == id).firstOrNull;
+    if (current == null) return;
+    final next = current.copyWith(label: label, positionMs: positionMs);
+    removePlaybackMarker(source, id, notify: false);
+    addPlaybackMarker(source, next);
+  }
+
+  void removePlaybackMarker(String source, String id, {bool notify = true}) {
+    final normalized = source.trim();
+    if (!_isSafeFilePath(normalized)) return;
+    final map = _readPlaybackMarkerMap();
+    final entry = map[normalized];
+    if (entry is! Map || entry['markers'] is! List) return;
+    final markers = (entry['markers'] as List).where((value) {
+      return value is! Map || value['id'] != id;
+    }).toList();
+    if (markers.isEmpty) {
+      map.remove(normalized);
+    } else {
+      entry['markers'] = markers;
+      entry['t'] = _nowAccess();
+    }
+    _writePlaybackMarkerMap(map);
+    if (notify) notifyListeners();
+  }
+
+  Map<String, dynamic> _readPlaybackMarkerMap() {
+    final raw = _prefs.getString(_kPlaybackMarkers);
+    if (raw == null || raw.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return <String, dynamic>{};
+      if (decoded.length > maxPlaybackMarkerSources) {
+        return <String, dynamic>{};
+      }
+      final result = <String, dynamic>{};
+      decoded.forEach((key, value) {
+        if (key is! String || !_isSafeFilePath(key) || value is! Map) return;
+        final t = value['t'];
+        final markers = value['markers'];
+        if (t is! int ||
+            t <= 0 ||
+            markers is! List ||
+            markers.length > maxPlaybackMarkersPerSource) {
+          return;
+        }
+        result[key] = {
+          't': t,
+          'markers': markers
+              .whereType<Map>()
+              .where((marker) {
+                final id = marker['id'];
+                final p = marker['p'];
+                final label = marker['label'];
+                return id is String &&
+                    id.isNotEmpty &&
+                    id.length <= 128 &&
+                    _isSafeMarkerId(id) &&
+                    p is int &&
+                    p >= 0 &&
+                    p <= playbackMarkerPositionLimitMs &&
+                    label is String &&
+                    _isSafeMarkerLabel(label);
+              })
+              .take(maxPlaybackMarkersPerSource)
+              .map(
+                (marker) => {
+                  'id': marker['id'],
+                  'p': marker['p'],
+                  'label': marker['label'],
+                },
+              )
+              .toList(),
+        };
+      });
+      return result;
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  void _writePlaybackMarkerMap(Map<String, dynamic> map) {
+    if (map.isEmpty) {
+      _prefs.remove(_kPlaybackMarkers);
+    } else {
+      _prefs.setString(_kPlaybackMarkers, jsonEncode(map));
+    }
+  }
+
+  static bool _isSafeMarkerLabel(String value) {
+    if (value.isEmpty || value.length > 80) return false;
+    return !value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7f);
+  }
+
+  static bool _isSafeMarkerId(String value) {
+    return !value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7f);
+  }
+
+  int get subtitleFontSize =>
+      (_prefs.getInt(_kSubtitleFontSize) ?? subtitleFontSizeDefault).clamp(
+        24,
+        72,
+      );
+
+  set subtitleFontSize(int value) {
+    _prefs.setInt(_kSubtitleFontSize, value.clamp(24, 72));
+    notifyListeners();
+  }
+
+  int get subtitlePosition {
+    final value = _prefs.getInt(_kSubtitlePosition);
+    if (value == null || value < 0 || value > 100 || value % 5 != 0) {
+      return subtitlePositionDefault;
+    }
+    return value;
+  }
+
+  set subtitlePosition(int value) {
+    _prefs.setInt(_kSubtitlePosition, (value / 5).round().clamp(0, 20) * 5);
+    notifyListeners();
+  }
+
+  double get subtitleOutlineSize {
+    final value = _prefs.getDouble(_kSubtitleOutlineSize);
+    if (value == null || !value.isFinite || value < 0 || value > 4) {
+      return subtitleOutlineSizeDefault;
+    }
+    final quarters = value * 4;
+    if (quarters.roundToDouble() != quarters) {
+      return subtitleOutlineSizeDefault;
+    }
+    return value;
+  }
+
+  set subtitleOutlineSize(double value) {
+    _prefs.setDouble(
+      _kSubtitleOutlineSize,
+      ((value * 4).round().clamp(0, 16) / 4),
+    );
+    notifyListeners();
+  }
+
+  String get subtitleTextColor => _safeColorPreference(
+    _prefs.getString(_kSubtitleTextColor),
+    subtitleTextColorDefault,
+  );
+
+  set subtitleTextColor(String value) {
+    if (!_isHexColor(value)) return;
+    _prefs.setString(_kSubtitleTextColor, value.toUpperCase());
+    notifyListeners();
+  }
+
+  String get subtitleOutlineColor => _safeColorPreference(
+    _prefs.getString(_kSubtitleOutlineColor),
+    subtitleOutlineColorDefault,
+  );
+
+  set subtitleOutlineColor(String value) {
+    if (!_isHexColor(value)) return;
+    _prefs.setString(_kSubtitleOutlineColor, value.toUpperCase());
+    notifyListeners();
+  }
+
+  static bool _isHexColor(String value) =>
+      RegExp(r'^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$').hasMatch(value.trim());
+
+  static bool isValidSubtitleColor(String value) => _isHexColor(value);
+
+  static String _safeColorPreference(String? value, String fallback) {
+    if (value == null || !_isHexColor(value)) return fallback;
+    return value.toUpperCase();
+  }
 
   double get volume => _prefs.getDouble(_kVolume) ?? 100.0;
   set volume(double v) {

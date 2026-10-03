@@ -183,6 +183,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     setState(() => _s.seekPreviewEnabled = v),
                               ),
                               SwitchListTile(
+                                title: Text(l10n.settingsAdvancedPlaybackTools),
+                                subtitle: Text(
+                                  l10n.settingsAdvancedPlaybackToolsSubtitle,
+                                ),
+                                value: _s.advancedPlaybackToolsEnabled,
+                                onChanged: (v) => setState(
+                                  () => _s.advancedPlaybackToolsEnabled = v,
+                                ),
+                              ),
+                              SwitchListTile(
                                 title: Text(l10n.settingsMediaSession),
                                 subtitle: Text(
                                   l10n.settingsMediaSessionSubtitle,
@@ -351,9 +361,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
   }
@@ -942,9 +951,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(
               '${l10n.settingsLinuxUpdateHint} ${linuxUpdateGuidance(l10n)}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.64),
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.64),
               ),
             ),
           ),
@@ -1124,9 +1132,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await _s.resetAll();
           if (mounted) {
             setState(() {});
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(l10n.snackSettingsReset)));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(l10n.snackSettingsReset)));
           }
         } else {
           _log('reset_settings_cancelled');

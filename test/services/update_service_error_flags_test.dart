@@ -107,34 +107,31 @@ void main() {
   });
 
   group('UpdateService beta fallback on rate-limit', () {
-    test(
-      'beta user on version newer than stable gets null when beta fetch rate-limited',
-      () async {
-        var requestCount = 0;
-        final svc = UpdateService(
-          packageInfoLoader: () async => info('0.10.0-beta.4'),
-          currentVersionLoader: (_) async => '0.10.0-beta.4',
-          httpGet: (uri, {headers}) async {
-            requestCount++;
-            final path = uri.toString();
-            if (path.contains('/releases/latest')) {
-              // Stable endpoint succeeds
-              return http.Response(
-                '{"tag_name":"v0.9.1","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.9.1","body":""}',
-                200,
-              );
-            }
-            // Beta list endpoint is rate-limited
-            return http.Response('rate limited', 403);
-          },
-        );
-        final update = await svc.checkForUpdate(channel: UpdateChannel.auto);
-        expect(update, isNull);
-        expect(svc.lastCheckRateLimited, isTrue);
-        expect(svc.lastCheckSucceeded, isFalse);
-        expect(requestCount, greaterThan(0));
-      },
-    );
+    test('beta user on version newer than stable gets null when beta fetch rate-limited', () async {
+      var requestCount = 0;
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('0.10.0-beta.4'),
+        currentVersionLoader: (_) async => '0.10.0-beta.4',
+        httpGet: (uri, {headers}) async {
+          requestCount++;
+          final path = uri.toString();
+          if (path.contains('/releases/latest')) {
+            // Stable endpoint succeeds
+            return http.Response(
+              '{"tag_name":"v0.9.1","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.9.1","body":""}',
+              200,
+            );
+          }
+          // Beta list endpoint is rate-limited
+          return http.Response('rate limited', 403);
+        },
+      );
+      final update = await svc.checkForUpdate(channel: UpdateChannel.auto);
+      expect(update, isNull);
+      expect(svc.lastCheckRateLimited, isTrue);
+      expect(svc.lastCheckSucceeded, isFalse);
+      expect(requestCount, greaterThan(0));
+    });
 
     test(
       'beta user behind stable gets stable upgrade when beta fetch fails',
