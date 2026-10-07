@@ -26,6 +26,8 @@ class IdleInhibitService {
 
   int? _cookie;
   bool _active = false;
+  int _setPlayingTicket = 0;
+  Future<void> _setPlayingSerial = Future<void>.value();
   DBusClient? _linuxClient;
   DBusRemoteObject? _linuxScreensaver;
 
@@ -49,18 +51,24 @@ class IdleInhibitService {
     return LinuxInstallDetector.isFlatpak ? 'run.rosie.dacx' : 'dacx';
   }
 
-  Future<void> setPlaying(bool playing) async {
-    if (Platform.isLinux) {
-      if (playing) {
-        await _inhibitLinux();
-      } else {
-        await _uninhibitLinux();
+  Future<void> setPlaying(bool playing) {
+    final ticket = ++_setPlayingTicket;
+    final run = _setPlayingSerial.then((_) async {
+      if (ticket != _setPlayingTicket) return;
+      if (Platform.isLinux) {
+        if (playing) {
+          await _inhibitLinux();
+        } else {
+          await _uninhibitLinux();
+        }
+        return;
       }
-      return;
-    }
-    if (Platform.isWindows || Platform.isMacOS) {
-      await _setNativeInhibit(playing);
-    }
+      if (Platform.isWindows || Platform.isMacOS) {
+        await _setNativeInhibit(playing);
+      }
+    });
+    _setPlayingSerial = run.catchError((Object _) {});
+    return run;
   }
 
   Future<void> _setNativeInhibit(bool inhibit) async {

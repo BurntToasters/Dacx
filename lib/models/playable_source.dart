@@ -59,7 +59,13 @@ class PlayableSource {
   static String displaySafeUrl(String value) {
     final trimmed = value.trim();
     final uri = Uri.tryParse(trimmed);
-    if (uri == null || !isSupportedUrl(trimmed)) return trimmed;
+    // Sanitize every http(s) URL, including ones isSupportedUrl rejects for
+    // embedded credentials: those are the ones that must never be shown raw.
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      return trimmed;
+    }
     var base = uri.replace(userInfo: '').toString();
     final queryIndex = base.indexOf('?');
     final fragmentIndex = base.indexOf('#');

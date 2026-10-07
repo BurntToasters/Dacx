@@ -45,11 +45,15 @@ Future<void> triggerUpdateAction({
     await updateService.openReleasePage(info.url);
     return;
   }
+  if (!context.mounted) return;
   await UpdatePendingMarker.write(
     targetVersion: info.version,
     channel: channelName,
   );
-  if (!context.mounted) return;
+  if (!context.mounted) {
+    UpdatePendingMarker.readAndClear();
+    return;
+  }
   final result = await showDialog<SelfUpdateResult>(
     context: context,
     barrierDismissible: false,

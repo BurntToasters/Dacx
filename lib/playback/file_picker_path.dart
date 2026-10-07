@@ -1,4 +1,4 @@
-/// Local filesystem paths from file_picker 12 `PlatformFile` / save `Uri`.
+/// Local filesystem paths from file_picker 13 `PlatformFile` / save `Uri`.
 abstract final class FilePickerPath {
   /// Absolute path from a picked file, or null if it is not a local file.
   static String? fromPlatformFilePath(String? path) {

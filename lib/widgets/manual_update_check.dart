@@ -30,9 +30,8 @@ Future<void> runManualUpdateCheck({
           : updateService.lastCheckNetworkError
           ? l10n.snackUpdateNetworkError
           : l10n.snackUpdateCheckFailed;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
       return;
     }
     if (update != null) {

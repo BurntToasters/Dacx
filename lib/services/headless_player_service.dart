@@ -44,6 +44,7 @@ class HeadlessPlayerService implements IPlayerService {
   final List<({String name, String value})> _propertyCalls = [];
   final List<PlaylistMode> _playlistModeCalls = [];
   Object? _openError;
+  final Set<String> _failOpenPaths = <String>{};
   Uint8List? screenshotBytes;
   Duration _openDelay = Duration.zero;
   final Set<String> _failPropertyNames = <String>{};
@@ -52,6 +53,13 @@ class HeadlessPlayerService implements IPlayerService {
 
   @visibleForTesting
   set openError(Object? value) => _openError = value;
+
+  @visibleForTesting
+  void failOpenPaths(Iterable<String> paths) {
+    _failOpenPaths
+      ..clear()
+      ..addAll(paths);
+  }
 
   @visibleForTesting
   set screenshotResult(Uint8List? value) => screenshotBytes = value;
@@ -104,6 +112,9 @@ class HeadlessPlayerService implements IPlayerService {
   Future<void> open(String filePath, {bool play = true}) async {
     if (_disposed) return;
     if (_openError != null) throw _openError!;
+    if (_failOpenPaths.contains(filePath)) {
+      throw Exception('open failed: $filePath');
+    }
     if (_openDelay > Duration.zero) {
       await Future<void>.delayed(_openDelay);
     }
@@ -234,6 +245,10 @@ class HeadlessPlayerService implements IPlayerService {
   @visibleForTesting
   List<({String name, String value})> get propertyCalls =>
       List.unmodifiable(_propertyCalls);
+
+  /// Snapshot of mpv-style properties for desktop E2E/widget assertions.
+  @visibleForTesting
+  Map<String, String> get properties => Map.unmodifiable(_properties);
 
   @override
   Future<bool> setProperty(String name, String value) async {

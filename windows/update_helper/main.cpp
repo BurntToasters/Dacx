@@ -128,7 +128,15 @@ std::wstring NormalizeThumbprint(std::wstring value) {
   return out;
 }
 
-bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
+// Opens the MSI for reading and denies write and delete sharing, so the file
+// cannot be swapped between verification and msiexec while the handle stays
+// open. Read sharing stays on for WinVerifyTrust and msiexec.
+HANDLE OpenLockedForRead(const std::wstring& path) {
+  return CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+}
+
+bool Sha256Handle(HANDLE file, std::wstring* out_hex) {
   BCRYPT_ALG_HANDLE alg = nullptr;
   BCRYPT_HASH_HANDLE hash = nullptr;
   NTSTATUS st =
@@ -151,10 +159,8 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
     return false;
   }
 
-  HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
-                            nullptr);
-  if (file == INVALID_HANDLE_VALUE) {
+  LARGE_INTEGER start{};
+  if (!SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) {
     BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(alg, 0);
     return false;
@@ -165,7 +171,6 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
     DWORD read = 0;
     if (!ReadFile(file, buf.data(), static_cast<DWORD>(buf.size()), &read,
                   nullptr)) {
-      CloseHandle(file);
       BCryptDestroyHash(hash);
       BCryptCloseAlgorithmProvider(alg, 0);
       return false;
@@ -173,13 +178,11 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
     if (read == 0) break;
     st = BCryptHashData(hash, buf.data(), read, 0);
     if (st < 0) {
-      CloseHandle(file);
       BCryptDestroyHash(hash);
       BCryptCloseAlgorithmProvider(alg, 0);
       return false;
     }
   }
-  CloseHandle(file);
 
   std::vector<BYTE> digest(hash_len);
   st = BCryptFinishHash(hash, digest.data(), hash_len, 0);
@@ -191,10 +194,7 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
   return true;
 }
 
-bool VerifyAuthenticode(const std::wstring& path,
-                        const std::wstring& expected_thumbprint,
-                        const std::wstring& expected_publisher,
-                        int* exit_code) {
+LONG RunWinVerifyTrust(const std::wstring& path, bool check_revocation) {
   WINTRUST_FILE_INFO file_info{};
   file_info.cbStruct = sizeof(file_info);
   file_info.pcwszFilePath = path.c_str();
@@ -203,15 +203,37 @@ bool VerifyAuthenticode(const std::wstring& path,
   WINTRUST_DATA data{};
   data.cbStruct = sizeof(data);
   data.dwUIChoice = WTD_UI_NONE;
-  data.fdwRevocationChecks = WTD_REVOKE_NONE;
+  data.fdwRevocationChecks =
+      check_revocation ? WTD_REVOKE_WHOLECHAIN : WTD_REVOKE_NONE;
   data.dwUnionChoice = WTD_CHOICE_FILE;
   data.pFile = &file_info;
   data.dwStateAction = WTD_STATEACTION_VERIFY;
-  data.dwProvFlags = WTD_SAFER_FLAG;
+  data.dwProvFlags =
+      check_revocation
+          ? (WTD_SAFER_FLAG | WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT)
+          : (WTD_SAFER_FLAG | WTD_REVOCATION_CHECK_NONE);
 
   const LONG status = WinVerifyTrust(nullptr, &action, &data);
   data.dwStateAction = WTD_STATEACTION_CLOSE;
   WinVerifyTrust(nullptr, &action, &data);
+  return status;
+}
+
+bool IsRevocationUnavailable(LONG status) {
+  return status == static_cast<LONG>(CRYPT_E_REVOCATION_OFFLINE) ||
+         status == static_cast<LONG>(CRYPT_E_NO_REVOCATION_CHECK) ||
+         status == static_cast<LONG>(CERT_E_REVOCATION_FAILURE);
+}
+
+bool VerifyAuthenticode(const std::wstring& path,
+                        const std::wstring& expected_thumbprint,
+                        const std::wstring& expected_publisher,
+                        int* exit_code) {
+  LONG status = RunWinVerifyTrust(path, true);
+  if (IsRevocationUnavailable(status)) {
+    LogLine(L"revocation server unreachable; verifying without revocation");
+    status = RunWinVerifyTrust(path, false);
+  }
 
   if (status != ERROR_SUCCESS) {
     LogLine(L"authenticode status not Valid");
@@ -258,8 +280,10 @@ bool VerifyAuthenticode(const std::wstring& path,
     return false;
   }
 
-  bool identity_matches = false;
+  bool identity_matches = true;
+  bool checked_identity = false;
   if (!expected_publisher.empty()) {
+    checked_identity = true;
     const DWORD name_len = CertGetNameStringW(
         cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, nullptr, 0);
     std::vector<wchar_t> name(name_len);
@@ -267,6 +291,7 @@ bool VerifyAuthenticode(const std::wstring& path,
         CertGetNameStringW(cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr,
                            name.data(), name_len) == 0) {
       LogLine(L"publisher read failed");
+      identity_matches = false;
     } else {
       const std::wstring actual_publisher(name.data());
       identity_matches =
@@ -276,13 +301,19 @@ bool VerifyAuthenticode(const std::wstring& path,
                 expected_publisher + L" actual=" + actual_publisher);
       }
     }
-  } else {
+  }
+  if (identity_matches && !expected_thumbprint.empty()) {
+    checked_identity = true;
     DWORD hash_len = 0;
     CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID, nullptr,
                                       &hash_len);
     std::vector<BYTE> hash(hash_len);
-    if (CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID,
-                                          hash.data(), &hash_len)) {
+    if (hash_len == 0 ||
+        !CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID,
+                                           hash.data(), &hash_len)) {
+      LogLine(L"thumbprint read failed");
+      identity_matches = false;
+    } else {
       const std::wstring actual =
           NormalizeThumbprint(ToHexLower(hash.data(), hash.size()));
       identity_matches =
@@ -291,10 +322,9 @@ bool VerifyAuthenticode(const std::wstring& path,
         LogLine(L"authenticode thumbprint mismatch expected=" +
                 expected_thumbprint + L" actual=" + actual);
       }
-    } else {
-      LogLine(L"thumbprint read failed");
     }
   }
+  if (!checked_identity) identity_matches = false;
   CertFreeCertificateContext(cert);
   CryptMsgClose(msg);
   CertCloseStore(store, 0);
@@ -549,6 +579,35 @@ bool ParseArgs(int argc, wchar_t** argv, Args* out) {
   return true;
 }
 
+// Hashes, verifies, and installs through one locked handle; see
+// OpenLockedForRead. Returns the msiexec exit code or a helper exit code.
+int VerifyAndInstall(const Args& args) {
+  LogLine(L"dacx exited, verifying sha256");
+  HANDLE msi = OpenLockedForRead(args.msi);
+  if (msi == INVALID_HANDLE_VALUE) {
+    LogLine(L"msi open failed err=" + std::to_wstring(GetLastError()));
+    return 12;
+  }
+  int rc = 0;
+  std::wstring actual;
+  if (!Sha256Handle(msi, &actual)) {
+    LogLine(L"sha256 compute failed");
+    rc = 12;
+  } else if (_wcsicmp(actual.c_str(), args.sha256.c_str()) != 0) {
+    LogLine(L"sha256 mismatch expected=" + args.sha256 + L" actual=" + actual);
+    rc = 12;
+  } else if ((!args.thumbprint.empty() || !args.publisher.empty()) &&
+             !VerifyAuthenticode(args.msi, args.thumbprint, args.publisher,
+                                 &rc)) {
+    // rc set by VerifyAuthenticode.
+  } else {
+    LogLine(L"launching msiexec");
+    rc = LaunchMsiexec(args.msi);
+  }
+  CloseHandle(msi);
+  return rc;
+}
+
 int Run(int argc, wchar_t** argv) {
   Args args;
   if (!ParseArgs(argc, argv, &args)) {
@@ -564,37 +623,22 @@ int Run(int argc, wchar_t** argv) {
   const int wait_rc = WaitForPid(args.pid);
   if (wait_rc != 0) return wait_rc;
 
-  LogLine(L"dacx exited, verifying sha256");
-  std::wstring actual;
-  if (!Sha256File(args.msi, &actual)) {
-    LogLine(L"sha256 compute failed");
-    return 12;
-  }
-  if (_wcsicmp(actual.c_str(), args.sha256.c_str()) != 0) {
-    LogLine(L"sha256 mismatch expected=" + args.sha256 + L" actual=" + actual);
-    return 12;
-  }
-
-  if (!args.thumbprint.empty() || !args.publisher.empty()) {
-    int auth_rc = 0;
-    if (!VerifyAuthenticode(args.msi, args.thumbprint, args.publisher,
-                            &auth_rc)) {
-      return auth_rc;
-    }
-  }
-
-  LogLine(L"launching msiexec");
-  const int msi_rc = LaunchMsiexec(args.msi);
-  if (MsiexecSucceeded(msi_rc)) {
-    std::wstring exe = args.exe;
-    if (exe.empty()) exe = DefaultExeBesideHelper();
+  std::wstring exe = args.exe;
+  if (exe.empty()) exe = DefaultExeBesideHelper();
+  const int rc = VerifyAndInstall(args);
+  if (MsiexecSucceeded(rc)) {
     NotifyShellExeChanged(exe);
     RefreshPinnedShortcuts(exe);
-    if (args.relaunch) {
-      RelaunchDacx(exe);
-    }
+  } else {
+    // Dacx already quit for the update. Bring the installed version back so a
+    // cancelled UAC prompt or failed install does not leave the user with no app.
+    LogLine(L"update not installed rc=" + std::to_wstring(rc) +
+            L"; relaunching current version");
   }
-  return msi_rc;
+  if (args.relaunch) {
+    RelaunchDacx(exe);
+  }
+  return rc;
 }
 
 }  // namespace

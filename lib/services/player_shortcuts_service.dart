@@ -28,6 +28,12 @@ enum PlayerShortcutAction {
   speedFaster,
   cycleSpeed,
   openUrl,
+  cycleAdvancedLoop,
+  subtitleDelayBack,
+  subtitleDelayForward,
+  audioDelayBack,
+  audioDelayForward,
+  addPlaybackMarker,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -57,6 +63,12 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.speedFaster: [']'],
   PlayerShortcutAction.cycleSpeed: ['\\'],
   PlayerShortcutAction.openUrl: ['Ctrl+U'],
+  PlayerShortcutAction.cycleAdvancedLoop: ['L'],
+  PlayerShortcutAction.subtitleDelayBack: ['Z'],
+  PlayerShortcutAction.subtitleDelayForward: ['Shift+Z'],
+  PlayerShortcutAction.audioDelayBack: ['Ctrl+-'],
+  PlayerShortcutAction.audioDelayForward: ['Ctrl+='],
+  PlayerShortcutAction.addPlaybackMarker: ['Ctrl+B'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -88,6 +100,13 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
       PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
       PlayerShortcutAction.openUrl => l10n.shortcutOpenUrl,
+      PlayerShortcutAction.cycleAdvancedLoop => l10n.shortcutCycleAdvancedLoop,
+      PlayerShortcutAction.subtitleDelayBack => l10n.shortcutSubtitleDelayBack,
+      PlayerShortcutAction.subtitleDelayForward =>
+        l10n.shortcutSubtitleDelayForward,
+      PlayerShortcutAction.audioDelayBack => l10n.shortcutAudioDelayBack,
+      PlayerShortcutAction.audioDelayForward => l10n.shortcutAudioDelayForward,
+      PlayerShortcutAction.addPlaybackMarker => l10n.shortcutAddPlaybackMarker,
     };
   }
   return switch (a) {
@@ -116,10 +135,28 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.speedFaster => 'Increase playback speed',
     PlayerShortcutAction.cycleSpeed => 'Cycle playback speed',
     PlayerShortcutAction.openUrl => 'Open URL',
+    PlayerShortcutAction.cycleAdvancedLoop => 'Cycle A-B repeat',
+    PlayerShortcutAction.subtitleDelayBack => 'Decrease subtitle delay',
+    PlayerShortcutAction.subtitleDelayForward => 'Increase subtitle delay',
+    PlayerShortcutAction.audioDelayBack => 'Decrease audio delay',
+    PlayerShortcutAction.audioDelayForward => 'Increase audio delay',
+    PlayerShortcutAction.addPlaybackMarker => 'Add playback marker',
   };
 }
 
 class PlayerShortcutsService {
+  static bool isAdvancedAction(PlayerShortcutAction action) {
+    return switch (action) {
+      PlayerShortcutAction.cycleAdvancedLoop ||
+      PlayerShortcutAction.subtitleDelayBack ||
+      PlayerShortcutAction.subtitleDelayForward ||
+      PlayerShortcutAction.audioDelayBack ||
+      PlayerShortcutAction.audioDelayForward ||
+      PlayerShortcutAction.addPlaybackMarker => true,
+      _ => false,
+    };
+  }
+
   /// Resolves a key event into an action.
   ///
   /// Default behavior preserves the original built-in mapping. When
@@ -301,6 +338,43 @@ class PlayerShortcutsService {
         !isShiftPressed &&
         key == LogicalKeyboardKey.backslash) {
       return PlayerShortcutAction.cycleSpeed;
+    }
+    return null;
+  }
+
+  /// Resolves the opt-in advanced playback accelerators. Kept separate from
+  /// the legacy default resolver so callers that rely on its historical
+  /// minimalist mapping remain compatible; PlayerScreen invokes this only
+  /// after the advanced tools gate is enabled.
+  static PlayerShortcutAction? resolveAdvanced({
+    required KeyEvent event,
+    required bool isMetaPressed,
+    required bool isControlPressed,
+    required bool isShiftPressed,
+  }) {
+    if (event is! KeyDownEvent) return null;
+    final key = event.logicalKey;
+    final primary = isMetaPressed || isControlPressed;
+    if (primary && key == LogicalKeyboardKey.keyB) {
+      return PlayerShortcutAction.addPlaybackMarker;
+    }
+    if (primary &&
+        (key == LogicalKeyboardKey.minus ||
+            key == LogicalKeyboardKey.numpadSubtract)) {
+      return PlayerShortcutAction.audioDelayBack;
+    }
+    if (primary &&
+        (key == LogicalKeyboardKey.equal ||
+            key == LogicalKeyboardKey.numpadAdd)) {
+      return PlayerShortcutAction.audioDelayForward;
+    }
+    if (!primary && key == LogicalKeyboardKey.keyL) {
+      return PlayerShortcutAction.cycleAdvancedLoop;
+    }
+    if (!primary && key == LogicalKeyboardKey.keyZ) {
+      return isShiftPressed
+          ? PlayerShortcutAction.subtitleDelayForward
+          : PlayerShortcutAction.subtitleDelayBack;
     }
     return null;
   }

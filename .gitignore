@@ -29,6 +29,7 @@ Thumbs.db
 # Coverage
 coverage/
 .lcov
+test-results/
 
 # Release artifacts
 release/

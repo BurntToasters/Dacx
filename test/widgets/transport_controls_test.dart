@@ -13,9 +13,109 @@ Widget _wrap(Widget child) {
   );
 }
 
+void _wideTestWidgets(String description, WidgetTesterCallback body) {
+  testWidgets(description, (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await body(tester);
+  });
+}
+
+Widget _fullyWiredControls({
+  VoidCallback? onReopenLast,
+  VoidCallback? onSettingsPressed,
+  VoidCallback? onCycleSpeed,
+}) {
+  return TransportControls(
+    isPlaying: true,
+    volume: 50,
+    hasMedia: true,
+    speed: 1.5,
+    loopMode: LoopMode.none,
+    recentFiles: const ['/media/recent.mp3'],
+    onPlayPause: () {},
+    onStop: () {},
+    onOpenFile: () {},
+    onOpenFolder: () {},
+    onOpenUrl: () {},
+    onReopenLast: onReopenLast ?? () {},
+    onVolumeChanged: (_) {},
+    onLoopModeChanged: (_) {},
+    onRecentFileSelected: (_) {},
+    onSettingsPressed: onSettingsPressed ?? () {},
+    onPrevious: () {},
+    onNext: () {},
+    onToggleQueue: () {},
+    onMoreActions: () {},
+    onToggleMute: () {},
+    onCycleSpeed: onCycleSpeed ?? () {},
+  );
+}
+
+void _useMinimumWindow(WidgetTester tester) {
+  tester.view.physicalSize = const Size(480, 320);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 void main() {
+  group('TransportControls at minimum window width', () {
+    testWidgets('lays out without overflow and keeps settings tappable', (
+      tester,
+    ) async {
+      _useMinimumWindow(tester);
+      var settingsPressed = false;
+
+      await tester.pumpWidget(
+        _wrap(
+          _fullyWiredControls(onSettingsPressed: () => settingsPressed = true),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('More'), findsOneWidget);
+      await tester.tap(find.byTooltip('Settings'));
+      expect(settingsPressed, isTrue);
+    });
+
+    testWidgets('overflow menu reaches reopen last and speed', (tester) async {
+      _useMinimumWindow(tester);
+      var reopenPressed = false;
+      var speedCycles = 0;
+
+      await tester.pumpWidget(
+        _wrap(
+          _fullyWiredControls(
+            onReopenLast: () => reopenPressed = true,
+            onCycleSpeed: () => speedCycles++,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('transport-compact-overflow')));
+      await tester.pumpAndSettle();
+      expect(find.text('1.5×'), findsOneWidget);
+      await tester.ensureVisible(find.text('Cycle playback speed'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cycle playback speed'));
+      await tester.pumpAndSettle();
+      expect(speedCycles, 1);
+
+      await tester.tap(find.byKey(const Key('transport-compact-overflow')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Reopen last file (Ctrl/Cmd+R)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reopen last file (Ctrl/Cmd+R)'));
+      await tester.pumpAndSettle();
+      expect(reopenPressed, isTrue);
+    });
+  });
+
   group('TransportControls', () {
-    testWidgets('reopen button is visible and enabled', (tester) async {
+    _wideTestWidgets('reopen button is visible and enabled', (tester) async {
       var reopenPressed = false;
 
       await tester.pumpWidget(
@@ -51,7 +151,7 @@ void main() {
       expect(reopenPressed, isTrue);
     });
 
-    testWidgets('recent dropdown hidden when there are no recent files', (
+    _wideTestWidgets('recent dropdown hidden when there are no recent files', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -78,7 +178,7 @@ void main() {
       expect(find.byTooltip('Recent files'), findsNothing);
     });
 
-    testWidgets(
+    _wideTestWidgets(
       'recent dropdown appears when at least one recent file exists',
       (tester) async {
         await tester.pumpWidget(
@@ -106,7 +206,7 @@ void main() {
       },
     );
 
-    testWidgets('folder button appears when callback is provided', (
+    _wideTestWidgets('folder button appears when callback is provided', (
       tester,
     ) async {
       var folderPressed = false;
@@ -138,7 +238,7 @@ void main() {
       expect(folderPressed, isTrue);
     });
 
-    testWidgets('url button is hidden unless callback is provided', (
+    _wideTestWidgets('url button is hidden unless callback is provided', (
       tester,
     ) async {
       Widget build({VoidCallback? onOpenUrl}) {
@@ -173,7 +273,7 @@ void main() {
       );
     });
 
-    testWidgets('more menu is enabled without media', (tester) async {
+    _wideTestWidgets('more menu is enabled without media', (tester) async {
       var morePressed = false;
       await tester.binding.setSurfaceSize(const Size(1280, 720));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -210,7 +310,7 @@ void main() {
       expect(morePressed, isTrue);
     });
 
-    testWidgets('speed chip cycles when tapped', (tester) async {
+    _wideTestWidgets('speed chip cycles when tapped', (tester) async {
       var cycles = 0;
       await tester.pumpWidget(
         _wrap(

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+
 import 'dart:convert';
 
 import 'package:dacx/services/self_update_service.dart';

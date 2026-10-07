@@ -1,15 +1,15 @@
-<!-- > [!NOTE]
-> 🅱️ This is a Beta build. -->
+> [!NOTE]
+> 🅱️ This is a Beta build.
 
 # ⬇️ Downloads
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Windows-x64.msi) | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.AppImage) |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-macOS.zip)** | **DEB (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-amd64.deb) |
-| | | **RPM (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.rpm) |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v0.11.3/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-Windows-x64.msi) | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-Linux-x86_64.AppImage) |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-macOS.zip)** | **DEB (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-Linux-amd64.deb) |
+| | | **RPM (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-Linux-x86_64.rpm) |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-Linux-x86_64.flatpak) |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.0.0-beta.1/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -17,6 +17,25 @@
 > ⚠️ Arm64 Linux and Windows Binaries are NOT available at the moment. Its something I may get around to in the future but its not a priority.
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
+
+## Changes in `v1.0.0-beta.1:`
+- **NEW - Opt-in advanced playback tools:** Per-file audio/subtitle sync, A-B repeat, playback markers, and subtitle appearance controls are available behind a disabled-by-default setting, preserving Dacx's minimalist default experience.
+- **Fix - Resume after quit:** Closing the window, quitting from the tray, or pressing `Cmd+Q` now saves the current position before exit. Pausing also saves it, so pause → seek → quit resumes at the seek target instead of an older position.
+- **Fix - Window size and position on quit:** A resize or move made just before quitting is now saved.
+- **Fix - macOS Recents:** Deleted or moved files no longer stay in Recents because a saved file-access bookmark exists. Dacx now resolves the bookmark and checks the file is really there.
+- **Fix - Playlist import encodings:** `.m3u` / `.pls` files in Latin-1 / Windows-1252 or UTF-16 now import instead of failing. A UTF-8 byte-order mark no longer ends up in the first entry.
+- **Fix - Stalled update downloads:** An update download that stops receiving data now fails after 60 seconds instead of hanging the progress dialog. Partial downloads are deleted.
+- **Fix - Windows update cancelled:** If the UAC prompt is cancelled or the installer fails, Dacx now reopens the installed version instead of staying closed.
+- **Fix - Log privacy:** Copied debug logs now fully redact paths that contain spaces (such as `C:\Users\Jane Doe\…`), quoted paths, and local paths in stack traces. URLs with embedded credentials are stripped instead of shown raw.
+- **Fix - macOS startup:** The hardware-acceleration check no longer runs a second time on the UI thread before the first frame.
+- **Fix - Linux media artwork:** Artwork for system media controls is now stored in your cache folder (`~/.cache/dacx`) instead of a shared `/tmp` folder, and multiple windows no longer overwrite each other's artwork.
+- **Fix - Responsiveness on slow drives:** Opening, dropping, and checking Recents no longer freeze the window while a slow or disconnected network drive is checked.
+- **Update - Error log:** Errors are now kept in `errors.log` in Dacx's app data folder (redacted, capped at 512 KB) so they survive a crash or quit. Copying the debug log includes errors from earlier sessions; **Clear** deletes the file.
+- **Update - Windows update hardening:** The update helper keeps the verified installer locked until installation finishes, so it cannot be swapped after verification. Opening files from a second Dacx instance can no longer be blocked by a stalled sender.
+- **Update - Naming:** Linux media controls now show "Dacx". New screenshots go to `Pictures/Dacx`; an existing `Pictures/DACX` folder keeps being used.
+- **Release safety:** `npm run u` now synchronizes versioned download URLs and creates the next blank changelog section. Release notes, artifact names, checksums, Ed25519/GPG signatures, remote bytes, and platform playback receipts are verified before publication.
+- **Platform E2E:** Windows, macOS, and Linux runners generate deterministic media fixtures and retain repeatable JSON evidence. Packaged smoke requires real duration/playing proof from the exact versioned candidate; process survival alone cannot pass.
+- **Dependencies:** Updated Flutter/Dart package baselines, `file_picker`, and `tray_manager`; retained the newest `dbus` release compatible with `desktop_drop`.
 
 ## Changes in `v0.11.3:`
 * **PKG:** Updated dependencies.

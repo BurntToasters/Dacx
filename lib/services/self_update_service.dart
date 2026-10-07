@@ -17,39 +17,38 @@ import 'update_service.dart';
 import 'windows_system_paths.dart';
 import 'windows_process_ffi.dart';
 
-typedef HttpStreamFn =
-    Future<http.StreamedResponse> Function(http.BaseRequest request);
-typedef ProcessRunFn =
-    Future<ProcessResult> Function(String executable, List<String> arguments);
-typedef WindowsSpawnFn =
-    Future<WindowsSpawnResult> Function(
-      String commandLine, {
-      String? applicationName,
-    });
-typedef SelfUpdateDownloadFn =
-    Future<void> Function(
-      String url,
-      File outFile, {
-      void Function(SelfUpdateProgress)? onProgress,
-    });
+typedef HttpStreamFn = Future<http.StreamedResponse> Function(
+  http.BaseRequest request,
+);
+typedef ProcessRunFn = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
+typedef WindowsSpawnFn = Future<WindowsSpawnResult> Function(
+  String commandLine, {
+  String? applicationName,
+});
+typedef SelfUpdateDownloadFn = Future<void> Function(
+  String url,
+  File outFile, {
+  void Function(SelfUpdateProgress)? onProgress,
+});
 typedef SelfUpdateFetchTextFn = Future<String> Function(String url);
 typedef SelfUpdateFetchBytesFn = Future<List<int>> Function(String url);
-typedef ValidateWindowsManifestFn =
-    Future<SelfUpdateResult> Function({
-      required List<int> manifestBytes,
-      required List<int> signatureBytes,
-      required String version,
-      required String assetName,
-    });
-typedef MacUpdateInstallFn =
-    Future<Map<String, dynamic>?> Function({
-      required String zipUrl,
-      required String checksumHex,
-      required String installedAppPath,
-      required String expectedTeamId,
-      required String expectedVersion,
-      required bool relaunch,
-    });
+typedef ValidateWindowsManifestFn = Future<SelfUpdateResult> Function({
+  required List<int> manifestBytes,
+  required List<int> signatureBytes,
+  required String version,
+  required String assetName,
+});
+typedef MacUpdateInstallFn = Future<Map<String, dynamic>?> Function({
+  required String zipUrl,
+  required String checksumHex,
+  required String installedAppPath,
+  required String expectedTeamId,
+  required String expectedVersion,
+  required bool relaunch,
+});
 
 enum SelfUpdateOutcome {
   unsupportedPlatform,
@@ -131,7 +130,7 @@ class SelfUpdateService {
   final String? _expectedWindowsSignerPublisherOverride;
 
   SelfUpdateService({
-    DebugLogService? debugLog,
+    this._debugLog,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
     WindowsSpawnFn? windowsSpawn,
@@ -140,25 +139,18 @@ class SelfUpdateService {
     @visibleForTesting SelfUpdateFetchBytesFn? fetchBytes,
     @visibleForTesting ValidateWindowsManifestFn? validateWindowsManifest,
     @visibleForTesting MacUpdateInstallFn? macUpdateInstall,
-    @visibleForTesting String? expectedTeamIdOverride,
-    @visibleForTesting String? windowsManifestPublicKeyOverride,
-    @visibleForTesting String? expectedWindowsSignerThumbprintOverride,
-    @visibleForTesting String? expectedWindowsSignerPublisherOverride,
-  }) : _debugLog = debugLog,
-       _httpStream = httpStream ?? platformHttpStreamFn,
+    @visibleForTesting this._expectedTeamIdOverride,
+    @visibleForTesting this._windowsManifestPublicKeyOverride,
+    @visibleForTesting this._expectedWindowsSignerThumbprintOverride,
+    @visibleForTesting this._expectedWindowsSignerPublisherOverride,
+  }) : _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
        _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn,
        _downloadToOverride = downloadTo,
        _fetchTextOverride = fetchText,
        _fetchBytesOverride = fetchBytes,
        _validateWindowsManifestOverride = validateWindowsManifest,
-       _macUpdateInstallOverride = macUpdateInstall,
-       _expectedTeamIdOverride = expectedTeamIdOverride,
-       _windowsManifestPublicKeyOverride = windowsManifestPublicKeyOverride,
-       _expectedWindowsSignerThumbprintOverride =
-           expectedWindowsSignerThumbprintOverride,
-       _expectedWindowsSignerPublisherOverride =
-           expectedWindowsSignerPublisherOverride;
+       _macUpdateInstallOverride = macUpdateInstall;
 
   static Future<WindowsSpawnResult> _defaultWindowsSpawn(
     String commandLine, {
@@ -471,15 +463,24 @@ class SelfUpdateService {
     final total = resp.contentLength;
     var downloaded = 0;
     final sink = outFile.openWrite();
+    var completed = false;
     try {
       await resp.stream.listen((chunk) {
         sink.add(chunk);
         downloaded += chunk.length;
         onProgress?.call(SelfUpdateProgress(downloaded, total));
       }).asFuture<void>();
+      completed = true;
     } finally {
       await sink.flush();
       await sink.close();
+      if (!completed) {
+        // Drop the partial download so a stalled or failed transfer never
+        // lingers in the update cache.
+        try {
+          await outFile.delete();
+        } catch (_) {}
+      }
     }
   }
 
@@ -823,8 +824,7 @@ class SelfUpdateService {
     if (publicKey.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
-        message:
-            'Self-update is misconfigured: Windows update manifest public key is not set.',
+        message: 'Self-update is misconfigured: Windows update manifest public key is not set.',
       );
     }
 
@@ -953,8 +953,7 @@ class SelfUpdateService {
     if (expected.isEmpty && expectedPublisher.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
-        message:
-            'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT or DACX_WINDOWS_SIGNER_PUBLISHER was not set at build time.',
+        message: 'Self-update is misconfigured: DACX_WINDOWS_SIGNER_THUMBPRINT or DACX_WINDOWS_SIGNER_PUBLISHER was not set at build time.',
       );
     }
 
@@ -990,7 +989,7 @@ class SelfUpdateService {
             'expected publisher $expectedPublisher, got "${parsed.publisher}"',
       );
     }
-    if (expectedPublisher.isEmpty && parsed.thumbprint != expected) {
+    if (expected.isNotEmpty && parsed.thumbprint != expected) {
       return SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message: 'expected signer $expected, got "${parsed.thumbprint}"',
@@ -1128,8 +1127,7 @@ exit 0
     if (teamId.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.gatekeeperRejected,
-        message:
-            'Self-update is misconfigured: DACX_APPLE_TEAM_ID was not set at build time.',
+        message: 'Self-update is misconfigured: DACX_APPLE_TEAM_ID was not set at build time.',
       );
     }
     final asset =
@@ -1217,15 +1215,17 @@ exit 0
     required String expectedVersion,
     required bool relaunch,
   }) {
-    return _macUpdateChannel
-        .invokeMapMethod<String, dynamic>('installUpdateFromUrl', {
-          'zipUrl': zipUrl,
-          'checksumHex': checksumHex,
-          'installedAppPath': installedAppPath,
-          'expectedTeamId': expectedTeamId,
-          'expectedVersion': expectedVersion,
-          'relaunch': relaunch,
-        });
+    return _macUpdateChannel.invokeMapMethod<String, dynamic>(
+      'installUpdateFromUrl',
+      {
+        'zipUrl': zipUrl,
+        'checksumHex': checksumHex,
+        'installedAppPath': installedAppPath,
+        'expectedTeamId': expectedTeamId,
+        'expectedVersion': expectedVersion,
+        'relaunch': relaunch,
+      },
+    );
   }
 
   static const macUpdateChannelName = 'run.rosie.dacx/update';

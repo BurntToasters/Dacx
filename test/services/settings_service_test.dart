@@ -59,7 +59,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
 
       expect(changed, isTrue);
       expect(service.recentFiles, [existing.path]);
@@ -78,7 +78,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
 
       expect(changed, isTrue);
       expect(service.recentFiles, [url]);
@@ -116,7 +116,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
 
       expect(changed, isTrue);
       expect(service.recentFiles, [safeUrl]);

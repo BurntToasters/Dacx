@@ -1,4 +1,4 @@
-# x-version: 0.11.3
+# x-version: 1.0.0-beta.1
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
@@ -19,7 +19,6 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.freedesktop.ScreenSaver
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --talk-name=org.mpris.MediaPlayer2.dacx
   - --own-name=org.mpris.MediaPlayer2.dacx
 
 modules:

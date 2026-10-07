@@ -6,6 +6,13 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/seek_preview_service.dart';
 
+class SeekMarker {
+  const SeekMarker({required this.position, required this.label});
+
+  final Duration position;
+  final String label;
+}
+
 class SeekSliderWithHover extends StatefulWidget {
   const SeekSliderWithHover({
     super.key,
@@ -16,6 +23,9 @@ class SeekSliderWithHover extends StatefulWidget {
     required this.onSeekEnd,
     this.previewService,
     this.previewEnabled = false,
+    this.markerPositions = const [],
+    this.rangeStart,
+    this.rangeEnd,
   });
 
   final Duration position;
@@ -25,6 +35,9 @@ class SeekSliderWithHover extends StatefulWidget {
   final ValueChanged<double> onSeekEnd;
   final SeekPreviewService? previewService;
   final bool previewEnabled;
+  final List<SeekMarker> markerPositions;
+  final Duration? rangeStart;
+  final Duration? rangeEnd;
 
   @override
   State<SeekSliderWithHover> createState() => _SeekSliderWithHoverState();
@@ -67,14 +80,79 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
       child: Semantics(
         slider: true,
         label: AppLocalizations.of(context).semanticsSeekBar,
-        value: AppLocalizations.of(
-          context,
-        ).semanticsSeekBarValue(positionLabel, durationLabel),
+        value: AppLocalizations.of(context)
+            .semanticsSeekBarValue(positionLabel, durationLabel),
         child: LayoutBuilder(
           builder: (context, constraints) {
             return Stack(
               clipBehavior: Clip.none,
               children: [
+                if (maxMs > 0 &&
+                    widget.rangeStart != null &&
+                    widget.rangeEnd != null &&
+                    widget.rangeEnd! >= widget.rangeStart!)
+                  Positioned(
+                    left:
+                        constraints.maxWidth *
+                        (widget.rangeStart!.inMilliseconds / maxMs).clamp(
+                          0.0,
+                          1.0,
+                        ),
+                    right:
+                        constraints.maxWidth *
+                        (1.0 -
+                                (widget.rangeEnd!.inMilliseconds / maxMs).clamp(
+                                  0.0,
+                                  1.0,
+                                ))
+                            .clamp(0.0, constraints.maxWidth),
+                    top: 19,
+                    child: IgnorePointer(
+                      child: Semantics(
+                        container: true,
+                        label: AppLocalizations.of(context)
+                            .seekLoopRangeSemantics(
+                              _fmt(widget.rangeStart!),
+                              _fmt(widget.rangeEnd!),
+                            ),
+                        child: Container(
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(alpha: 0.44),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (maxMs > 0)
+                  for (final marker in widget.markerPositions)
+                    Positioned(
+                      left:
+                          (constraints.maxWidth *
+                              (marker.position.inMilliseconds / maxMs).clamp(
+                                0.0,
+                                1.0,
+                              )) -
+                          3,
+                      top: 15,
+                      child: IgnorePointer(
+                        child: Semantics(
+                          container: true,
+                          label: AppLocalizations.of(context)
+                              .seekMarkerSemantics(marker.label),
+                          child: Container(
+                            width: 6,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.secondary,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 MouseRegion(
                   onHover: (e) {
                     final width = constraints.maxWidth;

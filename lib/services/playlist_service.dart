@@ -1,10 +1,25 @@
 import 'dart:math';
-import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
 import '../models/playable_source.dart';
+import 'path_probe.dart';
+
+class PlaylistSnapshot {
+  const PlaylistSnapshot({
+    required this.items,
+    required this.index,
+    required this.shuffle,
+    required this.shuffleOrder,
+    required this.shufflePos,
+  });
+
+  final List<PlayableSource> items;
+  final int index;
+  final bool shuffle;
+  final List<int> shuffleOrder;
+  final int shufflePos;
+}
 
 /// In-memory playback queue. Snapshot persistence lives in [SettingsService];
 /// this class itself only holds the live session state. The `index` is `-1`
@@ -19,8 +34,10 @@ class PlaylistService extends ChangeNotifier {
   final List<int> _shuffleOrder = [];
   int _shufflePos = -1;
   bool _disposed = false;
+  int _revision = 0;
 
   List<PlayableSource> get items => List.unmodifiable(_items);
+  int get revision => _revision;
   int get index => _index;
   int get length => _items.length;
   bool get isEmpty => _items.isEmpty;
@@ -30,6 +47,43 @@ class PlaylistService extends ChangeNotifier {
   bool get shuffle => _shuffle;
   bool get hasNext => _peekRelative(1) != null;
   bool get hasPrevious => _peekRelative(-1) != null;
+
+  @override
+  void notifyListeners() {
+    _revision++;
+    super.notifyListeners();
+  }
+
+  PlaylistSnapshot capture() {
+    return PlaylistSnapshot(
+      items: List<PlayableSource>.of(_items),
+      index: _index,
+      shuffle: _shuffle,
+      shuffleOrder: List<int>.of(_shuffleOrder),
+      shufflePos: _shufflePos,
+    );
+  }
+
+  void restore(PlaylistSnapshot snapshot) {
+    _items
+      ..clear()
+      ..addAll(snapshot.items);
+    _shuffle = snapshot.shuffle;
+    _shuffleOrder
+      ..clear()
+      ..addAll(snapshot.shuffleOrder);
+    _shufflePos = snapshot.shufflePos;
+    if (_items.isEmpty) {
+      _index = -1;
+      _shuffleOrder.clear();
+      _shufflePos = -1;
+    } else if (snapshot.index < 0 || snapshot.index >= _items.length) {
+      _index = 0;
+    } else {
+      _index = snapshot.index;
+    }
+    notifyListeners();
+  }
 
   void setShuffle(bool value) {
     if (_shuffle == value) return;
@@ -178,9 +232,7 @@ class PlaylistService extends ChangeNotifier {
         .toSet();
     if (checkedPaths.isEmpty) return 0;
     final pathsToCheck = checkedPaths.toList(growable: false);
-    final existingPaths = (await Isolate.run(
-      () => _existingFilePaths(pathsToCheck),
-    )).toSet();
+    final existingPaths = await PathProbe.existingFiles(pathsToCheck);
     if (_disposed) return 0;
     final missingPaths = checkedPaths.difference(existingPaths);
     if (missingPaths.isEmpty) return 0;
@@ -294,16 +346,4 @@ class PlaylistService extends ChangeNotifier {
       ..addAll(indices);
     _shufflePos = preserveCurrent ? 0 : -1;
   }
-}
-
-List<String> _existingFilePaths(List<String> paths) {
-  final existing = <String>[];
-  for (final path in paths) {
-    try {
-      if (File(path).existsSync()) existing.add(path);
-    } catch (_) {
-      // Treat inaccessible paths as missing.
-    }
-  }
-  return existing;
 }

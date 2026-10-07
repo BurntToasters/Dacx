@@ -7,17 +7,18 @@ import 'package:flutter/services.dart';
 import '../playback/player_path_utils.dart';
 import '../playback/subscription_bag.dart';
 
-typedef OpenFileRequestCallback =
-    Future<void> Function(OpenFileRequest request, {required bool forcePlay});
+typedef OpenFileRequestCallback = Future<void> Function(
+  OpenFileRequest request, {
+  required bool forcePlay,
+});
 
-typedef OpenFileBridgeLogger =
-    void Function(
-      String event, {
-      String? message,
-      Map<String, Object?> details,
-      bool warn,
-      bool error,
-    });
+typedef OpenFileBridgeLogger = void Function(
+  String event, {
+  String? message,
+  Map<String, Object?> details,
+  bool warn,
+  bool error,
+});
 
 /// Bridges native "Open With" / second-instance file delivery into Dart.
 ///
