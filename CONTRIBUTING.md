@@ -23,7 +23,9 @@ This runs version sync, static checks, hygiene, analyze, format, unit tests, cov
 
 Before a stable cut, run the manual checklist in [docs/QA.md](docs/QA.md).
 
-`release:prepare` intentionally does **not** run a clean-tree / branch guard; maintainers release from the branch they are on after `release:warn`. Keep the working tree intentional; do not assume an automated guard.
+`release:prepare` intentionally does **not** run a clean-tree guard. Keep the working tree intentional; do not assume an automated guard.
+
+`release:draft` (Windows) and `release:wait-draft` (macOS/Linux) do guard the branch: stable versions must be on `main`, beta/alpha versions on `beta`, and local HEAD must equal the freshly fetched `origin/<branch>`. The Windows machine creates the draft with `target_commitish` set to that exact commit, so the tag lands on the branch tip at publish. macOS/Linux refuse a draft that targets a different commit than their checkout; set `FORCE_UPLOAD=1` to bypass that one check.
 
 `release:prepare` validates `CHANGELOG.md` against the package version.
 `release:draft` then copies it into the GitHub draft body. If the matching draft
