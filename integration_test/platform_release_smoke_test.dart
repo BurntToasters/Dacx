@@ -107,11 +107,16 @@ void main() {
         subtitleSet &&
         _matchesPropertyValue(audioRead, 0.100) &&
         _matchesPropertyValue(subtitleRead, -0.100);
+    // Transport boundary through real libmpv. The widget suite fakes
+    // PlayerService, so volume, rate, pause, seek, and completion are only
+    // proven here.
+    final transport = await _exerciseTransport(tester, player);
     final passed =
         duration > Duration.zero &&
         playing &&
         error.isEmpty &&
-        advancedRoundTrip;
+        advancedRoundTrip &&
+        transport['passed'] == true;
     final report = <String, Object?>{
       'schema': 'dacx.e2e.desktop-playback.v1',
       'version': version,
@@ -137,6 +142,7 @@ void main() {
           'subtitleDelayRead': subtitleRead,
           'roundTrip': advancedRoundTrip,
         },
+        'transport': transport,
       },
     };
     final output = reportPath == null || reportPath.trim().isEmpty
@@ -157,6 +163,75 @@ void main() {
       fail('Desktop fixture playback failed; report: ${output.path}');
     }
   });
+}
+
+Future<Map<String, Object?>> _exerciseTransport(
+  WidgetTester tester,
+  PlayerService player,
+) async {
+  var volume = -1.0;
+  var playing = true;
+  var position = Duration.zero;
+  var completed = false;
+  final subscriptions = <StreamSubscription<dynamic>>[
+    player.volumeStream.listen((value) => volume = value),
+    player.playingStream.listen((value) => playing = value),
+    player.positionStream.listen((value) => position = value),
+    player.completedStream.listen((value) {
+      if (value) completed = true;
+    }),
+  ];
+  Future<void> pumpUntil(bool Function() done, {int maxTicks = 50}) async {
+    for (var i = 0; i < maxTicks && !done(); i += 1) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  try {
+    // A saved loop mode would suppress completion; force a single pass.
+    await player.setPlaylistMode(PlaylistMode.none);
+
+    await player.setVolume(42);
+    await pumpUntil(() => (volume - 42).abs() < 0.5);
+    final volumeOk = (volume - 42).abs() < 0.5;
+
+    await player.setRate(1.5);
+    final speedRead = await player.getProperty('speed');
+    final rateOk = _matchesPropertyValue(speedRead, 1.5);
+
+    await player.pause();
+    await pumpUntil(() => !playing);
+    final pauseOk = !playing;
+
+    const seekTarget = Duration(seconds: 3);
+    const seekTolerance = Duration(milliseconds: 500);
+    await player.seek(seekTarget);
+    await pumpUntil(() => (position - seekTarget).abs() < seekTolerance);
+    final seekPosition = position;
+    final seekOk = (seekPosition - seekTarget).abs() < seekTolerance;
+
+    // About 3s of fixture left at 1.5x; allow 8s before calling it failed.
+    await player.play();
+    await pumpUntil(() => completed, maxTicks: 80);
+
+    return {
+      'volumeSet': 42,
+      'volumeObserved': volume,
+      'volumeOk': volumeOk,
+      'speedRead': speedRead,
+      'rateOk': rateOk,
+      'pauseOk': pauseOk,
+      'seekTargetMs': seekTarget.inMilliseconds,
+      'seekObservedMs': seekPosition.inMilliseconds,
+      'seekOk': seekOk,
+      'completed': completed,
+      'passed': volumeOk && rateOk && pauseOk && seekOk && completed,
+    };
+  } finally {
+    for (final subscription in subscriptions) {
+      await subscription.cancel();
+    }
+  }
 }
 
 bool _matchesPropertyValue(String? value, double expected) {

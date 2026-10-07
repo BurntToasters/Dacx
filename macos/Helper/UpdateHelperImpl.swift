@@ -346,7 +346,9 @@ func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
     var result: Result<URL, DownloadFailure> = .failure(DownloadFailure(description: "download did not complete"))
 
     var request = URLRequest(url: url)
-    request.timeoutInterval = 600
+    // Idle timeout: fail when no data arrives for 60s. A slow but steady
+    // download still completes.
+    request.timeoutInterval = 60
     let redirectDelegate = AllowlistedRedirectDelegate()
     let session = URLSession(configuration: .ephemeral,
                              delegate: redirectDelegate,

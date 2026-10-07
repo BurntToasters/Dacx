@@ -16,18 +16,19 @@ import 'package:window_manager/window_manager.dart';
 
 import '../services/player_service.dart';
 import '../services/advanced_playback_controller.dart';
+import '../services/app_exit_hooks.dart';
 import '../services/player_shortcuts_service.dart';
 import '../services/instance_mode_service.dart';
 import '../services/settings_service.dart';
 import '../services/hardware_acceleration_service.dart';
 import '../services/idle_inhibit_service.dart';
 import '../services/debug_log_service.dart';
-import '../services/equalizer_service.dart';
 import '../services/media_session_service.dart';
 import '../services/packaged_e2e_probe.dart';
 import '../services/playlist_service.dart';
 import '../services/bookmark_service.dart';
 import '../services/open_file_bridge.dart';
+import '../services/path_probe.dart';
 import '../services/seek_preview_service.dart';
 import '../services/self_update_service.dart';
 import '../services/windows_shell_service.dart';
@@ -72,6 +73,9 @@ import '../playback/update_launch_policy.dart';
 import '../playback/subscription_bag.dart';
 import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/dialog_sizing.dart';
+import '../widgets/equalizer_dialog.dart';
+import '../widgets/keybinds_dialog.dart';
 import '../widgets/manual_update_check.dart';
 import '../widgets/media_info_dialog.dart';
 import '../widgets/open_url_dialog.dart';
@@ -79,6 +83,7 @@ import '../widgets/osd_overlay.dart';
 import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
+import '../widgets/track_pickers.dart';
 import '../widgets/advanced_playback_dialog.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
@@ -243,7 +248,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
     }
     if (reaction.shouldPruneRecentFiles) {
-      _settings.pruneRecentFiles();
+      unawaited(_settings.pruneRecentFiles());
     }
     if (!mounted || reaction.userMessage == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -274,8 +279,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     unawaited(_seekPreviewService.setEnabled(_settings.seekPreviewEnabled));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isDisposed) return;
-      _settings.pruneRecentFiles(notifyListeners: false);
-      unawaited(_syncWindowsJumpList());
+      unawaited(() async {
+        await _settings.pruneRecentFiles(notifyListeners: false);
+        if (_isDisposed) return;
+        await _syncWindowsJumpList();
+      }());
     });
     final hwDec = _settings.hwDec;
     final hwEnabled = _shouldEnableHardwareAcceleration(hwDec);
@@ -404,6 +412,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           unawaited(packagedProbe.recordPlaying(playing));
         }
         setState(() => _player.isPlaying = playing);
+        // Save on pause: the periodic saver only runs while playing, so a
+        // pause (and any seek after it) would otherwise not be stored.
+        if (!playing && !_player.fileOpenInProgress) {
+          _persistResumePosition();
+        }
         unawaited(_idleInhibit.setPlaying(playing));
         if (!playing) {
           unawaited(WindowsShellService.clearTaskbarProgress());
@@ -446,50 +459,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
-        final artChange = _player.onTracksStream(tracks);
-        if (artChange.uiChanged) {
-          setState(() {});
-          _log(
-            'album_art_track_changed',
-            detailsBuilder: () => {
-              'has_album_art_track': artChange.hasAlbumArt,
-              'track_id': artChange.trackId,
-            },
-          );
-        }
-
-        if (!_player.isAudioFile || !artChange.uiChanged) return;
-
-        final albumArtTrack = PlayerController.firstEmbeddedAlbumArtTrack(
+        _onAlbumArtTracks(tracks);
+        if (_stopInProgress || _player.fileOpenInProgress) return;
+        _cacheTracksForCurrentLoad(
           tracks,
+          refreshChapters: true,
+          gen: _playback.loadGeneration,
         );
-        if (albumArtTrack != null) {
-          final gen = _playback.loadGeneration;
-          unawaited(
-            _playerService
-                .setVideoTrack(albumArtTrack)
-                .then((_) async {
-                  // Let the album-art track settle before exporting for OS chrome.
-                  await Future<void>.delayed(const Duration(milliseconds: 120));
-                  if (!mounted ||
-                      _isDisposed ||
-                      !_playback.isLoadCurrent(gen)) {
-                    return;
-                  }
-                  final source = _player.currentSource;
-                  if (source != null && _settings.mediaSessionEnabled) {
-                    unawaited(_pushMediaSessionMetadata(source));
-                  }
-                })
-                .catchError((Object e) {
-                  _log(
-                    'album_art_track_select_failed',
-                    message: e.toString(),
-                    severity: DebugSeverity.warn,
-                  );
-                }),
-          );
-        }
       }),
       _playerService.errorStream.listen((event) {
         if (!mounted || _isDisposed) return;
@@ -511,15 +487,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             ),
           );
         }
-      }),
-      _playerService.tracksStream.listen((tracks) {
-        if (!mounted || _isDisposed) return;
-        if (_stopInProgress || _player.fileOpenInProgress) return;
-        _cacheTracksForCurrentLoad(
-          tracks,
-          refreshChapters: true,
-          gen: _playback.loadGeneration,
-        );
       }),
       _playerService.completedStream.listen((completed) {
         if (!mounted || _isDisposed || !completed) return;
@@ -578,6 +545,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             );
           },
     );
+
+    AppExitHooks.add(_saveStateBeforeExit);
 
     // Listen for settings changes (speed, loop, always-on-top).
     _settings.addListener(_onSettingsChanged);
@@ -647,6 +616,49 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
+  void _onAlbumArtTracks(Tracks tracks) {
+    final artChange = _player.onTracksStream(tracks);
+    if (artChange.uiChanged) {
+      setState(() {});
+      _log(
+        'album_art_track_changed',
+        detailsBuilder: () => {
+          'has_album_art_track': artChange.hasAlbumArt,
+          'track_id': artChange.trackId,
+        },
+      );
+    }
+
+    if (!_player.isAudioFile || !artChange.uiChanged) return;
+
+    final albumArtTrack = PlayerController.firstEmbeddedAlbumArtTrack(tracks);
+    if (albumArtTrack != null) {
+      final gen = _playback.loadGeneration;
+      unawaited(
+        _playerService
+            .setVideoTrack(albumArtTrack)
+            .then((_) async {
+              // Let the album-art track settle before exporting for OS chrome.
+              await Future<void>.delayed(const Duration(milliseconds: 120));
+              if (!mounted || _isDisposed || !_playback.isLoadCurrent(gen)) {
+                return;
+              }
+              final source = _player.currentSource;
+              if (source != null && _settings.mediaSessionEnabled) {
+                unawaited(_pushMediaSessionMetadata(source));
+              }
+            })
+            .catchError((Object e) {
+              _log(
+                'album_art_track_select_failed',
+                message: e.toString(),
+                severity: DebugSeverity.warn,
+              );
+            }),
+      );
+    }
+  }
+
   Future<void> _initializePackagedE2eProbe() async {
     final probe = await PackagedE2eProbe.fromEnvironment(
       player: _playerService,
@@ -657,9 +669,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await probe.recordPlaying(_player.isPlaying);
   }
 
+  /// Exit hook: window close, tray Quit, and Cmd+Q skip [dispose].
+  Future<void> _saveStateBeforeExit() async {
+    if (_isDisposed) return;
+    _persistResumePosition();
+    await _settings.flushResumePositions();
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
+    AppExitHooks.remove(_saveStateBeforeExit);
     HardwareKeyboard.instance.removeHandler(_onGlobalShortcutKey);
     _shortcutFocus.dispose();
     windowManager.removeListener(this);
@@ -927,7 +947,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           }
           return null;
         case InstanceModeService.getRecentFilesMethod:
-          _settings.pruneRecentFiles(notifyListeners: false);
+          await _settings.pruneRecentFiles(notifyListeners: false);
           return _settings.recentFiles;
         default:
           return null;
@@ -1093,16 +1113,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
     _playlist.setShuffle(on);
     unawaited(_mediaSession.updateShuffle(on));
-  }
-
-  double _dialogWidth(BuildContext context, double desired) {
-    final available = MediaQuery.sizeOf(context).width - 48;
-    return math.min(desired, math.max(280.0, available));
-  }
-
-  double _dialogHeight(BuildContext context, double desired) {
-    final available = MediaQuery.sizeOf(context).height - 120;
-    return math.min(desired, math.max(160.0, available));
   }
 
   void _applyLoopMode(LoopMode mode) {
@@ -1688,7 +1698,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         dir.createSync(recursive: true);
       }
       if (exportGen != _mediaSessionArtExportGen) return null;
-      final file = File(p.join(dir.path, 'artwork-$exportGen.jpg'));
+      // Prefix with the pid so instances never share or delete each other's art.
+      final prefix = 'artwork-$pid-';
+      final file = File(p.join(dir.path, '$prefix$exportGen.jpg'));
       await file.writeAsBytes(bytes, flush: true);
       if (exportGen != _mediaSessionArtExportGen) {
         try {
@@ -1700,12 +1712,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
       final uri = file.uri.toString();
       _lastMediaSessionArtUri = uri;
-      for (final older in dir.listSync().whereType<File>().where(
-        (candidate) =>
-            candidate.path != file.path &&
-            p.basename(candidate.path).startsWith('artwork-') &&
-            p.basename(candidate.path).endsWith('.jpg'),
-      )) {
+      // Own older exports go now; other instances' files only once stale, so
+      // art left by a crashed instance does not pile up.
+      final staleBefore = DateTime.now().subtract(const Duration(days: 1));
+      for (final older in dir.listSync().whereType<File>().where((candidate) {
+        if (candidate.path == file.path) return false;
+        final name = p.basename(candidate.path);
+        if (!name.startsWith('artwork-') || !name.endsWith('.jpg')) {
+          return false;
+        }
+        if (name.startsWith(prefix)) return true;
+        try {
+          return candidate.lastModifiedSync().isBefore(staleBefore);
+        } catch (_) {
+          return false;
+        }
+      })) {
         try {
           await older.delete();
         } catch (_) {
@@ -1788,14 +1810,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         : PlayableSource.file(await _resolveSandboxedPath(requestedValue));
     final normalizedValue = normalizedSource.value;
 
+    final fileExists =
+        _headlessMedia ||
+        !normalizedSource.isFile ||
+        await PathProbe.fileExists(normalizedValue);
+    if (_isDisposed) return false;
     final validation = SourceLoadValidationPolicy.validateNormalizedOpen(
       source: source,
       trimmedValue: requestedValue,
       normalizedSource: normalizedSource,
-      fileExists:
-          _headlessMedia ||
-          !normalizedSource.isFile ||
-          File(normalizedValue).existsSync(),
+      fileExists: fileExists,
     );
     if (!validation.isOk) {
       _handleLoadValidationFailure(
@@ -2076,7 +2100,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     for (final path in paths) {
       await _captureBookmarkFor(path);
       try {
-        if (Directory(path).existsSync()) {
+        if (await PathProbe.directoryExists(path)) {
           final scan = await MediaFolderScanner.scan(
             path,
             maxItems: PlaylistService.maxQueueItems,
@@ -2102,7 +2126,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
       if (!_headlessMedia) {
         try {
-          if (!File(path).existsSync()) {
+          if (!await PathProbe.fileExists(path)) {
             inaccessible++;
             continue;
           }
@@ -2160,7 +2184,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _loadRecentFile(String path) {
-    _settings.pruneRecentFiles();
+    unawaited(_settings.pruneRecentFiles());
     _log('recent_file_open_requested', detailsBuilder: () => {'path': path});
     final source = PlayableSource.fromStored(path);
     if (source == null) return;
@@ -2172,7 +2196,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<void> _reopenLastFile() async {
-    _settings.pruneRecentFiles();
+    await _settings.pruneRecentFiles();
+    if (!mounted || _isDisposed) return;
     final recents = _settings.recentFiles;
     if (recents.isEmpty) {
       _log('reopen_last_fallback_open_picker', category: DebugLogCategory.ui);
@@ -2213,7 +2238,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           settings: _settings,
           debugLog: widget.debugLog,
           updateService: _updateService,
-          onEditKeybinds: () => unawaited(_showKeybindsDialog()),
+          onEditKeybinds: () => unawaited(
+            showKeybindsDialog(context: context, settings: _settings),
+          ),
         ),
         opaque: false,
         transitionsBuilder: (context, animation, _, child) {
@@ -2337,7 +2364,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         (event.logicalKey == LogicalKeyboardKey.f1 ||
             (event.logicalKey == LogicalKeyboardKey.question) ||
             (event.logicalKey == LogicalKeyboardKey.slash && shiftPressed))) {
-      unawaited(_showKeybindsDialog());
+      unawaited(showKeybindsDialog(context: context, settings: _settings));
       return KeyEventResult.handled;
     }
     final custom = _settings.keybinds;
@@ -3942,9 +3969,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         userDirsContents: userDirs,
         directoryExists: (path) => Directory(path).existsSync(),
       );
-      if (pictures != null) return p.join(pictures, 'DACX');
+      if (pictures != null) return _screenshotFolderIn(pictures);
     }
-    return p.join(home, 'Pictures', 'DACX');
+    return _screenshotFolderIn(p.join(home, 'Pictures'));
+  }
+
+  /// Screenshots go to `Pictures/Dacx`. Releases before 1.0 used `DACX`; keep
+  /// using that folder when it exists so screenshots do not split across two
+  /// folders on case-sensitive file systems.
+  String _screenshotFolderIn(String pictures) {
+    final legacy = p.join(pictures, 'DACX');
+    try {
+      if (Directory(legacy).existsSync()) return legacy;
+    } catch (_) {
+      // Fall through to the current name.
+    }
+    return p.join(pictures, 'Dacx');
   }
 
   Directory _mediaSessionArtDirectory() {
@@ -3967,6 +4007,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         );
       }
     }
+    if (Platform.isLinux) {
+      // Linux `/tmp` is shared between users; a fixed folder there can be
+      // pre-created and seeded with symlinks. Use the per-user cache instead.
+      final cacheHome = Platform.environment['XDG_CACHE_HOME'];
+      if (cacheHome != null && cacheHome.startsWith('/')) {
+        return Directory(p.join(cacheHome, 'dacx', 'media-session'));
+      }
+      final home = Platform.environment['HOME'];
+      if (home != null && home.startsWith('/')) {
+        return Directory(p.join(home, '.cache', 'dacx', 'media-session'));
+      }
+    }
+    // macOS and Windows temp folders are already per-user.
     return Directory(p.join(Directory.systemTemp.path, 'dacx-media-session'));
   }
 
@@ -4011,22 +4064,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         l10n.osdEqualizer(wantEnabled ? l10n.osdStateOn : l10n.osdStateOff),
       );
     }());
-  }
-
-  String _eqPresetLabel(AppLocalizations l10n, String id) {
-    return switch (id) {
-      'flat' => l10n.eqPresetFlat,
-      'bass_boost' => l10n.eqPresetBassBoost,
-      'bass_reduce' => l10n.eqPresetBassReduce,
-      'treble_boost' => l10n.eqPresetTrebleBoost,
-      'vocal' => l10n.eqPresetVocal,
-      'rock' => l10n.eqPresetRock,
-      'electronic' => l10n.eqPresetElectronic,
-      'acoustic' => l10n.eqPresetAcoustic,
-      'loudness' => l10n.eqPresetLoudness,
-      'classical' => l10n.eqPresetClassical,
-      _ => id,
-    };
   }
 
   // ── Multi-audio mix ───────────────────────────────────────
@@ -4620,7 +4657,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await showDialog<void>(
       context: context,
       builder: (ctx) => MediaInfoDialog(
-        width: _dialogWidth(ctx, 520),
+        width: dialogWidth(ctx, 520),
         fields: [
           MediaInfoField(label: l10n.mediaInfoTitle, value: titleValue),
           MediaInfoField(label: l10n.mediaInfoArtist, value: artistValue),
@@ -5018,7 +5055,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         unawaited(_showChaptersDialog());
         break;
       case 'equalizer':
-        unawaited(_showEqualizerDialog());
+        unawaited(
+          showEqualizerDialog(
+            context: context,
+            settings: _settings,
+            onApply: _applyEqualizer,
+          ),
+        );
         break;
       case 'advanced-playback':
         unawaited(_showAdvancedPlaybackDialog());
@@ -5042,7 +5085,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _setSleepTimerMinutes(60);
         break;
       case 'keybinds':
-        unawaited(_showKeybindsDialog());
+        unawaited(showKeybindsDialog(context: context, settings: _settings));
         break;
       case 'queue':
         _scaffoldKey.currentState?.openEndDrawer();
@@ -5168,36 +5211,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final list = tracks.audio
         .where((t) => t.id != 'auto' && t.id != 'no')
         .toList(growable: false);
-    final current = _player.currentTrackSelection?.audio.id;
-    final selected = await showDialog<AudioTrack>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(AppLocalizations.of(ctx).dialogAudioTrackTitle),
-        children: list
-            .map(
-              (t) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, t),
-                child: Row(
-                  children: [
-                    Icon(
-                      t.id == current
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _trackLabel(t.title, t.language, t.id),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
-      ),
+    final selected = await pickAudioTrack(
+      context,
+      tracks: list,
+      currentId: _player.currentTrackSelection?.audio.id,
     );
     if (selected != null) {
       await _disableMixForManualTrackSelection();
@@ -5222,37 +5239,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       SubtitleTrack.no(),
       ...tracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no'),
     ];
-    final current = _player.currentTrackSelection?.subtitle.id;
-    final selected = await showDialog<SubtitleTrack>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(AppLocalizations.of(ctx).dialogSubtitleTrackTitle),
-        children: list
-            .map(
-              (t) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, t),
-                child: Row(
-                  children: [
-                    Icon(
-                      t.id == current
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        t.id == 'no'
-                            ? AppLocalizations.of(ctx).subtitleTrackOff
-                            : _trackLabel(t.title, t.language, t.id),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
-      ),
+    final selected = await pickSubtitleTrack(
+      context,
+      tracks: list,
+      currentId: _player.currentTrackSelection?.subtitle.id,
     );
     if (selected != null) {
       final ok = await _playerService.setSubtitleTrack(selected);
@@ -5264,164 +5254,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _showChaptersDialog() async {
     if (_player.chapters.isEmpty) await _refreshChapters();
     if (!mounted || _player.chapters.isEmpty) return;
-    final picked = await showDialog<int>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(AppLocalizations.of(ctx).dialogChaptersTitle),
-        children: _player.chapters
-            .map(
-              (c) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, c.index),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 70,
-                      child: Text(
-                        PlayerController.formatDuration(c.time),
-                        style: Theme.of(ctx).textTheme.bodySmall,
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(c.title, overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
+    final picked = await pickChapter(context, _player.chapters);
     if (picked != null) {
       await _playerService.setChapter(picked);
     }
-  }
-
-  Future<void> _showEqualizerDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            final l10n = AppLocalizations.of(ctx);
-            final bands = List<double>.from(_settings.eqBands);
-            return AlertDialog(
-              title: Text(l10n.dialogEqualizerTitle),
-              content: SizedBox(
-                width: _dialogWidth(ctx, 480),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Text(l10n.dialogEqualizerEnable),
-                        const Spacer(),
-                        Switch(
-                          value: _settings.eqEnabled,
-                          onChanged: (v) {
-                            _settings.eqEnabled = v;
-                            unawaited(_applyEqualizer());
-                            setLocal(() {});
-                          },
-                        ),
-                      ],
-                    ),
-                    DropdownButton<String>(
-                      value: _settings.eqPreset,
-                      isExpanded: true,
-                      onChanged: (id) {
-                        if (id == null) return;
-                        final preset = EqualizerService.presetById(id);
-                        if (preset == null) return;
-                        _settings.eqPreset = id;
-                        _settings.eqBands = preset.gains;
-                        unawaited(_applyEqualizer());
-                        setLocal(() {});
-                      },
-                      items: kEqPresets
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p.id,
-                              child: Text(_eqPresetLabel(l10n, p.id)),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: math.min(
-                        220.0,
-                        math.max(120.0, _dialogHeight(ctx, 360) - 140),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: List.generate(SettingsService.eqBandCount, (
-                          i,
-                        ) {
-                          final freq = SettingsService.eqBandFrequencies[i];
-                          final label = freq < 1000
-                              ? '$freq'
-                              : '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k';
-                          return Expanded(
-                            child: Column(
-                              children: [
-                                Expanded(
-                                  child: RotatedBox(
-                                    quarterTurns: 3,
-                                    child: Slider(
-                                      min: -12,
-                                      max: 12,
-                                      divisions: 48,
-                                      value: bands[i],
-                                      onChanged: (v) {
-                                        bands[i] = v;
-                                        _settings.eqBands = bands;
-                                        _settings.eqPreset = 'custom';
-                                        unawaited(_applyEqualizer());
-                                        setLocal(() {});
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  label,
-                                  style: Theme.of(ctx).textTheme.bodySmall,
-                                ),
-                                Text(
-                                  '${bands[i].toStringAsFixed(0)}dB',
-                                  style: Theme.of(ctx).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _settings.eqBands = List<double>.filled(
-                      SettingsService.eqBandCount,
-                      0,
-                    );
-                    _settings.eqPreset = 'flat';
-                    unawaited(_applyEqualizer());
-                    setLocal(() {});
-                  },
-                  child: Text(l10n.actionReset),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.actionClose),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _pickFilesToEnqueue() async {
@@ -5449,188 +5285,5 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
     }
-  }
-
-  Future<void> _showKeybindsDialog() async {
-    final current = Map<String, List<String>>.from(_settings.keybinds);
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            final l10n = AppLocalizations.of(ctx);
-            return AlertDialog(
-              title: Text(l10n.dialogKeyboardShortcutsTitle),
-              content: SizedBox(
-                width: _dialogWidth(ctx, 460),
-                height: _dialogHeight(ctx, 480),
-                child: Scrollbar(
-                  child: ListView(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                        child: Text(
-                          AppLocalizations.of(ctx).keybindsTip,
-                          style: Theme.of(ctx).textTheme.bodySmall,
-                        ),
-                      ),
-                      ...PlayerShortcutAction.values
-                          .where(
-                            (a) =>
-                                _settings.advancedPlaybackToolsEnabled ||
-                                !PlayerShortcutsService.isAdvancedAction(a),
-                          )
-                          .map((a) {
-                            final accels =
-                                current[a.name] ??
-                                defaultKeybinds[a]?.toList(growable: true) ??
-                                const <String>[];
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                shortcutActionLabel(
-                                  a,
-                                  l10n: AppLocalizations.of(ctx),
-                                ),
-                              ),
-                              subtitle: Text(
-                                accels.isEmpty
-                                    ? AppLocalizations.of(ctx).keybindsNone
-                                    : accels
-                                          .map(
-                                            (a) =>
-                                                PlayerShortcutsService.formatAcceleratorForDisplay(
-                                                  a,
-                                                  useMacSymbols:
-                                                      Platform.isMacOS,
-                                                ),
-                                          )
-                                          .join(', '),
-                                style: Theme.of(ctx).textTheme.bodySmall,
-                              ),
-                              trailing: Wrap(
-                                spacing: 4,
-                                children: [
-                                  IconButton(
-                                    tooltip: l10n.actionSetNewBinding,
-                                    icon: const Icon(Icons.edit, size: 18),
-                                    onPressed: () async {
-                                      final accel = await _captureKeybind(ctx);
-                                      if (accel == null) return;
-                                      current[a.name] = [accel];
-                                      _settings.keybinds = current;
-                                      setLocal(() {});
-                                    },
-                                  ),
-                                  IconButton(
-                                    tooltip: l10n.actionResetToDefault,
-                                    icon: const Icon(Icons.refresh, size: 18),
-                                    onPressed: () {
-                                      current.remove(a.name);
-                                      _settings.keybinds = current;
-                                      setLocal(() {});
-                                    },
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _settings.resetKeybinds();
-                    current.clear();
-                    setLocal(() {});
-                  },
-                  child: Text(l10n.actionResetAll),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.actionClose),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<String?> _captureKeybind(BuildContext context) async {
-    final node = FocusNode();
-    String? captured;
-    var saved = false;
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setLocal) {
-            final l10n = AppLocalizations.of(ctx);
-            return AlertDialog(
-              title: Text(l10n.dialogKeyCaptureTitle),
-              content: SizedBox(
-                width: _dialogWidth(ctx, 320),
-                child: Focus(
-                  autofocus: true,
-                  focusNode: node,
-                  onKeyEvent: (n, e) {
-                    if (e is! KeyDownEvent) {
-                      return KeyEventResult.ignored;
-                    }
-                    if (e.logicalKey == LogicalKeyboardKey.escape) {
-                      Navigator.pop(ctx);
-                      return KeyEventResult.handled;
-                    }
-                    if (e.logicalKey != LogicalKeyboardKey.controlLeft &&
-                        e.logicalKey != LogicalKeyboardKey.controlRight &&
-                        e.logicalKey != LogicalKeyboardKey.shiftLeft &&
-                        e.logicalKey != LogicalKeyboardKey.shiftRight &&
-                        e.logicalKey != LogicalKeyboardKey.altLeft &&
-                        e.logicalKey != LogicalKeyboardKey.altRight &&
-                        e.logicalKey != LogicalKeyboardKey.metaLeft &&
-                        e.logicalKey != LogicalKeyboardKey.metaRight) {
-                      captured = PlayerShortcutsService.acceleratorFromEvent(e);
-                      setLocal(() {});
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    alignment: Alignment.center,
-                    child: Text(
-                      captured ?? l10n.keyCaptureWaiting,
-                      style: Theme.of(ctx).textTheme.titleMedium,
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.actionCancel),
-                ),
-                TextButton(
-                  onPressed: captured == null
-                      ? null
-                      : () {
-                          saved = true;
-                          Navigator.pop(ctx);
-                        },
-                  child: Text(l10n.actionSave),
-                ),
-              ],
-            );
-          },
-        ),
-      );
-    } finally {
-      node.dispose();
-    }
-    return saved ? captured : null;
   }
 }

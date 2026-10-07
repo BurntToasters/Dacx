@@ -22,6 +22,9 @@
 - A Windows manifest signature is tampered after signing.
 - A remote asset advertises a wrong GitHub digest or size despite matching name.
 - A detached signature comes from the wrong GPG signer or fingerprint.
+- The GPG signer test cannot start gpg-agent because its socket path under a
+  long macOS temp folder exceeds the Unix socket limit, so the test fails locally.
+- The GPG signer test leaves a gpg-agent running or its temporary keyring on disk.
 - A platform proof emitted by the current smoke harness uses its v2 schema and
   is rejected despite containing the required proof checks.
 

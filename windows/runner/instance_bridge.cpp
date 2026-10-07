@@ -33,6 +33,7 @@ constexpr const char kOpenFileEventChannel[] =
     "run.rosie.dacx/open_file/events";
 constexpr const char kNewInstanceFlag[] = "--new-instance";
 constexpr DWORD kPipeBufferSize = 1024 * 1024;
+constexpr DWORD kClientReadTimeoutMs = 5000;
 constexpr DWORD kPipeWaitMs = 1000;
 constexpr uint32_t kMaxMessageBytes = 1024 * 1024;
 std::atomic_bool g_pipe_started{false};
@@ -138,29 +139,59 @@ void EnsureDispatchWindow() {
   }
 }
 
+// Reads exactly [len] bytes from an overlapped pipe handle, giving up at
+// [deadline] (GetTickCount64 time). Cancels the pending read on timeout.
+bool ReadWithDeadline(HANDLE pipe, char* dst, DWORD len, ULONGLONG deadline) {
+  HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (event == nullptr) return false;
+  bool ok = true;
+  DWORD total = 0;
+  while (total < len) {
+    OVERLAPPED ov{};
+    ov.hEvent = event;
+    ResetEvent(event);
+    if (!ReadFile(pipe, dst + total, len - total, nullptr, &ov) &&
+        GetLastError() != ERROR_IO_PENDING) {
+      ok = false;
+      break;
+    }
+    const ULONGLONG now = GetTickCount64();
+    const DWORD wait =
+        now >= deadline ? 0 : static_cast<DWORD>(deadline - now);
+    DWORD got = 0;
+    if (WaitForSingleObject(event, wait) != WAIT_OBJECT_0) {
+      CancelIoEx(pipe, &ov);
+      GetOverlappedResult(pipe, &ov, &got, TRUE);  // Wait for the cancel.
+      ok = false;
+      break;
+    }
+    if (!GetOverlappedResult(pipe, &ov, &got, FALSE) || got == 0) {
+      ok = false;
+      break;
+    }
+    total += got;
+  }
+  CloseHandle(event);
+  return ok;
+}
+
 void HandlePipeClient(HANDLE pipe) {
+  // One deadline for the whole message: the server handles clients one at a
+  // time, so a client that connects and never writes must not stall it.
+  const ULONGLONG deadline = GetTickCount64() + kClientReadTimeoutMs;
   uint32_t length = 0;
-  DWORD read = 0;
-  if (!ReadFile(pipe, &length, sizeof(length), &read, nullptr) ||
-      read != sizeof(length) || length == 0 || length > kMaxMessageBytes) {
+  if (!ReadWithDeadline(pipe, reinterpret_cast<char*>(&length), sizeof(length),
+                        deadline) ||
+      length == 0 || length > kMaxMessageBytes) {
     DisconnectNamedPipe(pipe);
     CloseHandle(pipe);
     return;
   }
   std::string buffer(length, '\0');
-  DWORD total = 0;
-  while (total < length) {
-    DWORD chunk = 0;
-    if (!ReadFile(pipe, buffer.data() + total, length - total, &chunk,
-                  nullptr) ||
-        chunk == 0) {
-      break;
-    }
-    total += chunk;
-  }
+  const bool complete = ReadWithDeadline(pipe, buffer.data(), length, deadline);
   DisconnectNamedPipe(pipe);
   CloseHandle(pipe);
-  if (total != length) return;
+  if (!complete) return;
 
   size_t start = 0;
   for (size_t i = 0; i <= buffer.size(); i++) {
@@ -233,7 +264,7 @@ void PipeServerLoop() {
     }
     HANDLE pipe = CreateNamedPipeW(
         name.c_str(),
-        PIPE_ACCESS_INBOUND,
+        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
             PIPE_REJECT_REMOTE_CLIENTS,
         PIPE_UNLIMITED_INSTANCES, kPipeBufferSize, kPipeBufferSize, 0,
@@ -250,9 +281,22 @@ void PipeServerLoop() {
       Sleep(250);
       continue;
     }
-    BOOL connected = ConnectNamedPipe(pipe, nullptr)
-                         ? TRUE
-                         : (GetLastError() == ERROR_PIPE_CONNECTED);
+    // Overlapped handle (for read timeouts), so connect is overlapped too.
+    // Waiting here without a timeout is fine: no client is attached yet.
+    BOOL connected = FALSE;
+    OVERLAPPED connect_ov{};
+    connect_ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (connect_ov.hEvent != nullptr) {
+      const BOOL immediate = ConnectNamedPipe(pipe, &connect_ov);
+      const DWORD err = immediate ? ERROR_SUCCESS : GetLastError();
+      if (immediate || err == ERROR_PIPE_CONNECTED) {
+        connected = TRUE;
+      } else if (err == ERROR_IO_PENDING) {
+        DWORD unused = 0;
+        connected = GetOverlappedResult(pipe, &connect_ov, &unused, TRUE);
+      }
+      CloseHandle(connect_ov.hEvent);
+    }
     if (!connected) {
       CloseHandle(pipe);
       continue;

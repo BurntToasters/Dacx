@@ -40,16 +40,14 @@ class UpdateService {
   UpdateChannel? _lastEffectiveChannel;
 
   UpdateService({
-    DebugLogService? debugLog,
-    String debugSource = 'unknown',
+    this._debugLog,
+    this._debugSource = 'unknown',
     PackageInfoLoader? packageInfoLoader,
     CurrentVersionLoader? currentVersionLoader,
     HttpGet? httpGet,
     CanLaunchUrlFn? canLaunch,
     LaunchUrlFn? launch,
-  }) : _debugLog = debugLog,
-       _debugSource = debugSource,
-       _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
+  }) : _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
        _currentVersionLoader =
            currentVersionLoader ?? currentVersionFromPackageInfo,
        _httpGet = httpGet ?? platformHttpGetFn,

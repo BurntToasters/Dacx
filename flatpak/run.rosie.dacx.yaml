@@ -19,7 +19,6 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.freedesktop.ScreenSaver
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --talk-name=org.mpris.MediaPlayer2.dacx
   - --own-name=org.mpris.MediaPlayer2.dacx
 
 modules:

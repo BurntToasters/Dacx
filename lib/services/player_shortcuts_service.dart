@@ -100,12 +100,13 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
       PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
       PlayerShortcutAction.openUrl => l10n.shortcutOpenUrl,
-      PlayerShortcutAction.cycleAdvancedLoop => 'A-B repeat',
-      PlayerShortcutAction.subtitleDelayBack => 'Decrease subtitle delay',
-      PlayerShortcutAction.subtitleDelayForward => 'Increase subtitle delay',
-      PlayerShortcutAction.audioDelayBack => 'Decrease audio delay',
-      PlayerShortcutAction.audioDelayForward => 'Increase audio delay',
-      PlayerShortcutAction.addPlaybackMarker => 'Add playback marker',
+      PlayerShortcutAction.cycleAdvancedLoop => l10n.shortcutCycleAdvancedLoop,
+      PlayerShortcutAction.subtitleDelayBack => l10n.shortcutSubtitleDelayBack,
+      PlayerShortcutAction.subtitleDelayForward =>
+        l10n.shortcutSubtitleDelayForward,
+      PlayerShortcutAction.audioDelayBack => l10n.shortcutAudioDelayBack,
+      PlayerShortcutAction.audioDelayForward => l10n.shortcutAudioDelayForward,
+      PlayerShortcutAction.addPlaybackMarker => l10n.shortcutAddPlaybackMarker,
     };
   }
   return switch (a) {

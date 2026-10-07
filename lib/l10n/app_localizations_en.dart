@@ -1219,4 +1219,164 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accentColorPink => 'Pink';
+
+  @override
+  String get advancedDialogTitle => 'Advanced playback';
+
+  @override
+  String get advancedDialogIntro =>
+      'Optional tools for repeat, synchronization, bookmarks, and subtitle appearance.';
+
+  @override
+  String get advancedToolsToggleHint =>
+      'Turn off to restore the minimalist player. Saved choices stay stored.';
+
+  @override
+  String get advancedLoopTitle => 'A-B repeat';
+
+  @override
+  String get advancedLoopSetA => 'Set A';
+
+  @override
+  String get advancedLoopSetB => 'Set B';
+
+  @override
+  String get advancedLoopClear => 'Clear A-B';
+
+  @override
+  String get advancedLoopNone => 'No A-B range set';
+
+  @override
+  String advancedLoopPointA(String time) {
+    return 'A: $time';
+  }
+
+  @override
+  String get advancedAudioDelay => 'Audio delay';
+
+  @override
+  String get advancedSubtitleDelay => 'Subtitle delay';
+
+  @override
+  String advancedDelayDecrease(String control) {
+    return 'Decrease $control';
+  }
+
+  @override
+  String advancedDelayIncrease(String control) {
+    return 'Increase $control';
+  }
+
+  @override
+  String advancedDelayReset(String control) {
+    return 'Reset $control';
+  }
+
+  @override
+  String get advancedMarkersTitle => 'Playback markers';
+
+  @override
+  String get advancedMarkersHint => 'Markers are saved per file or safe URL.';
+
+  @override
+  String get advancedMarkerAdd => 'Add at current time';
+
+  @override
+  String get advancedMarkersEmpty => 'No markers yet.';
+
+  @override
+  String get advancedMarkerRename => 'Rename marker';
+
+  @override
+  String get advancedMarkerDelete => 'Delete marker';
+
+  @override
+  String get advancedSubtitleTitle => 'Subtitle appearance';
+
+  @override
+  String get advancedSubtitleHint =>
+      'Applies to plain text subtitles. Authored ASS styling is preserved; bitmap subtitles cannot be restyled.';
+
+  @override
+  String get advancedSubtitleFontSize => 'Font size';
+
+  @override
+  String get advancedSubtitlePosition => 'Vertical position';
+
+  @override
+  String get advancedSubtitleOutlineSize => 'Outline size';
+
+  @override
+  String get advancedSubtitleTextColor => 'Text color (hex)';
+
+  @override
+  String get advancedSubtitleOutlineColor => 'Outline color (hex)';
+
+  @override
+  String get advancedColorWhite => 'White';
+
+  @override
+  String get advancedColorYellow => 'Yellow';
+
+  @override
+  String get advancedColorBlack => 'Black';
+
+  @override
+  String get advancedColorInvalid => 'Enter a 6- or 8-digit hex color.';
+
+  @override
+  String get advancedErrorApplySync =>
+      'Could not apply saved playback synchronization.';
+
+  @override
+  String get advancedErrorApplySubtitleAppearance =>
+      'Could not apply subtitle appearance.';
+
+  @override
+  String get advancedErrorApplyAudioDelay => 'Could not apply audio delay.';
+
+  @override
+  String get advancedErrorApplySubtitleDelay =>
+      'Could not apply subtitle delay.';
+
+  @override
+  String get advancedErrorResetAudioDelay => 'Could not reset audio delay.';
+
+  @override
+  String get advancedErrorResetSubtitleDelay =>
+      'Could not reset subtitle delay.';
+
+  @override
+  String get advancedErrorApplyLoop => 'Could not apply A-B repeat.';
+
+  @override
+  String get advancedErrorClearLoop => 'Could not clear A-B repeat.';
+
+  @override
+  String get shortcutCycleAdvancedLoop => 'A-B repeat';
+
+  @override
+  String get shortcutSubtitleDelayBack => 'Decrease subtitle delay';
+
+  @override
+  String get shortcutSubtitleDelayForward => 'Increase subtitle delay';
+
+  @override
+  String get shortcutAudioDelayBack => 'Decrease audio delay';
+
+  @override
+  String get shortcutAudioDelayForward => 'Increase audio delay';
+
+  @override
+  String get shortcutAddPlaybackMarker => 'Add playback marker';
+
+  @override
+  String seekLoopRangeSemantics(String start, String end) {
+    return 'A-B repeat range: $start to $end';
+  }
+
+  @override
+  String seekMarkerSemantics(String label) {
+    return 'Playback marker: $label';
+  }
 }

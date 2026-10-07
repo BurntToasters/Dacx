@@ -2235,6 +2235,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pink'**
   String get accentColorPink;
+
+  /// Title of the advanced playback tools dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced playback'**
+  String get advancedDialogTitle;
+
+  /// Intro text at the top of the advanced playback dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional tools for repeat, synchronization, bookmarks, and subtitle appearance.'**
+  String get advancedDialogIntro;
+
+  /// Subtitle of the switch that turns advanced playback tools off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to restore the minimalist player. Saved choices stay stored.'**
+  String get advancedToolsToggleHint;
+
+  /// Heading of the A-B repeat section.
+  ///
+  /// In en, this message translates to:
+  /// **'A-B repeat'**
+  String get advancedLoopTitle;
+
+  /// Button that sets the A-B repeat start point.
+  ///
+  /// In en, this message translates to:
+  /// **'Set A'**
+  String get advancedLoopSetA;
+
+  /// Button that sets the A-B repeat end point.
+  ///
+  /// In en, this message translates to:
+  /// **'Set B'**
+  String get advancedLoopSetB;
+
+  /// Button that clears the A-B repeat range.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear A-B'**
+  String get advancedLoopClear;
+
+  /// Shown when no A-B repeat range is set.
+  ///
+  /// In en, this message translates to:
+  /// **'No A-B range set'**
+  String get advancedLoopNone;
+
+  /// Shown after the A point is set.
+  ///
+  /// In en, this message translates to:
+  /// **'A: {time}'**
+  String advancedLoopPointA(String time);
+
+  /// Label for the audio delay control.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio delay'**
+  String get advancedAudioDelay;
+
+  /// Label for the subtitle delay control.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle delay'**
+  String get advancedSubtitleDelay;
+
+  /// Tooltip for the minus button of a delay control.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease {control}'**
+  String advancedDelayDecrease(String control);
+
+  /// Tooltip for the plus button of a delay control.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase {control}'**
+  String advancedDelayIncrease(String control);
+
+  /// Tooltip for the reset button of a delay control.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset {control}'**
+  String advancedDelayReset(String control);
+
+  /// Heading of the playback markers section.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback markers'**
+  String get advancedMarkersTitle;
+
+  /// Explains where playback markers are stored.
+  ///
+  /// In en, this message translates to:
+  /// **'Markers are saved per file or safe URL.'**
+  String get advancedMarkersHint;
+
+  /// Button that adds a playback marker.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at current time'**
+  String get advancedMarkerAdd;
+
+  /// Shown when the current media has no markers.
+  ///
+  /// In en, this message translates to:
+  /// **'No markers yet.'**
+  String get advancedMarkersEmpty;
+
+  /// Tooltip and dialog title for renaming a marker.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename marker'**
+  String get advancedMarkerRename;
+
+  /// Tooltip for deleting a marker.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete marker'**
+  String get advancedMarkerDelete;
+
+  /// Heading of the subtitle appearance section.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle appearance'**
+  String get advancedSubtitleTitle;
+
+  /// Explains which subtitles the appearance settings affect.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to plain text subtitles. Authored ASS styling is preserved; bitmap subtitles cannot be restyled.'**
+  String get advancedSubtitleHint;
+
+  /// Subtitle font size slider label.
+  ///
+  /// In en, this message translates to:
+  /// **'Font size'**
+  String get advancedSubtitleFontSize;
+
+  /// Subtitle vertical position slider label.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertical position'**
+  String get advancedSubtitlePosition;
+
+  /// Subtitle outline size slider label.
+  ///
+  /// In en, this message translates to:
+  /// **'Outline size'**
+  String get advancedSubtitleOutlineSize;
+
+  /// Subtitle text color field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Text color (hex)'**
+  String get advancedSubtitleTextColor;
+
+  /// Subtitle outline color field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Outline color (hex)'**
+  String get advancedSubtitleOutlineColor;
+
+  /// Color preset button.
+  ///
+  /// In en, this message translates to:
+  /// **'White'**
+  String get advancedColorWhite;
+
+  /// Color preset button.
+  ///
+  /// In en, this message translates to:
+  /// **'Yellow'**
+  String get advancedColorYellow;
+
+  /// Color preset button.
+  ///
+  /// In en, this message translates to:
+  /// **'Black'**
+  String get advancedColorBlack;
+
+  /// Validation error for a subtitle color field.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a 6- or 8-digit hex color.'**
+  String get advancedColorInvalid;
+
+  /// Shown when saved audio/subtitle delays cannot be applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply saved playback synchronization.'**
+  String get advancedErrorApplySync;
+
+  /// Shown when subtitle styling cannot be applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply subtitle appearance.'**
+  String get advancedErrorApplySubtitleAppearance;
+
+  /// Shown when the audio delay cannot be applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply audio delay.'**
+  String get advancedErrorApplyAudioDelay;
+
+  /// Shown when the subtitle delay cannot be applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply subtitle delay.'**
+  String get advancedErrorApplySubtitleDelay;
+
+  /// Shown when the audio delay cannot be reset.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reset audio delay.'**
+  String get advancedErrorResetAudioDelay;
+
+  /// Shown when the subtitle delay cannot be reset.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reset subtitle delay.'**
+  String get advancedErrorResetSubtitleDelay;
+
+  /// Shown when the A-B repeat range cannot be applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply A-B repeat.'**
+  String get advancedErrorApplyLoop;
+
+  /// Shown when the A-B repeat range cannot be cleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear A-B repeat.'**
+  String get advancedErrorClearLoop;
+
+  /// Shortcut action: cycle A-B repeat.
+  ///
+  /// In en, this message translates to:
+  /// **'A-B repeat'**
+  String get shortcutCycleAdvancedLoop;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease subtitle delay'**
+  String get shortcutSubtitleDelayBack;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase subtitle delay'**
+  String get shortcutSubtitleDelayForward;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease audio delay'**
+  String get shortcutAudioDelayBack;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase audio delay'**
+  String get shortcutAudioDelayForward;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Add playback marker'**
+  String get shortcutAddPlaybackMarker;
+
+  /// Screen reader label for the A-B range on the seek bar.
+  ///
+  /// In en, this message translates to:
+  /// **'A-B repeat range: {start} to {end}'**
+  String seekLoopRangeSemantics(String start, String end);
+
+  /// Screen reader label for a playback marker tick on the seek bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback marker: {label}'**
+  String seekMarkerSemantics(String label);
 }
 
 class _AppLocalizationsDelegate

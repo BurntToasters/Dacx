@@ -34,8 +34,43 @@ abstract final class M3uPlaylist {
     if (length > maxBytes) {
       throw const FileSystemException('Playlist file is too large');
     }
-    final content = await file.readAsString();
+    final content = decodeBytes(await file.readAsBytes());
     return parse(content, baseDir: p.dirname(playlistPath));
+  }
+
+  /// UTF-16 when a UTF-16 BOM is present. Otherwise UTF-8 first (BOM
+  /// stripped), falling back to Latin-1 for the legacy
+  /// single-byte `.m3u` files many Windows tools still write. Latin-1 maps
+  /// every byte, so decoding never throws.
+  static String decodeBytes(List<int> bytes) {
+    if (bytes.length >= 2) {
+      final littleEndian = bytes[0] == 0xFF && bytes[1] == 0xFE;
+      final bigEndian = bytes[0] == 0xFE && bytes[1] == 0xFF;
+      if (littleEndian || bigEndian) {
+        final units = <int>[];
+        for (var i = 2; i + 1 < bytes.length; i += 2) {
+          units.add(
+            littleEndian
+                ? bytes[i] | (bytes[i + 1] << 8)
+                : (bytes[i] << 8) | bytes[i + 1],
+          );
+        }
+        return String.fromCharCodes(units);
+      }
+    }
+    var start = 0;
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      start = 3;
+    }
+    final body = start == 0 ? bytes : bytes.sublist(start);
+    try {
+      return utf8.decode(body);
+    } on FormatException {
+      return latin1.decode(body);
+    }
   }
 
   /// Serializes [sources] as an `#EXTM3U` playlist (absolute paths / URLs).

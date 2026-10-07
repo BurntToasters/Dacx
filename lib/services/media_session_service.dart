@@ -245,7 +245,7 @@ class _MprisAdapter extends MPRISService {
   _MprisAdapter(this._dispatch, this._log)
     : super(
         'dacx',
-        identity: 'DACX',
+        identity: 'Dacx',
         desktopEntry: IdleInhibitService.mprisDesktopEntry(),
         emitSeekedSignal: false,
         canPlay: true,

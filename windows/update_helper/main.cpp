@@ -128,7 +128,15 @@ std::wstring NormalizeThumbprint(std::wstring value) {
   return out;
 }
 
-bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
+// Opens the MSI for reading and denies write and delete sharing, so the file
+// cannot be swapped between verification and msiexec while the handle stays
+// open. Read sharing stays on for WinVerifyTrust and msiexec.
+HANDLE OpenLockedForRead(const std::wstring& path) {
+  return CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+}
+
+bool Sha256Handle(HANDLE file, std::wstring* out_hex) {
   BCRYPT_ALG_HANDLE alg = nullptr;
   BCRYPT_HASH_HANDLE hash = nullptr;
   NTSTATUS st =
@@ -151,10 +159,8 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
     return false;
   }
 
-  HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
-                            nullptr);
-  if (file == INVALID_HANDLE_VALUE) {
+  LARGE_INTEGER start{};
+  if (!SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) {
     BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(alg, 0);
     return false;
@@ -165,7 +171,6 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
     DWORD read = 0;
     if (!ReadFile(file, buf.data(), static_cast<DWORD>(buf.size()), &read,
                   nullptr)) {
-      CloseHandle(file);
       BCryptDestroyHash(hash);
       BCryptCloseAlgorithmProvider(alg, 0);
       return false;
@@ -173,13 +178,11 @@ bool Sha256File(const std::wstring& path, std::wstring* out_hex) {
     if (read == 0) break;
     st = BCryptHashData(hash, buf.data(), read, 0);
     if (st < 0) {
-      CloseHandle(file);
       BCryptDestroyHash(hash);
       BCryptCloseAlgorithmProvider(alg, 0);
       return false;
     }
   }
-  CloseHandle(file);
 
   std::vector<BYTE> digest(hash_len);
   st = BCryptFinishHash(hash, digest.data(), hash_len, 0);
@@ -576,6 +579,35 @@ bool ParseArgs(int argc, wchar_t** argv, Args* out) {
   return true;
 }
 
+// Hashes, verifies, and installs through one locked handle; see
+// OpenLockedForRead. Returns the msiexec exit code or a helper exit code.
+int VerifyAndInstall(const Args& args) {
+  LogLine(L"dacx exited, verifying sha256");
+  HANDLE msi = OpenLockedForRead(args.msi);
+  if (msi == INVALID_HANDLE_VALUE) {
+    LogLine(L"msi open failed err=" + std::to_wstring(GetLastError()));
+    return 12;
+  }
+  int rc = 0;
+  std::wstring actual;
+  if (!Sha256Handle(msi, &actual)) {
+    LogLine(L"sha256 compute failed");
+    rc = 12;
+  } else if (_wcsicmp(actual.c_str(), args.sha256.c_str()) != 0) {
+    LogLine(L"sha256 mismatch expected=" + args.sha256 + L" actual=" + actual);
+    rc = 12;
+  } else if ((!args.thumbprint.empty() || !args.publisher.empty()) &&
+             !VerifyAuthenticode(args.msi, args.thumbprint, args.publisher,
+                                 &rc)) {
+    // rc set by VerifyAuthenticode.
+  } else {
+    LogLine(L"launching msiexec");
+    rc = LaunchMsiexec(args.msi);
+  }
+  CloseHandle(msi);
+  return rc;
+}
+
 int Run(int argc, wchar_t** argv) {
   Args args;
   if (!ParseArgs(argc, argv, &args)) {
@@ -591,37 +623,22 @@ int Run(int argc, wchar_t** argv) {
   const int wait_rc = WaitForPid(args.pid);
   if (wait_rc != 0) return wait_rc;
 
-  LogLine(L"dacx exited, verifying sha256");
-  std::wstring actual;
-  if (!Sha256File(args.msi, &actual)) {
-    LogLine(L"sha256 compute failed");
-    return 12;
-  }
-  if (_wcsicmp(actual.c_str(), args.sha256.c_str()) != 0) {
-    LogLine(L"sha256 mismatch expected=" + args.sha256 + L" actual=" + actual);
-    return 12;
-  }
-
-  if (!args.thumbprint.empty() || !args.publisher.empty()) {
-    int auth_rc = 0;
-    if (!VerifyAuthenticode(args.msi, args.thumbprint, args.publisher,
-                            &auth_rc)) {
-      return auth_rc;
-    }
-  }
-
-  LogLine(L"launching msiexec");
-  const int msi_rc = LaunchMsiexec(args.msi);
-  if (MsiexecSucceeded(msi_rc)) {
-    std::wstring exe = args.exe;
-    if (exe.empty()) exe = DefaultExeBesideHelper();
+  std::wstring exe = args.exe;
+  if (exe.empty()) exe = DefaultExeBesideHelper();
+  const int rc = VerifyAndInstall(args);
+  if (MsiexecSucceeded(rc)) {
     NotifyShellExeChanged(exe);
     RefreshPinnedShortcuts(exe);
-    if (args.relaunch) {
-      RelaunchDacx(exe);
-    }
+  } else {
+    // Dacx already quit for the update. Bring the installed version back so a
+    // cancelled UAC prompt or failed install does not leave the user with no app.
+    LogLine(L"update not installed rc=" + std::to_wstring(rc) +
+            L"; relaunching current version");
   }
-  return msi_rc;
+  if (args.relaunch) {
+    RelaunchDacx(exe);
+  }
+  return rc;
 }
 
 }  // namespace

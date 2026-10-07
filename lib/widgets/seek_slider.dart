@@ -110,8 +110,11 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                     child: IgnorePointer(
                       child: Semantics(
                         container: true,
-                        label:
-                            'A-B repeat range: ${_fmt(widget.rangeStart!)} to ${_fmt(widget.rangeEnd!)}',
+                        label: AppLocalizations.of(context)
+                            .seekLoopRangeSemantics(
+                              _fmt(widget.rangeStart!),
+                              _fmt(widget.rangeEnd!),
+                            ),
                         child: Container(
                           height: 4,
                           decoration: BoxDecoration(
@@ -137,7 +140,8 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                       child: IgnorePointer(
                         child: Semantics(
                           container: true,
-                          label: 'Playback marker: ${marker.label}',
+                          label: AppLocalizations.of(context)
+                              .seekMarkerSemantics(marker.label),
                           child: Container(
                             width: 6,
                             height: 12,

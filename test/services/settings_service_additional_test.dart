@@ -131,7 +131,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
       expect(changed, isTrue);
       expect(service.recentFiles, [child.path]);
       expect(service.fileBookmark(tmp.path), 'dir-bookmark');
@@ -146,7 +146,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
       expect(changed, isTrue);
       expect(service.recentFiles, isEmpty);
       expect(prefs.getString('recent_files'), isNull);
@@ -368,7 +368,7 @@ void main() {
         final value = service.resumePositionFor('/old.mp3');
         expect(value, 3210);
 
-        service.flushResumePositions();
+        await service.flushResumePositions();
         final raw = prefs.getString('resume_positions_v2');
         final decoded = jsonDecode(raw!) as Map<String, dynamic>;
         final old = decoded['/old.mp3'] as Map<String, dynamic>;

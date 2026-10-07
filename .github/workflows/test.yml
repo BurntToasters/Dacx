@@ -12,6 +12,10 @@ on:
       - beta
       - 'prepare-for-v*'
 
+# Read-only token: jobs only check out code and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -132,6 +136,13 @@ jobs:
           echo "$PUB_BIN" >> "$GITHUB_PATH"
           export PATH="$PUB_BIN:$PATH"
           npm run setup:flutter
+
+      # The test job runs the suite on Linux only; macOS- and Windows-only
+      # branches (sandbox bookmarks, Windows paths) need their own run.
+      - name: Run tests on native platform
+        if: matrix.os != 'ubuntu-latest'
+        shell: bash
+        run: fvm flutter test
 
       - name: Install Linux desktop deps
         if: matrix.os == 'ubuntu-latest'

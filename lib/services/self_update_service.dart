@@ -130,7 +130,7 @@ class SelfUpdateService {
   final String? _expectedWindowsSignerPublisherOverride;
 
   SelfUpdateService({
-    DebugLogService? debugLog,
+    this._debugLog,
     HttpStreamFn? httpStream,
     ProcessRunFn? processRun,
     WindowsSpawnFn? windowsSpawn,
@@ -139,25 +139,18 @@ class SelfUpdateService {
     @visibleForTesting SelfUpdateFetchBytesFn? fetchBytes,
     @visibleForTesting ValidateWindowsManifestFn? validateWindowsManifest,
     @visibleForTesting MacUpdateInstallFn? macUpdateInstall,
-    @visibleForTesting String? expectedTeamIdOverride,
-    @visibleForTesting String? windowsManifestPublicKeyOverride,
-    @visibleForTesting String? expectedWindowsSignerThumbprintOverride,
-    @visibleForTesting String? expectedWindowsSignerPublisherOverride,
-  }) : _debugLog = debugLog,
-       _httpStream = httpStream ?? platformHttpStreamFn,
+    @visibleForTesting this._expectedTeamIdOverride,
+    @visibleForTesting this._windowsManifestPublicKeyOverride,
+    @visibleForTesting this._expectedWindowsSignerThumbprintOverride,
+    @visibleForTesting this._expectedWindowsSignerPublisherOverride,
+  }) : _httpStream = httpStream ?? platformHttpStreamFn,
        _processRun = processRun ?? Process.run,
        _windowsSpawn = windowsSpawn ?? _defaultWindowsSpawn,
        _downloadToOverride = downloadTo,
        _fetchTextOverride = fetchText,
        _fetchBytesOverride = fetchBytes,
        _validateWindowsManifestOverride = validateWindowsManifest,
-       _macUpdateInstallOverride = macUpdateInstall,
-       _expectedTeamIdOverride = expectedTeamIdOverride,
-       _windowsManifestPublicKeyOverride = windowsManifestPublicKeyOverride,
-       _expectedWindowsSignerThumbprintOverride =
-           expectedWindowsSignerThumbprintOverride,
-       _expectedWindowsSignerPublisherOverride =
-           expectedWindowsSignerPublisherOverride;
+       _macUpdateInstallOverride = macUpdateInstall;
 
   static Future<WindowsSpawnResult> _defaultWindowsSpawn(
     String commandLine, {
@@ -470,15 +463,24 @@ class SelfUpdateService {
     final total = resp.contentLength;
     var downloaded = 0;
     final sink = outFile.openWrite();
+    var completed = false;
     try {
       await resp.stream.listen((chunk) {
         sink.add(chunk);
         downloaded += chunk.length;
         onProgress?.call(SelfUpdateProgress(downloaded, total));
       }).asFuture<void>();
+      completed = true;
     } finally {
       await sink.flush();
       await sink.close();
+      if (!completed) {
+        // Drop the partial download so a stalled or failed transfer never
+        // lingers in the update cache.
+        try {
+          await outFile.delete();
+        } catch (_) {}
+      }
     }
   }
 

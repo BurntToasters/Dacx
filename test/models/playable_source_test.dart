@@ -53,11 +53,15 @@ void main() {
         PlayableSource.displaySafeUrl(signed),
         'https://example.com/live.m3u8?<redacted>#<redacted>',
       );
-      // Credentialed URLs are unsupported; displaySafeUrl leaves them unchanged.
+      // Credentialed URLs are unsupported for playback but must still be
+      // stripped for display and logs.
       const withCreds =
           'https://user:pass@example.com/live.m3u8?token=secret#fragment';
       expect(PlayableSource.isDisplaySafeUrl(withCreds), isFalse);
-      expect(PlayableSource.displaySafeUrl(withCreds), withCreds);
+      expect(
+        PlayableSource.displaySafeUrl(withCreds),
+        'https://example.com/live.m3u8?<redacted>#<redacted>',
+      );
     });
 
     test('extension getter extracts from files and URLs', () {

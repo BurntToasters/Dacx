@@ -11,6 +11,18 @@ enum AdvancedLoopStage { clear, aSet, active }
 ///
 /// [PlayerScreen] supplies lifecycle events and renders the state; it does not
 /// own preference parsing or mpv property policy.
+
+enum AdvancedPlaybackError {
+  applySync,
+  applySubtitleAppearance,
+  applyAudioDelay,
+  applySubtitleDelay,
+  resetAudioDelay,
+  resetSubtitleDelay,
+  applyLoop,
+  clearLoop,
+}
+
 class AdvancedPlaybackController extends ChangeNotifier {
   AdvancedPlaybackController({
     required SettingsService settings,
@@ -30,7 +42,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
   bool _lastEnabled;
   bool _runtimeApplied = false;
 
-  String? _errorMessage;
+  AdvancedPlaybackError? _error;
 
   String? get source => _source;
   Duration get position => _position;
@@ -43,11 +55,12 @@ class AdvancedPlaybackController extends ChangeNotifier {
     return AdvancedLoopStage.active;
   }
 
-  String? get errorMessage => _errorMessage;
+  /// Last failed operation; the UI maps it to localized text.
+  AdvancedPlaybackError? get error => _error;
 
-  void _setError(String? message) {
-    if (_errorMessage == message) return;
-    _errorMessage = message;
+  void _setError(AdvancedPlaybackError? error) {
+    if (_error == error) return;
+    _error = error;
     notifyListeners();
   }
 
@@ -132,9 +145,9 @@ class AdvancedPlaybackController extends ChangeNotifier {
       );
       final appearanceApplied = await _applySubtitleAppearance();
       if (!audioApplied || !subtitleApplied) {
-        _setError('Could not apply saved playback synchronization.');
+        _setError(AdvancedPlaybackError.applySync);
       } else if (!appearanceApplied) {
-        _setError('Could not apply subtitle appearance.');
+        _setError(AdvancedPlaybackError.applySubtitleAppearance);
       } else {
         _setError(null);
       }
@@ -152,7 +165,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     );
     final applied = await _player.setProperty('audio-delay', _delayValue(next));
     if (!applied) {
-      _setError('Could not apply audio delay.');
+      _setError(AdvancedPlaybackError.applyAudioDelay);
       return;
     }
     _settings.setPlaybackAdjustment(
@@ -173,7 +186,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     );
     final applied = await _player.setProperty('sub-delay', _delayValue(next));
     if (!applied) {
-      _setError('Could not apply subtitle delay.');
+      _setError(AdvancedPlaybackError.applySubtitleDelay);
       return;
     }
     _settings.setPlaybackAdjustment(
@@ -190,7 +203,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     final current = adjustment;
     final applied = await _player.setProperty('audio-delay', '0');
     if (!applied) {
-      _setError('Could not reset audio delay.');
+      _setError(AdvancedPlaybackError.resetAudioDelay);
       return;
     }
     _settings.setPlaybackAdjustment(
@@ -207,7 +220,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     final current = adjustment;
     final applied = await _player.setProperty('sub-delay', '0');
     if (!applied) {
-      _setError('Could not reset subtitle delay.');
+      _setError(AdvancedPlaybackError.resetSubtitleDelay);
       return;
     }
     _settings.setPlaybackAdjustment(
@@ -232,7 +245,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
         _seconds(_position),
       );
       if (!applied) {
-        _setError('Could not apply A-B repeat.');
+        _setError(AdvancedPlaybackError.applyLoop);
         return;
       }
       _a = _position;
@@ -248,7 +261,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
         _seconds(_position),
       );
       if (!applied) {
-        _setError('Could not apply A-B repeat.');
+        _setError(AdvancedPlaybackError.applyLoop);
         return;
       }
       _b = _position;
@@ -256,7 +269,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
       final aCleared = await _player.setProperty('ab-loop-a', 'no');
       final bCleared = await _player.setProperty('ab-loop-b', 'no');
       if (!aCleared || !bCleared) {
-        _setError('Could not clear A-B repeat.');
+        _setError(AdvancedPlaybackError.clearLoop);
         return;
       }
       _a = null;
@@ -279,7 +292,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     final aCleared = await _player.setProperty('ab-loop-a', 'no');
     final bCleared = await _player.setProperty('ab-loop-b', 'no');
     if (!aCleared || !bCleared) {
-      _setError('Could not clear A-B repeat.');
+      _setError(AdvancedPlaybackError.clearLoop);
       notifyListeners();
       return;
     }
@@ -329,7 +342,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     if (!enabled || _source == null) return;
     _runtimeApplied = true;
     final applied = await _applySubtitleAppearance();
-    _setError(applied ? null : 'Could not apply subtitle appearance.');
+    _setError(applied ? null : AdvancedPlaybackError.applySubtitleAppearance);
   }
 
   Future<bool> _applySubtitleAppearance() async {

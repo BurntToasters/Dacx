@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../playback/advanced_playback_models.dart';
 import '../services/advanced_playback_controller.dart';
 import '../services/settings_service.dart';
@@ -36,26 +37,26 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
     return ListenableBuilder(
       listenable: Listenable.merge([_controller, _settings]),
       builder: (context, _) {
+        final l10n = AppLocalizations.of(context);
         final adjustment = _controller.adjustment;
+        final error = _controller.error;
         final markers = _controller.markers;
         return AlertDialog(
           key: const ValueKey('advanced-playback-dialog'),
-          title: const Text('Advanced playback'),
+          title: Text(l10n.advancedDialogTitle),
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Optional tools for repeat, synchronization, bookmarks, and subtitle appearance.',
-                  ),
+                  Text(l10n.advancedDialogIntro),
                   const SizedBox(height: 16),
                   _loopSection(context),
                   const Divider(height: 28),
                   _delaySection(
                     context,
-                    label: 'Audio delay',
+                    label: l10n.advancedAudioDelay,
                     value: adjustment.audioMs,
                     onBack: () => _controller.adjustAudioDelay(-100),
                     onForward: () => _controller.adjustAudioDelay(100),
@@ -66,7 +67,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
                   ),
                   _delaySection(
                     context,
-                    label: 'Subtitle delay',
+                    label: l10n.advancedSubtitleDelay,
                     value: adjustment.subtitleMs,
                     onBack: () => _controller.adjustSubtitleDelay(-100),
                     onForward: () => _controller.adjustSubtitleDelay(100),
@@ -75,11 +76,11 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
                     plusKey: 'advanced-subtitle-plus',
                     resetKey: 'advanced-subtitle-reset',
                   ),
-                  if (_controller.errorMessage != null)
+                  if (error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        _controller.errorMessage!,
+                        _errorText(l10n, error),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                         ),
@@ -93,10 +94,8 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
                   SwitchListTile.adaptive(
                     key: const ValueKey('advanced-disable'),
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Advanced playback tools'),
-                    subtitle: const Text(
-                      'Turn off to restore the minimalist player. Saved choices stay stored.',
-                    ),
+                    title: Text(l10n.settingsAdvancedPlaybackTools),
+                    subtitle: Text(l10n.advancedToolsToggleHint),
                     value: _settings.advancedPlaybackToolsEnabled,
                     onChanged: (value) async {
                       await _controller.setEnabled(value);
@@ -110,7 +109,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+              child: Text(l10n.actionClose),
             ),
           ],
         );
@@ -119,11 +118,12 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
   }
 
   Widget _loopSection(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final stage = _controller.loopStage;
     final label = switch (stage) {
-      AdvancedLoopStage.clear => 'Set A',
-      AdvancedLoopStage.aSet => 'Set B',
-      AdvancedLoopStage.active => 'Clear A-B',
+      AdvancedLoopStage.clear => l10n.advancedLoopSetA,
+      AdvancedLoopStage.aSet => l10n.advancedLoopSetB,
+      AdvancedLoopStage.active => l10n.advancedLoopClear,
     };
     final key = switch (stage) {
       AdvancedLoopStage.clear => 'advanced-set-a',
@@ -133,17 +133,16 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
     final range = stage == AdvancedLoopStage.active
         ? '${_format(_controller.a!)} – ${_format(_controller.b!)}'
         : switch (stage) {
-            AdvancedLoopStage.clear => 'No A-B range set',
-            AdvancedLoopStage.aSet => 'A: ${_format(_controller.a!)}',
+            AdvancedLoopStage.clear => l10n.advancedLoopNone,
+            AdvancedLoopStage.aSet => l10n.advancedLoopPointA(
+              _format(_controller.a!),
+            ),
             AdvancedLoopStage.active => '',
           };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'A-B repeat',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-        ),
+        Text(l10n.advancedLoopTitle, style: _headingStyle),
         const SizedBox(height: 4),
         Text(range),
         const SizedBox(height: 8),
@@ -167,12 +166,13 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
     required String plusKey,
     required String resetKey,
   }) {
+    final l10n = AppLocalizations.of(context);
     return Row(
       children: [
         Expanded(child: Text(label)),
         IconButton(
           key: ValueKey(minusKey),
-          tooltip: 'Decrease $label',
+          tooltip: l10n.advancedDelayDecrease(label),
           onPressed: value <= -SettingsService.playbackDelayLimitMs
               ? null
               : () => onBack(),
@@ -181,7 +181,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
         SizedBox(width: 76, child: Center(child: Text(_delayLabel(value)))),
         IconButton(
           key: ValueKey(plusKey),
-          tooltip: 'Increase $label',
+          tooltip: l10n.advancedDelayIncrease(label),
           onPressed: value >= SettingsService.playbackDelayLimitMs
               ? null
               : () => onForward(),
@@ -189,7 +189,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
         ),
         IconButton(
           key: ValueKey(resetKey),
-          tooltip: 'Reset $label',
+          tooltip: l10n.advancedDelayReset(label),
           onPressed: value == 0 ? null : () => onReset(),
           icon: const Icon(Icons.refresh),
         ),
@@ -198,15 +198,13 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
   }
 
   Widget _markersSection(BuildContext context, List<PlaybackMarker> markers) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Playback markers',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-        ),
+        Text(l10n.advancedMarkersTitle, style: _headingStyle),
         const SizedBox(height: 4),
-        const Text('Markers are saved per file or safe URL.'),
+        Text(l10n.advancedMarkersHint),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           key: const ValueKey('advanced-add-marker'),
@@ -214,12 +212,12 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
               ? null
               : () => _controller.addMarker(),
           icon: const Icon(Icons.bookmark_add_outlined),
-          label: const Text('Add at current time'),
+          label: Text(l10n.advancedMarkerAdd),
         ),
         if (markers.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('No markers yet.'),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(l10n.advancedMarkersEmpty),
           )
         else
           ...markers.map(
@@ -236,12 +234,12 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
                 spacing: 0,
                 children: [
                   IconButton(
-                    tooltip: 'Rename marker',
+                    tooltip: l10n.advancedMarkerRename,
                     onPressed: () => _renameMarker(context, marker),
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(
-                    tooltip: 'Delete marker',
+                    tooltip: l10n.advancedMarkerDelete,
                     onPressed: () => _controller.deleteMarker(marker.id),
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -254,19 +252,15 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
   }
 
   Widget _subtitleSection(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Subtitle appearance',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-        ),
+        Text(l10n.advancedSubtitleTitle, style: _headingStyle),
         const SizedBox(height: 4),
-        const Text(
-          'Applies to plain text subtitles. Authored ASS styling is preserved; bitmap subtitles cannot be restyled.',
-        ),
+        Text(l10n.advancedSubtitleHint),
         _sliderRow(
-          label: 'Font size',
+          label: l10n.advancedSubtitleFontSize,
           value: _settings.subtitleFontSize.toDouble(),
           min: 24,
           max: 72,
@@ -278,7 +272,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           },
         ),
         _sliderRow(
-          label: 'Vertical position',
+          label: l10n.advancedSubtitlePosition,
           value: _settings.subtitlePosition.toDouble(),
           min: 0,
           max: 100,
@@ -290,7 +284,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           },
         ),
         _sliderRow(
-          label: 'Outline size',
+          label: l10n.advancedSubtitleOutlineSize,
           value: _settings.subtitleOutlineSize,
           min: 0,
           max: 4,
@@ -305,7 +299,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           key: const ValueKey('advanced-subtitle-text-color'),
           initialValue: _settings.subtitleTextColor,
           decoration: InputDecoration(
-            labelText: 'Text color (hex)',
+            labelText: l10n.advancedSubtitleTextColor,
             hintText: '#FFFFFFFF',
             errorText: _textColorError,
           ),
@@ -319,13 +313,13 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           children: [
             _colorPreset(
               key: 'advanced-text-color-white',
-              label: 'White',
+              label: l10n.advancedColorWhite,
               value: '#FFFFFFFF',
               outline: false,
             ),
             _colorPreset(
               key: 'advanced-text-color-yellow',
-              label: 'Yellow',
+              label: l10n.advancedColorYellow,
               value: '#FFFF00FF',
               outline: false,
             ),
@@ -335,7 +329,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           key: const ValueKey('advanced-subtitle-outline-color'),
           initialValue: _settings.subtitleOutlineColor,
           decoration: InputDecoration(
-            labelText: 'Outline color (hex)',
+            labelText: l10n.advancedSubtitleOutlineColor,
             hintText: '#000000FF',
             errorText: _outlineColorError,
           ),
@@ -349,13 +343,13 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           children: [
             _colorPreset(
               key: 'advanced-outline-color-black',
-              label: 'Black',
+              label: l10n.advancedColorBlack,
               value: '#000000FF',
               outline: true,
             ),
             _colorPreset(
               key: 'advanced-outline-color-white',
-              label: 'White',
+              label: l10n.advancedColorWhite,
               value: '#FFFFFFFF',
               outline: true,
             ),
@@ -380,11 +374,14 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
 
   void _submitColor(String value, {required bool outline}) {
     final valid = SettingsService.isValidSubtitleColor(value);
+    final message = valid
+        ? null
+        : AppLocalizations.of(context).advancedColorInvalid;
     setState(() {
       if (outline) {
-        _outlineColorError = valid ? null : 'Enter a 6- or 8-digit hex color.';
+        _outlineColorError = message;
       } else {
-        _textColorError = valid ? null : 'Enter a 6- or 8-digit hex color.';
+        _textColorError = message;
       }
     });
     if (!valid) return;
@@ -431,7 +428,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
     final next = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename marker'),
+        title: Text(AppLocalizations.of(ctx).advancedMarkerRename),
         content: TextField(
           controller: text,
           autofocus: true,
@@ -441,17 +438,40 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(AppLocalizations.of(ctx).actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, text.text),
-            child: const Text('Save'),
+            child: Text(AppLocalizations.of(ctx).actionSave),
           ),
         ],
       ),
     );
     text.dispose();
     if (next != null) _controller.renameMarker(marker.id, next);
+  }
+
+  static const _headingStyle = TextStyle(
+    fontWeight: FontWeight.w600,
+    fontSize: 16,
+  );
+
+  static String _errorText(AppLocalizations l10n, AdvancedPlaybackError error) {
+    return switch (error) {
+      AdvancedPlaybackError.applySync => l10n.advancedErrorApplySync,
+      AdvancedPlaybackError.applySubtitleAppearance =>
+        l10n.advancedErrorApplySubtitleAppearance,
+      AdvancedPlaybackError.applyAudioDelay =>
+        l10n.advancedErrorApplyAudioDelay,
+      AdvancedPlaybackError.applySubtitleDelay =>
+        l10n.advancedErrorApplySubtitleDelay,
+      AdvancedPlaybackError.resetAudioDelay =>
+        l10n.advancedErrorResetAudioDelay,
+      AdvancedPlaybackError.resetSubtitleDelay =>
+        l10n.advancedErrorResetSubtitleDelay,
+      AdvancedPlaybackError.applyLoop => l10n.advancedErrorApplyLoop,
+      AdvancedPlaybackError.clearLoop => l10n.advancedErrorClearLoop,
+    };
   }
 
   static String _format(Duration value) {

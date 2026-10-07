@@ -12,14 +12,13 @@ import 'player_service.dart';
 /// every `DACX_E2E_*` value and explicitly set `DACX_E2E_PACKAGED_PROBE=1`.
 class PackagedE2eProbe {
   PackagedE2eProbe({
-    required IPlayerService player,
+    required this._player,
     required this.reportPath,
     required this.expectedVersion,
     required this.runId,
     required this.fixturePath,
-    required Future<String> Function() installedVersion,
-  }) : _player = player,
-       _installedVersion = installedVersion;
+    required this._installedVersion,
+  });
 
   final IPlayerService _player;
   final Future<String> Function() _installedVersion;

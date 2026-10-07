@@ -70,6 +70,12 @@ Future<void> _hydrateWindowsCertificateStore(
   ProcessStarter startProcess = Process.start,
   Duration timeout = windowsCertificateStoreHydrationTimeout,
 }) async {
+  // The intermediate `CA` stores are loaded on purpose. Dart's SecurityContext
+  // has no separate intermediate pool and does not fetch missing issuers
+  // (AIA), so servers and TLS-inspecting proxies that omit intermediates fail
+  // without them. The cost is that these intermediates act as trust anchors.
+  // Update integrity does not depend on TLS: it is enforced by the signed
+  // manifest, SHA-256, and code-signature checks.
   const stores = <String>[
     r'Cert:\LocalMachine\Root',
     r'Cert:\CurrentUser\Root',

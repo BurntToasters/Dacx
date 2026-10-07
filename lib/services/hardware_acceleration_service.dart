@@ -15,10 +15,14 @@ class HardwareAccelerationService {
   /// expensive `sysctl` + `system_profiler` probes do not block the first
   /// frame. Safe to call multiple times; subsequent calls reuse the cached
   /// result. No-op on non-macOS platforms.
+  static const Duration _macPrimeTimeout = Duration(seconds: 3);
+
   static Future<void> prime() {
     if (!Platform.isMacOS) return Future.value();
     if (_macHardwareAccelerationSupportedCache != null) return Future.value();
+    // Startup awaits this, so a hung system_profiler must not block launch.
     return _macPrimeFuture ??= Isolate.run(_detectMacSupport)
+        .timeout(_macPrimeTimeout)
         .then((supported) {
           _macHardwareAccelerationSupportedCache = supported;
           if (!_macHardwareAccelerationSupportLogged) {
@@ -31,6 +35,9 @@ class HardwareAccelerationService {
           }
         })
         .catchError((Object e) {
+          // Same default as the sync probe; caching it keeps a failed or slow
+          // probe from rerunning on the UI isolate.
+          _macHardwareAccelerationSupportedCache ??= true;
           if (kDebugMode) {
             debugPrint('Dacx: HardwareAccelerationService.prime failed: $e');
           }
@@ -93,16 +100,16 @@ class HardwareAccelerationService {
   }
 
   static bool _looksLikeVirtualizedMac() {
-    final model = _runSyncTrimmed('sysctl', ['-n', 'hw.model']);
+    final model = _runSyncTrimmed('/usr/sbin/sysctl', ['-n', 'hw.model']);
     if (_containsVmMarker(model)) return true;
 
-    final hvVmmPresent = _runSyncTrimmed('sysctl', [
+    final hvVmmPresent = _runSyncTrimmed('/usr/sbin/sysctl', [
       '-n',
       'kern.hv_vmm_present',
     ]);
     if (hvVmmPresent == '1') return true;
 
-    final cpuFeatures = _runSyncTrimmed('sysctl', [
+    final cpuFeatures = _runSyncTrimmed('/usr/sbin/sysctl', [
       '-n',
       'machdep.cpu.features',
     ]);

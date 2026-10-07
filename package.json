@@ -52,7 +52,7 @@
     "test:coverage": "fvm flutter test --coverage",
     "coverage:check": "node scripts/check-coverage.js",
     "test:all": "node scripts/test-all.js && npm run test:scripts",
-    "test:scripts": "node --test scripts/post-release-assets.test.js scripts/release-notes.test.cjs scripts/semver-sort.test.js scripts/setup-flutter.test.js scripts/update-cacert.test.js scripts/bundle-linux-native-libs.test.js scripts/test-all.test.js scripts/sync-version.e2e.test.js scripts/verify-draft-release.e2e.test.cjs scripts/platform-release-smoke.e2e.test.js",
+    "test:scripts": "node --test scripts/github-cli.test.cjs scripts/post-release-assets.test.js scripts/release-notes.test.cjs scripts/semver-sort.test.js scripts/setup-flutter.test.js scripts/update-cacert.test.js scripts/bundle-linux-native-libs.test.js scripts/test-all.test.js scripts/sync-version.e2e.test.js scripts/verify-draft-release.e2e.test.cjs scripts/platform-release-smoke.e2e.test.js",
     "test:platform-release-smoke": "node --test scripts/platform-release-smoke.e2e.test.js",
     "test:release-assets": "npm run test:scripts",
     "check:version": "node scripts/check-version-sync.js",

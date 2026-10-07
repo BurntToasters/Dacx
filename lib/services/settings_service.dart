@@ -11,7 +11,9 @@ import '../models/update_channel.dart';
 import '../playback/advanced_playback_models.dart';
 import '../playback/bookmark_retention_policy.dart';
 import '../playback/playback_mix_policy.dart';
+import 'bookmark_service.dart';
 import 'instance_mode_service.dart';
+import 'path_probe.dart';
 
 enum AccentColor {
   blueGrey(Colors.blueGrey, 'Blue Grey'),
@@ -51,15 +53,16 @@ class SettingsService extends ChangeNotifier {
   void dispose() {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
-    _persistResumePositionsToPrefs();
+    unawaited(_persistResumePositionsToPrefs());
     super.dispose();
   }
 
-  /// Writes any pending resume-position cache to disk immediately.
-  void flushResumePositions() {
+  /// Writes any pending resume-position cache to disk now. Completes when
+  /// the platform write finishes, so exit paths can await it.
+  Future<void> flushResumePositions() {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
-    _persistResumePositionsToPrefs();
+    return _persistResumePositionsToPrefs();
   }
 
   List<double>? _eqBandsCache;
@@ -934,18 +937,44 @@ class SettingsService extends ChangeNotifier {
     _writeBookmarkMap(map);
   }
 
-  bool pruneRecentFiles({bool notifyListeners = true}) {
+  /// Drops Recents entries whose target is gone. Existence checks run off the
+  /// UI isolate so a slow or stale mount never freezes the app.
+  Future<bool> pruneRecentFiles({bool notifyListeners = true}) async {
     final raw = _prefs.getString(_kRecentFiles);
     if (raw == null) return false;
-    final parsed = _decodeStoredRecentFiles(raw);
-    final pruned = parsed.where(_recentFilePathExists).toList(growable: false);
-    final nextRaw = pruned.isEmpty ? null : jsonEncode(pruned);
-    if (nextRaw == raw) return false;
+    final entries = _decodeStoredRecentFiles(raw);
+    final existingFiles = await PathProbe.existingFiles(
+      entries
+          .where((path) => !PlayableSource.isSupportedUrl(path))
+          .toList(growable: false),
+    );
+    final missing = <String>{};
+    for (final path in entries) {
+      if (PlayableSource.isSupportedUrl(path)) {
+        if (!PlayableSource.isDisplaySafeUrl(path)) missing.add(path);
+        continue;
+      }
+      if (existingFiles.contains(path)) continue;
+      if (Platform.isMacOS && await _bookmarkedPathExists(path)) continue;
+      missing.add(path);
+    }
 
+    // Recents may have changed while the checks ran; apply the result to the
+    // current list so concurrent adds and removes are not lost.
+    final currentRaw = _prefs.getString(_kRecentFiles);
+    if (currentRaw == null) return false;
+    final pruned = _decodeStoredRecentFiles(currentRaw)
+        .where((path) => !missing.contains(path))
+        .toList(growable: false);
+    final nextRaw = pruned.isEmpty ? null : jsonEncode(pruned);
+    if (nextRaw == currentRaw) return false;
+
+    // No await between the re-read and these writes: the in-memory prefs
+    // cache updates synchronously, so the read-modify-write stays atomic.
     if (nextRaw == null) {
-      _prefs.remove(_kRecentFiles);
+      unawaited(_prefs.remove(_kRecentFiles));
     } else {
-      _prefs.setString(_kRecentFiles, nextRaw);
+      unawaited(_prefs.setString(_kRecentFiles, nextRaw));
     }
     _pruneBookmarksToList(pruned);
     if (notifyListeners) {
@@ -1326,17 +1355,20 @@ class SettingsService extends ChangeNotifier {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = Timer(_resumePersistDebounce, () {
       _resumePersistTimer = null;
-      _persistResumePositionsToPrefs();
+      unawaited(_persistResumePositionsToPrefs());
     });
   }
 
-  void _persistResumePositionsToPrefs() {
+  Future<void> _persistResumePositionsToPrefs() async {
     final positions = _resumePositionsCache ?? _readResumePositions();
     if (positions.isEmpty) {
-      _prefs.remove(_kResumePositions);
+      await _prefs.remove(_kResumePositions);
       return;
     }
-    _prefs.setString(_kResumePositions, _encodeResumePositions(positions));
+    await _prefs.setString(
+      _kResumePositions,
+      _encodeResumePositions(positions),
+    );
   }
 
   /// Stores [positionMs] for [path]. Pass null/0 to clear.
@@ -1417,21 +1449,40 @@ class SettingsService extends ChangeNotifier {
     return _decodeStoredRecentFiles(raw);
   }
 
-  bool _recentFilePathExists(String path) {
-    if (PlayableSource.isSupportedUrl(path)) {
-      return PlayableSource.isDisplaySafeUrl(path);
-    }
-    if (Platform.isMacOS &&
-        (fileBookmark(path) != null || coveringBookmarkKey(path) != null)) {
-      return true;
-    }
+  /// The macOS sandbox can deny a plain stat outside an active security
+  /// scope. Resolve the saved bookmark and check inside its scope; a bookmark
+  /// that no longer resolves means the target is gone.
+  Future<bool> _bookmarkedPathExists(String path) async {
+    final key = coveringBookmarkKey(path);
+    if (key == null) return false;
+    final bookmark = fileBookmark(key);
+    if (bookmark == null) return false;
+    final ResolvedBookmark? resolved;
     try {
-      return File(path).existsSync();
+      resolved = await BookmarkService.resolveAndStart(bookmark);
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('Dacx: recent file exists check failed: $e');
+        debugPrint('Dacx: recent file bookmark resolve failed: $e');
       }
       return false;
+    }
+    if (resolved == null) return false;
+    try {
+      final refreshed = resolved.refreshed;
+      if (resolved.stale && refreshed != null && refreshed.isNotEmpty) {
+        setFileBookmark(key, refreshed);
+      }
+      final relative = BookmarkRetentionPolicy.normalize(path)
+          .substring(BookmarkRetentionPolicy.normalize(key).length);
+      final target = '${resolved.path}$relative';
+      return await PathProbe.fileOrDirectoryExists(target);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: bookmarked recent file check failed: $e');
+      }
+      return false;
+    } finally {
+      await BookmarkService.stop(resolved.token);
     }
   }
 }

@@ -354,12 +354,28 @@ test('draft verifier hashes downloaded remote bytes when digest is absent', () =
   assert.deepEqual(parsed.remote.sizeMismatches, []);
 });
 
-test('draft verifier rejects a wrong GPG signer fingerprint', { skip: !HAS_GPG }, () => {
+// gpg-agent puts its sockets inside GNUPGHOME. macOS temp paths are long
+// enough to push them past the 104-byte Unix socket limit, and the agent then
+// fails to start ("IPC connect call failed"). Keep the home short on POSIX.
+function shortGpgHome() {
+  const root = process.platform === 'win32' ? os.tmpdir() : '/tmp';
+  const home = fs.mkdtempSync(path.join(root, 'dxg-'));
+  fs.chmodSync(home, 0o700);
+  return home;
+}
+
+test('draft verifier rejects a wrong GPG signer fingerprint', { skip: !HAS_GPG }, (t) => {
   const base = fixtureRoot();
   const { release, proof, manifestPublicKey } = createFixture(base);
-  const gpgHome = path.join(base, 'gnupg');
-  fs.mkdirSync(gpgHome, { recursive: true });
+  const gpgHome = shortGpgHome();
   const env = { GNUPGHOME: gpgHome };
+  t.after(() => {
+    spawnSync('gpgconf', ['--kill', 'gpg-agent'], {
+      env: { ...process.env, ...env },
+      stdio: 'ignore',
+    });
+    fs.rmSync(gpgHome, { recursive: true, force: true });
+  });
   const generated = spawnSync('gpg', [
     '--batch', '--pinentry-mode', 'loopback', '--passphrase', '',
     '--quick-gen-key', 'Dacx Test <dacx@example.invalid>', 'ed25519', 'sign', '0',

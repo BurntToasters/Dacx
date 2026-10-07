@@ -1,10 +1,9 @@
 import 'dart:math';
-import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
 import '../models/playable_source.dart';
+import 'path_probe.dart';
 
 class PlaylistSnapshot {
   const PlaylistSnapshot({
@@ -233,9 +232,7 @@ class PlaylistService extends ChangeNotifier {
         .toSet();
     if (checkedPaths.isEmpty) return 0;
     final pathsToCheck = checkedPaths.toList(growable: false);
-    final existingPaths = (await Isolate.run(
-      () => _existingFilePaths(pathsToCheck),
-    )).toSet();
+    final existingPaths = await PathProbe.existingFiles(pathsToCheck);
     if (_disposed) return 0;
     final missingPaths = checkedPaths.difference(existingPaths);
     if (missingPaths.isEmpty) return 0;
@@ -349,16 +346,4 @@ class PlaylistService extends ChangeNotifier {
       ..addAll(indices);
     _shufflePos = preserveCurrent ? 0 : -1;
   }
-}
-
-List<String> _existingFilePaths(List<String> paths) {
-  final existing = <String>[];
-  for (final path in paths) {
-    try {
-      if (File(path).existsSync()) existing.add(path);
-    } catch (_) {
-      // Treat inaccessible paths as missing.
-    }
-  }
-  return existing;
 }
