@@ -94,6 +94,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,14 +127,16 @@ jobs:
         shell: bash
         run: |
           dart pub global activate fvm
-          if [ -n "$PUB_CACHE" ]; then
-            PUB_BIN="${PUB_CACHE//\\//}/bin"
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            PUB_BIN="${LOCALAPPDATA//\\//}/Pub/Cache/bin"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            PUB_BIN="$(cygpath -u "$PUB_CACHE")/bin"
+            cygpath -w "$PUB_BIN" >> "$GITHUB_PATH"
+          elif [ -n "$PUB_CACHE" ]; then
+            PUB_BIN="$PUB_CACHE/bin"
+            echo "$PUB_BIN" >> "$GITHUB_PATH"
           else
             PUB_BIN="$HOME/.pub-cache/bin"
+            echo "$PUB_BIN" >> "$GITHUB_PATH"
           fi
-          echo "$PUB_BIN" >> "$GITHUB_PATH"
           export PATH="$PUB_BIN:$PATH"
           npm run setup:flutter
 
@@ -169,13 +172,13 @@ jobs:
           DACX_E2E_FIXTURE: test-results/e2e/${{ matrix.os }}/fixtures/release-smoke.wav
           DACX_E2E_REPORT: test-results/e2e/${{ matrix.os }}/desktop-playback.json
         run: |
-          export DACX_E2E_VERSION="$(node -p \"require('./package.json').version\")"
+          export DACX_E2E_VERSION="$(node -p 'require("./package.json").version')"
           export DACX_E2E_RUN_ID="desktop-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}"
           E2E_LOG="test-results/e2e/${{ matrix.os }}/flutter-test.log"
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            xvfb-run -a fvm flutter test integration_test/platform_release_smoke_test.dart -d linux 2>&1 | tee "$E2E_LOG"
+            xvfb-run -a fvm flutter --ci test integration_test/platform_release_smoke_test.dart -d linux 2>&1 | tee "$E2E_LOG"
           else
-            fvm flutter test integration_test/platform_release_smoke_test.dart -d "${{ matrix.os == 'windows-latest' && 'windows' || 'macos' }}" 2>&1 | tee "$E2E_LOG"
+            fvm flutter --ci test integration_test/platform_release_smoke_test.dart -d "${{ matrix.os == 'windows-latest' && 'windows' || 'macos' }}" 2>&1 | tee "$E2E_LOG"
           fi
           grep -Eq 'All tests passed!?' "$E2E_LOG"
           if grep -Eq 'Some tests failed|Failed to load|[+][0-9]+ -[1-9][0-9]*:' "$E2E_LOG"; then
