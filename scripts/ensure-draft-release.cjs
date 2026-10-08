@@ -3,14 +3,25 @@
 //   (default)  create-or-reuse the single draft. Run by the Windows machine only.
 //   --wait     poll until that draft exists; NEVER create. Run by mac/linux so
 //              they only ever reuse the draft Windows created (no duplicates).
+// The draft targets the exact commit at the tip of the channel branch (main for
+// stable, beta for beta/alpha), and waiters refuse a draft built from another commit.
 
-require('dotenv').config();
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+try {
+  require('dotenv').config();
+} catch {
+  // dotenv-cli usually loads .env already; the module itself is optional.
+}
 const { assertGitHubCliAuthenticated, githubApi } = require('./github-cli.cjs');
 const {
   assertValidReleaseNotes,
   readReleaseNotes,
 } = require('./release-notes.cjs');
 
+const REPOSITORY_ROOT = path.resolve(__dirname, '..');
+const RELEASE_REMOTE = 'origin';
 const REPO_OWNER = 'BurntToasters';
 const REPO_NAME = 'Dacx';
 const GH_REQUEST_RETRIES = Number.parseInt(process.env.GH_REQUEST_RETRIES || '3', 10);
@@ -34,6 +45,103 @@ const TAG_NAME = 'v' + VERSION;
 const IS_PRERELEASE = VERSION.includes('beta') || VERSION.includes('alpha');
 const RELEASE_BODY = readReleaseNotes();
 assertValidReleaseNotes(RELEASE_BODY, VERSION);
+const RELEASE_BRANCH = IS_PRERELEASE ? 'beta' : 'main';
+
+function git(args) {
+  return execFileSync('git', args, {
+    cwd: REPOSITORY_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+}
+
+// Returns the SHA of the latest commit on the channel branch, and only when the
+// local checkout is that branch and matches the remote tip exactly.
+function resolveReleaseCommit() {
+  let branch;
+  try {
+    branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
+  } catch {
+    throw new Error(
+      'Detached HEAD; check out ' + RELEASE_BRANCH + ' before releasing ' + VERSION + '.'
+    );
+  }
+  if (branch !== RELEASE_BRANCH) {
+    throw new Error(
+      (IS_PRERELEASE ? 'Beta' : 'Stable') +
+        ' release ' +
+        VERSION +
+        ' must be built from ' +
+        RELEASE_BRANCH +
+        ', but the checkout is on ' +
+        branch +
+        '.'
+    );
+  }
+
+  const remoteRef = 'refs/remotes/' + RELEASE_REMOTE + '/' + RELEASE_BRANCH;
+  try {
+    git(['fetch', '--quiet', RELEASE_REMOTE, '+refs/heads/' + RELEASE_BRANCH + ':' + remoteRef]);
+  } catch (error) {
+    const detail = String(error.stderr || error.message || '').trim();
+    throw new Error(
+      'Could not fetch ' + RELEASE_REMOTE + '/' + RELEASE_BRANCH + (detail ? ': ' + detail : '.'),
+      { cause: error }
+    );
+  }
+
+  const head = git(['rev-parse', 'HEAD']);
+  const remoteHead = git(['rev-parse', remoteRef]);
+  if (!/^[0-9a-f]{40,64}$/i.test(head)) {
+    throw new Error('Could not resolve an exact release commit from git HEAD.');
+  }
+  if (head !== remoteHead) {
+    throw new Error(
+      'Local ' +
+        RELEASE_BRANCH +
+        ' is at ' +
+        head.slice(0, 12) +
+        ' but ' +
+        RELEASE_REMOTE +
+        '/' +
+        RELEASE_BRANCH +
+        ' is at ' +
+        remoteHead.slice(0, 12) +
+        '. Pull or push so the release targets the latest pushed commit.'
+    );
+  }
+  return head;
+}
+
+function isExplicitTruthy(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || '').trim());
+}
+
+function assertReleaseTargetsCommit(release, commit) {
+  if (!release || !release.draft || release.target_commitish === commit) return release;
+  const target = release.target_commitish || 'an unknown commit';
+  if (isExplicitTruthy(process.env.FORCE_UPLOAD)) {
+    console.warn(
+      'WARNING: Draft release ' +
+        TAG_NAME +
+        ' targets ' +
+        target +
+        ', not checked-out commit ' +
+        commit +
+        '. FORCE_UPLOAD=1 bypassing commit check.'
+    );
+    return release;
+  }
+  throw new Error(
+    'Draft release ' +
+      TAG_NAME +
+      ' targets ' +
+      target +
+      ', not checked-out commit ' +
+      commit +
+      '. Delete or retarget the stale draft, or set FORCE_UPLOAD=1 to bypass.'
+  );
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,11 +226,20 @@ async function findExistingRelease() {
   return draft || matching[0];
 }
 
-async function ensureDraftRelease() {
-  console.log('Ensuring draft release exists for ' + TAG_NAME + '...');
+async function ensureDraftRelease(commit) {
+  console.log(
+    'Ensuring draft release exists for ' +
+      TAG_NAME +
+      ' targeting ' +
+      RELEASE_BRANCH +
+      '@' +
+      commit.slice(0, 12) +
+      '...'
+  );
 
   const existing = await findExistingRelease();
   if (existing) {
+    assertReleaseTargetsCommit(existing, commit);
     if (existing.draft && existing.body !== RELEASE_BODY) {
       console.log('   Draft exists but release notes differ; updating body...');
       return await githubRequestWithRetry(
@@ -155,6 +272,7 @@ async function ensureDraftRelease() {
         // Match electron-builder's createRelease() so it reuses this draft:
         // tag = "v" + version, name defaults to the version, draft:true.
         tag_name: TAG_NAME,
+        target_commitish: commit,
         name: VERSION,
         draft: true,
         prerelease: IS_PRERELEASE,
@@ -171,14 +289,14 @@ async function ensureDraftRelease() {
       const afterRetry = await findExistingRelease();
       if (afterRetry) {
         console.log('   Found existing draft after retry: id ' + afterRetry.id);
-        return afterRetry;
+        return assertReleaseTargetsCommit(afterRetry, commit);
       }
     }
     throw error;
   }
 }
 
-async function waitForDraftRelease() {
+async function waitForDraftRelease(commit) {
   const deadline = Date.now() + WAIT_TIMEOUT_MS;
   console.log(
     'Waiting for draft release ' +
@@ -191,6 +309,7 @@ async function waitForDraftRelease() {
     attempt += 1;
     const existing = await findExistingRelease();
     if (existing) {
+      assertReleaseTargetsCommit(existing, commit);
       console.log(
         '   Found draft: ' +
           (existing.name || TAG_NAME) +
@@ -225,12 +344,13 @@ async function waitForDraftRelease() {
 }
 
 async function main() {
+  const commit = resolveReleaseCommit();
   assertGitHubCliAuthenticated();
 
   if (WAIT_MODE) {
-    await waitForDraftRelease();
+    await waitForDraftRelease(commit);
   } else {
-    await ensureDraftRelease();
+    await ensureDraftRelease(commit);
   }
 }
 
