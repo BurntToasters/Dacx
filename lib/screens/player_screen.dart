@@ -531,6 +531,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
     _openFileBridge = OpenFileBridge(
       onOpenRequest: _openRequestedFileRequest,
+      onOpenBatch: _openRequestedFileBatch,
       isActive: () => !_isDisposed && mounted,
       onLog:
           (event, {message, details = const {}, warn = false, error = false}) {
@@ -755,21 +756,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<String> _resolveSandboxedPath(String requestedPath) async {
-    if (!BookmarkService.isSupported) return requestedPath;
+    final scoped = await _resolveBookmarkScope(requestedPath);
+    if (scoped.token != null) {
+      _releaseActiveBookmark();
+      _activeBookmarkToken = scoped.token!.isNotEmpty ? scoped.token : null;
+    }
+    return scoped.path;
+  }
+
+  Future<({String path, String? token})> _resolveBookmarkScope(
+    String requestedPath,
+  ) async {
+    if (!BookmarkService.isSupported) return (path: requestedPath, token: null);
     final coveringKey = _settings.coveringBookmarkKey(requestedPath);
     final bookmarkKey = coveringKey ?? requestedPath;
     final bookmark = _settings.fileBookmark(bookmarkKey);
-    if (bookmark == null || bookmark.isEmpty) return requestedPath;
+    if (bookmark == null || bookmark.isEmpty) {
+      return (path: requestedPath, token: null);
+    }
     final resolved = await BookmarkService.resolveAndStart(bookmark);
     if (resolved == null) {
       // A covering folder bookmark may still be valid for siblings.
       if (coveringKey == null || coveringKey == requestedPath) {
         _settings.removeFileBookmark(requestedPath);
       }
-      return requestedPath;
+      return (path: requestedPath, token: null);
     }
-    _releaseActiveBookmark();
-    _activeBookmarkToken = resolved.token.isNotEmpty ? resolved.token : null;
     final bookmarkToPersist = resolved.refreshed ?? bookmark;
     if (resolved.path != bookmarkKey) {
       _settings.setFileBookmark(resolved.path, bookmarkToPersist);
@@ -777,9 +789,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _settings.setFileBookmark(bookmarkKey, resolved.refreshed!);
     }
     if (coveringKey != null && coveringKey != requestedPath) {
-      return requestedPath;
+      return (path: requestedPath, token: resolved.token);
     }
-    return resolved.path;
+    return (path: resolved.path, token: resolved.token);
   }
 
   Future<void> _captureBookmarkFor(String path) async {
@@ -823,6 +835,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           LoopMode.none => 'none',
           LoopMode.single => 'single',
           LoopMode.loop => 'loop',
+        }),
+      );
+    }
+
+    final settingsVolume = _settings.volume;
+    if ((settingsVolume - _player.volume).abs() > 0.01) {
+      setState(() => _player.volume = settingsVolume);
+      unawaited(
+        _playerService.setVolume(settingsVolume).catchError((Object e) {
+          _log(
+            'settings_volume_apply_failed',
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
         }),
       );
     }
@@ -1006,6 +1032,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       detailsBuilder: () => {'path': trimmed, 'force_play': forcePlay},
     );
     await _loadFile(trimmed, forcePlay: forcePlay);
+  }
+
+  Future<void> _openRequestedFileBatch(List<OpenFileRequest> requests) async {
+    if (BookmarkService.isSupported) {
+      for (final request in requests) {
+        final bookmark = request.bookmark;
+        if (bookmark != null) _settings.setFileBookmark(request.path, bookmark);
+      }
+    }
+    _applyDroppedPaths(requests.map((request) => request.path));
   }
 
   void _applySpeed(double speed) {
@@ -2098,6 +2134,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final media = <PlayableSource>[];
     var inaccessible = 0;
     for (final path in paths) {
+      if (PlayableSource.isSupportedUrl(path)) {
+        media.add(PlayableSource.url(path));
+        continue;
+      }
       await _captureBookmarkFor(path);
       try {
         if (await PathProbe.directoryExists(path)) {
@@ -3889,60 +3929,83 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return;
       }
       final requestedDir = _settings.screenshotDir ?? _defaultScreenshotDir();
-      final dir = _settings.screenshotDir != null
-          ? await _resolveSandboxedPath(requestedDir)
-          : requestedDir;
+      final scoped = _settings.screenshotDir != null
+          ? await _resolveBookmarkScope(requestedDir)
+          : (path: requestedDir, token: null);
       try {
-        Directory(dir).createSync(recursive: true);
-      } catch (e) {
-        _log(
-          'screenshot_dir_create_failed',
-          message: e.toString(),
-          details: {'dir': dir},
-          severity: DebugSeverity.warn,
+        await _saveScreenshot(
+          bytes: bytes,
+          dir: scoped.path,
+          source: source,
+          fmt: fmt,
+          l10n: l10n,
         );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.snackScreenshotDirInaccessible)),
-          );
+      } finally {
+        final token = scoped.token;
+        if (token != null && token.isNotEmpty) {
+          unawaited(BookmarkService.stop(token));
         }
-        _showOsdMessage(l10n.osdScreenshotSaveFailed);
-        return;
-      }
-      final base = ScreenshotPathPolicy.baseNameForSource(
-        isFile: source.isFile,
-        sourceValue: source.value,
-        displayName: source.displayName,
-      );
-      final outPath = ScreenshotPathPolicy.uniqueOutputPath(
-        path: ScreenshotPathPolicy.buildOutputPath(
-          directory: dir,
-          baseName: base,
-          format: fmt,
-          timestamp: DateTime.now(),
-        ),
-        exists: (candidate) => File(candidate).existsSync(),
-      );
-      try {
-        File(outPath).writeAsBytesSync(bytes, flush: true);
-        _showOsdMessage(l10n.osdScreenshotSaved);
-        _log(
-          'screenshot_saved',
-          detailsBuilder: () => {'path': outPath, 'bytes': bytes.length},
-        );
-      } catch (e) {
-        _showOsdMessage(l10n.osdScreenshotSaveFailed);
-        _log(
-          'screenshot_save_failed',
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
       }
     } finally {
       final done = widget.screenshotOperationForTesting;
       if (done != null && !done.isCompleted) {
         done.complete();
       }
+    }
+  }
+
+  Future<void> _saveScreenshot({
+    required List<int> bytes,
+    required String dir,
+    required PlayableSource source,
+    required String fmt,
+    required AppLocalizations l10n,
+  }) async {
+    try {
+      Directory(dir).createSync(recursive: true);
+    } catch (e) {
+      _log(
+        'screenshot_dir_create_failed',
+        message: e.toString(),
+        details: {'dir': dir},
+        severity: DebugSeverity.warn,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.snackScreenshotDirInaccessible)),
+        );
+      }
+      _showOsdMessage(l10n.osdScreenshotSaveFailed);
+      return;
+    }
+    final base = ScreenshotPathPolicy.baseNameForSource(
+      isFile: source.isFile,
+      sourceValue: source.value,
+      displayName: source.displayName,
+    );
+    final outPath = ScreenshotPathPolicy.uniqueOutputPath(
+      path: ScreenshotPathPolicy.buildOutputPath(
+        directory: dir,
+        baseName: base,
+        format: fmt,
+        timestamp: DateTime.now(),
+      ),
+      exists: (candidate) => File(candidate).existsSync(),
+    );
+    try {
+      File(outPath).writeAsBytesSync(bytes, flush: true);
+      _showOsdMessage(l10n.osdScreenshotSaved);
+      _log(
+        'screenshot_saved',
+        detailsBuilder: () => {'path': outPath, 'bytes': bytes.length},
+      );
+    } catch (e) {
+      _showOsdMessage(l10n.osdScreenshotSaveFailed);
+      _log(
+        'screenshot_save_failed',
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
     }
   }
 
@@ -4498,12 +4561,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<void> _removeMissingQueueItems() async {
-    final before = _playlist.current;
-    final removed = await _playlist.removeMissingFiles();
+    var currentRemoved = false;
+    final removed = await _playlist.removeMissingFiles(
+      onCurrentRemoved: () => currentRemoved = true,
+    );
     if (!mounted) return;
     if (_playlist.isEmpty) {
       unawaited(_stopPlaybackAndResetUi());
-    } else if (before != null && _playlist.current != before) {
+    } else if (currentRemoved) {
       final next = _playlist.current;
       if (next != null) {
         unawaited(_loadSource(next, syncPlaylist: false));

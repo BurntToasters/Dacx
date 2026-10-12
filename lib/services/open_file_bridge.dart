@@ -12,6 +12,10 @@ typedef OpenFileRequestCallback = Future<void> Function(
   required bool forcePlay,
 });
 
+typedef OpenFileBatchCallback = Future<void> Function(
+  List<OpenFileRequest> requests,
+);
+
 typedef OpenFileBridgeLogger = void Function(
   String event, {
   String? message,
@@ -29,21 +33,29 @@ class OpenFileBridge {
   static const methodChannelName = 'run.rosie.dacx/open_file/methods';
   static const eventChannelName = 'run.rosie.dacx/open_file/events';
   static const defaultRetryDelay = Duration(milliseconds: 250);
+  static const defaultBatchWindow = Duration(milliseconds: 400);
 
   OpenFileBridge({
     required this.onOpenRequest,
+    this.onOpenBatch,
     this.isActive = _alwaysActive,
     this.onLog,
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
     this.retryDelay = defaultRetryDelay,
+    this.batchWindow = defaultBatchWindow,
   }) : _methodChannel = methodChannel ?? const MethodChannel(methodChannelName),
        _eventChannel = eventChannel ?? const EventChannel(eventChannelName);
 
   final OpenFileRequestCallback onOpenRequest;
+  final OpenFileBatchCallback? onOpenBatch;
   final bool Function() isActive;
   final OpenFileBridgeLogger? onLog;
   final Duration retryDelay;
+  final Duration batchWindow;
+
+  final List<OpenFileRequest> _batch = [];
+  Timer? _batchTimer;
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
@@ -83,8 +95,37 @@ class OpenFileBridge {
   }
 
   void dispose() {
+    _batchTimer?.cancel();
+    _batchTimer = null;
+    _batch.clear();
     unawaited(_eventSubscription?.cancel());
     _eventSubscription = null;
+  }
+
+  Future<void> _deliver(List<OpenFileRequest> requests) async {
+    if (requests.isEmpty || !isActive()) return;
+    final batch = onOpenBatch;
+    if (requests.length > 1 && batch != null) {
+      _log('open_file_batch_received', details: {'count': requests.length});
+      await batch(requests);
+      return;
+    }
+    for (final request in requests) {
+      if (!isActive()) return;
+      _log('open_file_event_received', details: {'path': request.path});
+      await onOpenRequest(request, forcePlay: true);
+    }
+  }
+
+  void _queueLiveRequest(OpenFileRequest request) {
+    _batch.add(request);
+    _batchTimer?.cancel();
+    _batchTimer = Timer(batchWindow, () {
+      _batchTimer = null;
+      final requests = List<OpenFileRequest>.of(_batch);
+      _batch.clear();
+      unawaited(_deliver(requests));
+    });
   }
 
   /// Handles one platform event payload. Exposed for unit tests.
@@ -112,10 +153,16 @@ class OpenFileBridge {
         retry ? 'open_file_pending_found_retry' : 'open_file_pending_found',
         details: {'count': pending.length},
       );
-      for (final entry in pending) {
-        if (!isActive()) return true;
-        await handlePlatformPayload(entry, forcePlay: true);
+      if (onOpenBatch == null) {
+        for (final entry in pending) {
+          if (!isActive()) return true;
+          await handlePlatformPayload(entry, forcePlay: true);
+        }
+        return true;
       }
+      await _deliver([
+        for (final entry in pending) ?PlayerPathUtils.coerceOpenRequest(entry),
+      ]);
       return true;
     } on MissingPluginException {
       _log('open_file_bridge_missing_plugin', warn: true);
@@ -138,7 +185,12 @@ class OpenFileBridge {
     final subscription = _eventChannel.receiveBroadcastStream().listen(
       (event) {
         if (!isActive()) return;
-        unawaited(handlePlatformPayload(event, forcePlay: true));
+        if (onOpenBatch == null) {
+          unawaited(handlePlatformPayload(event, forcePlay: true));
+          return;
+        }
+        final request = PlayerPathUtils.coerceOpenRequest(event);
+        if (request != null) _queueLiveRequest(request);
       },
       onError: (Object error) {
         _log('open_file_event_error', message: error.toString(), warn: true);

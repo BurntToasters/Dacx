@@ -6,6 +6,7 @@ on:
       - main
       - beta
       - 'prepare-for-v*'
+      - 'next-*'
   pull_request:
     branches:
       - main
@@ -129,6 +130,8 @@ jobs:
           dart pub global activate fvm
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             PUB_BIN="$(cygpath -u "$PUB_CACHE")/bin"
+            printf '#!/usr/bin/env bash\nexec fvm.bat "$@"\n' > "$PUB_BIN/fvm"
+            chmod +x "$PUB_BIN/fvm"
             cygpath -w "$PUB_BIN" >> "$GITHUB_PATH"
           elif [ -n "$PUB_CACHE" ]; then
             PUB_BIN="$PUB_CACHE/bin"

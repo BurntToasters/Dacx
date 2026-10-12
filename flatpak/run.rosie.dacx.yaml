@@ -20,6 +20,7 @@ finish-args:
   - --talk-name=org.freedesktop.ScreenSaver
   - --talk-name=org.kde.StatusNotifierWatcher
   - --own-name=org.mpris.MediaPlayer2.dacx
+  - --own-name=org.mpris.MediaPlayer2.dacx.*
 
 modules:
   - name: dacx

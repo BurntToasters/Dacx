@@ -1423,6 +1423,7 @@ class SettingsService extends ChangeNotifier {
     _keybindsCache = null;
     _resumePositionsCache = null;
     await _prefs.clear();
+    await syncInstanceModeFlag();
     notifyListeners();
   }
 

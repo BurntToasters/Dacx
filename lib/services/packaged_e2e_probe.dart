@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import 'player_service.dart';
+import 'update_service.dart';
 
 /// Opt-in release-candidate probe used by packaged E2E automation.
 ///
@@ -52,7 +52,7 @@ class PackagedE2eProbe {
       expectedVersion: version,
       runId: run,
       fixturePath: fixture,
-      installedVersion: () async => (await PackageInfo.fromPlatform()).version,
+      installedVersion: UpdateService.currentVersionFromPlatform,
     );
   }
 

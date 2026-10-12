@@ -139,7 +139,11 @@ abstract final class M3uPlaylist {
     var path = trimmed;
     // file:/// URIs → local path
     if (uri != null && uri.scheme == 'file') {
-      path = uri.toFilePath();
+      try {
+        path = uri.toFilePath();
+      } catch (_) {
+        return null;
+      }
     } else if (!p.isAbsolute(path) && baseDir != null && baseDir.isNotEmpty) {
       path = p.normalize(p.join(baseDir, path));
     }
