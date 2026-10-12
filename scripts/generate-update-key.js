@@ -10,5 +10,6 @@ const rawPublicKey = publicDer.subarray(publicDer.length - 32);
 console.log("Add this to .env and keep it secret:");
 console.log(`DACX_UPDATE_PRIVATE_KEY_PKCS8_BASE64=${privateDer.toString("base64")}`);
 console.log("");
-console.log("Commit this public key in lib/services/update_trust_config.dart:");
-console.log(`windowsManifestPublicKeyBase64 = '${rawPublicKey.toString("base64")}'`);
+console.log("Add this public key to windowsManifestPublicKeysBase64 in lib/services/update_trust_config.dart");
+console.log("(keep the current key in the list until every supported build trusts the new one):");
+console.log(`'${rawPublicKey.toString("base64")}',`);

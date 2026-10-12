@@ -421,3 +421,43 @@ test('draft verifier emits report and redacted raw log on argument failure', () 
   assert.equal(parsed.releaseProof, false);
   assert.match(fs.readFileSync(`${report}.log`, 'utf8'), /missing value|unknown option/i);
 });
+
+test('pinned trust config yields every rotation key as 32-byte Ed25519', () => {
+  const { readPinnedManifestPublicKeys } = require('./verify-draft-release.cjs');
+  const keys = readPinnedManifestPublicKeys();
+  assert.ok(keys.length >= 1);
+  for (const key of keys) assert.equal(Buffer.from(key, 'base64').length, 32);
+});
+
+test('manifest signed by a later rotation key verifies against the key list', () => {
+  const { verifyManifest } = require('./verify-draft-release.cjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dacx-rotation-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'Dacx-Windows-x64.msi'), 'msi');
+    const msiHash = crypto.createHash('sha256').update('msi').digest('hex');
+    const manifest = `${JSON.stringify({
+      schema: 1,
+      app: 'Dacx',
+      platform: 'Windows-x64',
+      version: '1.0.1',
+      assets: { 'Dacx-Windows-x64.msi': msiHash },
+    }, null, 2)}\n`;
+    fs.writeFileSync(path.join(dir, 'Dacx-update-manifest-Windows-x64.json'), manifest);
+    const raw = (pair) => {
+      const der = pair.publicKey.export({ format: 'der', type: 'spki' });
+      return der.subarray(der.length - 32).toString('base64');
+    };
+    const current = crypto.generateKeyPairSync('ed25519');
+    const next = crypto.generateKeyPairSync('ed25519');
+    fs.writeFileSync(
+      path.join(dir, 'Dacx-update-manifest-Windows-x64.json.sig'),
+      `${crypto.sign(null, Buffer.from(manifest), next.privateKey).toString('base64')}\n`,
+    );
+    const both = verifyManifest(dir, '1.0.1', [raw(current), raw(next)]);
+    assert.equal(both.checks.signature, true);
+    const onlyCurrent = verifyManifest(dir, '1.0.1', [raw(current)]);
+    assert.equal(onlyCurrent.checks.signature, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

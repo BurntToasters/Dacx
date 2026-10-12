@@ -134,15 +134,21 @@ class TrayService {
     }
   }
 
-  Future<void> hideToTray() async {
-    if (!isSupported) return;
+  Future<bool> hideToTray() async {
+    if (!isSupported) return false;
     if (!_initialized) {
       await init(showLabel: _showLabel, quitLabel: _quitLabel);
     }
     try {
+      if (!_initialized) {
+        await windowManager.minimize();
+        return false;
+      }
       await windowManager.hide();
+      return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Dacx: tray hideToTray failed: $e');
+      return false;
     }
   }
 

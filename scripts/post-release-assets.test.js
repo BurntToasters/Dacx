@@ -80,6 +80,7 @@ test("mirrors, verifies, and removes conflicting destination artifacts", () => {
 
   assert.equal(isBetaReleaseVersion(STABLE_VERSION), false);
   assert.equal(isBetaReleaseVersion(BETA_VERSION), true);
+  assert.equal(isBetaReleaseVersion(`${STABLE_VERSION}-rc.1`), true);
   assert.equal(shouldSkipBetaMirror({}, BETA_VERSION), true);
   assert.deepEqual(
     run({

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../playback/linux_install_kind.dart';
+import '../services/app_exit_hooks.dart';
 import '../services/debug_log_service.dart';
 import '../services/self_update_service.dart';
 import '../services/update_service.dart';
@@ -64,6 +65,7 @@ Future<void> triggerUpdateAction({
     ),
   );
   if (result?.outcome == SelfUpdateOutcome.spawned) {
+    await AppExitHooks.runAll();
     exit(0);
   }
   UpdatePendingMarker.readAndClear();

@@ -132,7 +132,30 @@ if (fs.existsSync(flatpakManifest)) {
   }
 }
 
-// 6. Optional shellcheck
+// 6. Linux launchers resolve bundled libs via RUNPATH, never LD_LIBRARY_PATH
+const setsLibraryPath = (text) =>
+  /(^|\s)export\s+LD_LIBRARY_PATH\b/.test(text) ||
+  /LD_LIBRARY_PATH\s*[:?+]?=/.test(text);
+const flatpakLauncher = path.join(root, "flatpak", "dacx-launcher.sh");
+if (fs.existsSync(flatpakLauncher)) {
+  const launcher = fs.readFileSync(flatpakLauncher, "utf8");
+  if (setsLibraryPath(launcher)) {
+    failures.push(
+      `${rel(flatpakLauncher)} must not set LD_LIBRARY_PATH (vendored libs resolve via $ORIGIN RUNPATH)`,
+    );
+  }
+}
+const packageRelease = path.join(root, "scripts", "package-release.js");
+if (fs.existsSync(packageRelease)) {
+  const packaging = fs.readFileSync(packageRelease, "utf8");
+  if (setsLibraryPath(packaging)) {
+    failures.push(
+      `${rel(packageRelease)} must not set LD_LIBRARY_PATH (vendored libs resolve via $ORIGIN RUNPATH)`,
+    );
+  }
+}
+
+// 7. Optional shellcheck
 const shFiles = fs
   .readdirSync(scriptsDir)
   .filter((f) => f.endsWith(".sh"))

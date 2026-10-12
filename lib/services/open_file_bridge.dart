@@ -84,10 +84,17 @@ class OpenFileBridge {
   }
 
   /// Starts the bridge: drains pending files, then listens for live events.
-  Future<void> bootstrap({SubscriptionBag? subscriptions}) async {
-    if (!isSupportedPlatform) return;
+  Future<void> bootstrap({
+    SubscriptionBag? subscriptions,
+    List<OpenFileRequest> initial = const [],
+  }) async {
+    if (!isSupportedPlatform) {
+      await Future<void>.value();
+      await _deliverSafely(initial, retry: false);
+      return;
+    }
     _log('open_file_bridge_init');
-    final bridgeReady = await _drainPendingFiles();
+    final bridgeReady = await _drainPendingFiles(initial: initial);
     _attachEventListener(subscriptions: subscriptions);
     if (!bridgeReady) {
       unawaited(_schedulePendingRetry());
@@ -141,35 +148,23 @@ class OpenFileBridge {
     await onOpenRequest(request, forcePlay: forcePlay);
   }
 
-  Future<bool> _drainPendingFiles({bool retry = false}) async {
+  Future<bool> _drainPendingFiles({
+    bool retry = false,
+    List<OpenFileRequest> initial = const [],
+  }) async {
     if (!isActive()) return true;
+    List<dynamic>? pending;
+    var ready = true;
     try {
-      final pending = await _methodChannel.invokeListMethod<dynamic>(
+      pending = await _methodChannel.invokeListMethod<dynamic>(
         'getPendingFiles',
       );
-      if (!isActive()) return true;
-      if (pending == null || pending.isEmpty) return true;
-      _log(
-        retry ? 'open_file_pending_found_retry' : 'open_file_pending_found',
-        details: {'count': pending.length},
-      );
-      if (onOpenBatch == null) {
-        for (final entry in pending) {
-          if (!isActive()) return true;
-          await handlePlatformPayload(entry, forcePlay: true);
-        }
-        return true;
-      }
-      await _deliver([
-        for (final entry in pending) ?PlayerPathUtils.coerceOpenRequest(entry),
-      ]);
-      return true;
     } on MissingPluginException {
       _log('open_file_bridge_missing_plugin', warn: true);
-      return false;
+      ready = false;
     } on PlatformException {
       _log('open_file_bridge_platform_exception', warn: true);
-      return false;
+      ready = false;
     } catch (e) {
       _log(
         retry ? 'open_file_pending_retry_failed' : 'open_file_bridge_failed',
@@ -177,8 +172,53 @@ class OpenFileBridge {
         warn: retry,
         error: !retry,
       );
-      return retry;
+      ready = retry;
     }
+    if (!isActive()) return true;
+    final entries = pending ?? const <dynamic>[];
+    if (entries.isNotEmpty) {
+      _log(
+        retry ? 'open_file_pending_found_retry' : 'open_file_pending_found',
+        details: {'count': entries.length},
+      );
+    }
+    if (onOpenBatch == null) {
+      await _deliverSafely(initial, retry: retry);
+      for (final entry in entries) {
+        if (!isActive()) return ready;
+        try {
+          await handlePlatformPayload(entry, forcePlay: true);
+        } catch (e) {
+          _logDeliveryFailure(e, retry: retry);
+        }
+      }
+      return ready;
+    }
+    await _deliverSafely([
+      ...initial,
+      for (final entry in entries) ?PlayerPathUtils.coerceOpenRequest(entry),
+    ], retry: retry);
+    return ready;
+  }
+
+  Future<void> _deliverSafely(
+    List<OpenFileRequest> requests, {
+    required bool retry,
+  }) async {
+    try {
+      await _deliver(requests);
+    } catch (e) {
+      _logDeliveryFailure(e, retry: retry);
+    }
+  }
+
+  void _logDeliveryFailure(Object error, {required bool retry}) {
+    _log(
+      retry ? 'open_file_pending_retry_failed' : 'open_file_bridge_failed',
+      message: error.toString(),
+      warn: retry,
+      error: !retry,
+    );
   }
 
   void _attachEventListener({SubscriptionBag? subscriptions}) {

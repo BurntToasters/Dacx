@@ -126,6 +126,7 @@ class SelfUpdateService {
   final MacUpdateInstallFn? _macUpdateInstallOverride;
   final String? _expectedTeamIdOverride;
   final String? _windowsManifestPublicKeyOverride;
+  final List<String>? _windowsManifestPublicKeysOverride;
   final String? _expectedWindowsSignerThumbprintOverride;
   final String? _expectedWindowsSignerPublisherOverride;
 
@@ -141,6 +142,7 @@ class SelfUpdateService {
     @visibleForTesting MacUpdateInstallFn? macUpdateInstall,
     @visibleForTesting this._expectedTeamIdOverride,
     @visibleForTesting this._windowsManifestPublicKeyOverride,
+    @visibleForTesting this._windowsManifestPublicKeysOverride,
     @visibleForTesting this._expectedWindowsSignerThumbprintOverride,
     @visibleForTesting this._expectedWindowsSignerPublisherOverride,
   }) : _httpStream = httpStream ?? platformHttpStreamFn,
@@ -817,28 +819,40 @@ class SelfUpdateService {
     required String version,
     required String assetName,
   }) async {
-    final publicKey =
-        (_windowsManifestPublicKeyOverride ??
-                UpdateTrustConfig.windowsManifestPublicKeyBase64)
-            .trim();
-    if (publicKey.isEmpty) {
+    final single = _windowsManifestPublicKeyOverride;
+    final publicKeys = [
+      ...(single != null
+          ? [single]
+          : (_windowsManifestPublicKeysOverride ??
+                UpdateTrustConfig.windowsManifestPublicKeysBase64)),
+    ].map((key) => key.trim()).where((key) => key.isNotEmpty).toList();
+    if (publicKeys.isEmpty) {
       return const SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
         message: 'Self-update is misconfigured: Windows update manifest public key is not set.',
       );
     }
 
-    bool isValid;
-    try {
-      isValid = await verifyEd25519Signature(
-        message: manifestBytes,
-        signature: signatureBytes,
-        publicKeyBase64: publicKey,
-      );
-    } catch (e) {
+    var isValid = false;
+    Object? lastError;
+    for (final publicKey in publicKeys) {
+      try {
+        if (await verifyEd25519Signature(
+          message: manifestBytes,
+          signature: signatureBytes,
+          publicKeyBase64: publicKey,
+        )) {
+          isValid = true;
+          break;
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (!isValid && lastError != null) {
       return SelfUpdateResult(
         SelfUpdateOutcome.signatureInvalid,
-        message: e.toString(),
+        message: lastError.toString(),
       );
     }
     if (!isValid) {

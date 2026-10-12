@@ -11,7 +11,12 @@ import '../playback/seek_preview_utils.dart';
 /// muted secondary [Player] that we seek to the requested timestamp and
 /// screenshot on demand.
 class SeekPreviewService {
-  SeekPreviewService();
+  SeekPreviewService({@visibleForTesting this._captureForTesting});
+
+  final Future<Uint8List?> Function(int key)? _captureForTesting;
+
+  @visibleForTesting
+  void markReadyForTesting(String path) => _loadedPath = path;
 
   static const int _quantumMs = SeekPreviewUtils.defaultQuantumMs;
   static const int _cacheLimit = 192;
@@ -149,7 +154,8 @@ class SeekPreviewService {
 
   /// Schedules a screenshot request for [target]. Returns the JPEG bytes.
   Future<Uint8List?> requestPreview(Duration target) {
-    if (_disposed || !_enabled || _player == null || _loadedPath == null) {
+    final hasPlayer = _player != null || _captureForTesting != null;
+    if (_disposed || !_enabled || !hasPlayer || _loadedPath == null) {
       return Future.value(null);
     }
     final key = _quantize(target.inMilliseconds);
@@ -197,6 +203,7 @@ class SeekPreviewService {
         if (!completer.isCompleted) completer.complete(null);
         return;
       }
+      if (_pendingKey != key) return;
       if (!completer.isCompleted) completer.complete(bytes);
       _pendingCompleter = null;
       _pendingKey = null;
@@ -215,6 +222,12 @@ class SeekPreviewService {
 
   Future<Uint8List?> _captureAt(int key) async {
     if (_disposed) return null;
+    final override = _captureForTesting;
+    if (override != null) {
+      final bytes = await override(key);
+      if (!_disposed && bytes != null) _cache.put(key, bytes);
+      return bytes;
+    }
     final p = _player;
     if (p == null || _loadedPath == null) return null;
     final generation = _sourceGeneration;

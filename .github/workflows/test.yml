@@ -77,7 +77,7 @@ jobs:
 
       - name: Enforce coverage threshold
         env:
-          MIN_COVERAGE: "55"
+          MIN_COVERAGE: "68"
         run: npm run coverage:check
 
       - name: Upload coverage artifact
@@ -177,16 +177,18 @@ jobs:
         run: |
           export DACX_E2E_VERSION="$(node -p 'require("./package.json").version')"
           export DACX_E2E_RUN_ID="desktop-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}"
-          E2E_LOG="test-results/e2e/${{ matrix.os }}/flutter-test.log"
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            xvfb-run -a fvm flutter --ci test integration_test/platform_release_smoke_test.dart -d linux 2>&1 | tee "$E2E_LOG"
-          else
-            fvm flutter --ci test integration_test/platform_release_smoke_test.dart -d "${{ matrix.os == 'windows-latest' && 'windows' || 'macos' }}" 2>&1 | tee "$E2E_LOG"
-          fi
-          grep -Eq 'All tests passed!?' "$E2E_LOG"
-          if grep -Eq 'Some tests failed|Failed to load|[+][0-9]+ -[1-9][0-9]*:' "$E2E_LOG"; then
-            exit 1
-          fi
+          for TARGET in platform_release_smoke_test libmpv_contract_test; do
+            E2E_LOG="test-results/e2e/${{ matrix.os }}/$TARGET.log"
+            if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+              xvfb-run -a fvm flutter --ci test "integration_test/$TARGET.dart" -d linux 2>&1 | tee "$E2E_LOG"
+            else
+              fvm flutter --ci test "integration_test/$TARGET.dart" -d "${{ matrix.os == 'windows-latest' && 'windows' || 'macos' }}" 2>&1 | tee "$E2E_LOG"
+            fi
+            grep -Eq 'All tests passed!?' "$E2E_LOG"
+            if grep -Eq 'Some tests failed|Failed to load|[+][0-9]+ -[1-9][0-9]*:' "$E2E_LOG"; then
+              exit 1
+            fi
+          done
 
       - name: Upload desktop E2E evidence
         if: always()

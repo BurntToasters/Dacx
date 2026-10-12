@@ -19,11 +19,13 @@ abstract final class M3uPlaylist {
   /// Parses playlist [content]. Relative file entries resolve against [baseDir]
   /// when provided. Unsafe / empty entries are skipped.
   static List<PlayableSource> parse(String content, {String? baseDir}) {
-    final trimmed = content.trimLeft();
+    const bom = '\uFEFF';
+    final stripped = content.startsWith(bom) ? content.substring(1) : content;
+    final trimmed = stripped.trimLeft();
     if (trimmed.toLowerCase().startsWith('[playlist]')) {
-      return _parsePls(content, baseDir: baseDir);
+      return _parsePls(stripped, baseDir: baseDir);
     }
-    return _parseM3u(content, baseDir: baseDir);
+    return _parseM3u(stripped, baseDir: baseDir);
   }
 
   static const maxBytes = 8 * 1024 * 1024;
@@ -75,7 +77,7 @@ abstract final class M3uPlaylist {
 
   /// Serializes [sources] as an `#EXTM3U` playlist (absolute paths / URLs).
   static String encode(List<PlayableSource> sources) {
-    final buf = StringBuffer('#EXTM3U\n');
+    final buf = StringBuffer('\uFEFF#EXTM3U\n');
     for (final source in sources) {
       final value = source.value.trim();
       if (value.isEmpty) continue;

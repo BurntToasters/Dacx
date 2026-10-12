@@ -5,6 +5,8 @@ import path from "path";
 import { spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 
+import { vendorLinuxNativeLibs } from "./bundle-linux-native-libs.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
@@ -74,6 +76,44 @@ function olderThan(targetPath, referencePath) {
   }
 }
 
+function copyDirSync(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirSync(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+function ensurePortableBundle() {
+  const portable = path.join(root, "build", "linux-portable", "bundle");
+  if (
+    fs.existsSync(path.join(portable, "dacx")) &&
+    fs.existsSync(path.join(portable, "lib"))
+  ) {
+    return portable;
+  }
+  const shared = path.join(root, "build", "linux", "x64", "release", "bundle");
+  if (!fs.existsSync(path.join(shared, "dacx"))) {
+    throw new Error(
+      "No Linux bundle found. Run 'npm run build:linux' and " +
+        "'node scripts/package-release.js linux' first.",
+    );
+  }
+  console.log("Staging portable bundle for Flatpak...");
+  fs.rmSync(path.join(root, "build", "linux-portable"), {
+    recursive: true,
+    force: true,
+  });
+  copyDirSync(shared, portable);
+  vendorLinuxNativeLibs(portable);
+  return portable;
+}
+
 function resolveManifestPath() {
   const candidates = [
     process.env.FLATPAK_MANIFEST,
@@ -101,6 +141,8 @@ function main() {
   }
 
   const manifestPath = resolveManifestPath();
+
+  ensurePortableBundle();
 
   const noticesPath = path.join(root, "build", "THIRD_PARTY_NOTICES.txt");
   if (!fs.existsSync(noticesPath)) {

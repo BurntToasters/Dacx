@@ -96,7 +96,7 @@ NumberOfEntries=2
         PlayableSource.file('/music/a.mp3'),
         PlayableSource.url('https://cdn.example/b.flac'),
       ]);
-      expect(encoded, startsWith('#EXTM3U\n'));
+      expect(encoded, startsWith('\uFEFF#EXTM3U\n'));
       expect(encoded, contains('/music/a.mp3\n'));
       expect(encoded, contains('https://cdn.example/b.flac\n'));
     });

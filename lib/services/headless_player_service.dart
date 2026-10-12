@@ -284,15 +284,24 @@ class HeadlessPlayerService implements IPlayerService {
   }
 
   @override
-  Future<bool> addExternalAudio(String path) {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return Future.value(false);
-    return setProperty('audio-files-append', path);
-  }
+  Future<bool> addExternalAudio(String path) => _addTrack('audio-add', path);
 
   @override
-  Future<bool> addExternalSubtitle(String path) {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return Future.value(false);
-    return setProperty('sub-files-append', path);
+  Future<bool> addExternalSubtitle(String path) => _addTrack('sub-add', path);
+
+  final Set<String> _failCommandNames = {};
+  final List<List<String>> _commandCalls = [];
+
+  @visibleForTesting
+  void failCommands(Iterable<String> names) => _failCommandNames.addAll(names);
+
+  @visibleForTesting
+  List<List<String>> get commandCalls => List.unmodifiable(_commandCalls);
+
+  Future<bool> _addTrack(String command, String path) async {
+    if (_disposed || PlayerPathUtils.isUnsafeOpenPath(path)) return false;
+    _commandCalls.add([command, path, 'select']);
+    return !_failCommandNames.contains(command);
   }
 
   /// Test helper to push synthetic stream events into listeners.

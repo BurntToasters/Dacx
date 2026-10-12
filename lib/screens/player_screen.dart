@@ -51,14 +51,13 @@ import '../playback/player_settings_sync.dart';
 import '../playback/player_ui_policies.dart';
 import '../playback/chapter_navigation_policy.dart';
 import '../playback/drop_path_batch_policy.dart';
-import '../playback/flatpak_pictures_dir.dart';
 import '../playback/enqueue_policy.dart';
 import '../playback/file_picker_path.dart';
 import '../playback/linux_install_kind.dart';
 import '../playback/m3u_playlist.dart';
 import '../playback/playback_speed_policy.dart';
 import '../playback/resume_playback_policy.dart';
-import '../playback/screenshot_path_policy.dart';
+import '../playback/screenshot_saver.dart';
 import '../playback/source_load_post_open_policy.dart';
 import '../playback/source_load_pre_open_policy.dart';
 import '../playback/source_load_open_policy.dart';
@@ -121,6 +120,7 @@ class PlayerScreen extends StatefulWidget {
   final ValueNotifier<String?>? osdMessageProbe;
   final Completer<void>? screenshotOperationForTesting;
   final StreamController<MediaSessionCommand>? mediaSessionCommandsForTesting;
+  final Future<void> Function()? onQuitRequest;
 
   const PlayerScreen({
     super.key,
@@ -139,6 +139,7 @@ class PlayerScreen extends StatefulWidget {
     @visibleForTesting this.osdMessageProbe,
     @visibleForTesting this.screenshotOperationForTesting,
     @visibleForTesting this.mediaSessionCommandsForTesting,
+    this.onQuitRequest,
   });
 
   @override
@@ -195,6 +196,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // Resume-position bookkeeping.
   Timer? _resumeSaveTimer;
+  Timer? _updateCheckTimer;
 
   String? _activeBookmarkToken;
   String? _mediaDisplayTitle;
@@ -417,7 +419,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (!playing && !_player.fileOpenInProgress) {
           _persistResumePosition();
         }
-        unawaited(_idleInhibit.setPlaying(playing));
+        _syncIdleInhibit();
         if (!playing) {
           unawaited(WindowsShellService.clearTaskbarProgress());
         }
@@ -446,6 +448,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (!mounted || _isDisposed) return;
         if (_player.onVideoWidth(w)) {
           setState(() {});
+          _syncIdleInhibit();
           if (widget.debugLog.isEnabled) {
             _log(
               'video_output_changed',
@@ -529,6 +532,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       (_) => _persistResumePosition(requirePlaying: true),
     );
 
+    _checkForUpdates();
+    _updateCheckTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      if (!_isDisposed && mounted) _checkForUpdates();
+    });
+
     _openFileBridge = OpenFileBridge(
       onOpenRequest: _openRequestedFileRequest,
       onOpenBatch: _openRequestedFileBatch,
@@ -554,20 +562,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _initializePlatformFileOpenBridge();
     _initializeMacAppMenuBridge();
 
-    _checkForUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_showPendingUpdateNotice());
     });
 
-    // Auto-open CLI file.
     if (widget.initialFile != null) {
       _log(
         'initial_file_requested',
         detailsBuilder: () => {'path': widget.initialFile},
       );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_openRequestedFile(widget.initialFile!, forcePlay: true));
-      });
     }
 
     final seededSource = widget.initialLoadedSource;
@@ -692,6 +695,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _fullscreenChromeHideTimer?.cancel();
     _mediaSurfaceTapTimer?.cancel();
     _resumeSaveTimer?.cancel();
+    _updateCheckTimer?.cancel();
     _persistResumePosition();
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
@@ -910,7 +914,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _initializePlatformFileOpenBridge() {
-    unawaited(_openFileBridge.bootstrap(subscriptions: _subscriptions));
+    final initialFile = widget.initialFile?.trim();
+    unawaited(
+      _openFileBridge.bootstrap(
+        subscriptions: _subscriptions,
+        initial: [
+          if (initialFile != null && initialFile.isNotEmpty)
+            OpenFileRequest(path: initialFile),
+        ],
+      ),
+    );
   }
 
   /// macOS application menu → Flutter (Preferences, updates, File menu).
@@ -2073,6 +2086,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     if (result.audioOnlyChanged) {
       setState(() {});
+      _syncIdleInhibit();
       unawaited(_applyMergedAudioFilters(gen: gen));
     }
     if (result.refreshChapters) {
@@ -2423,6 +2437,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         isMetaPressed: metaPressed,
         isControlPressed: controlPressed,
         isShiftPressed: shiftPressed,
+        customBindings: custom.isEmpty ? null : custom,
       );
     }
 
@@ -3921,30 +3936,42 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     try {
       final source = _player.currentSource;
       if (source == null) return;
-      final fmt = _settings.screenshotFormat;
-      final mime = ScreenshotPathPolicy.mimeForFormat(fmt);
-      final bytes = await _playerService.screenshot(format: mime);
-      if (bytes == null) {
-        _showOsdMessage(l10n.osdScreenshotFailed);
-        return;
-      }
-      final requestedDir = _settings.screenshotDir ?? _defaultScreenshotDir();
-      final scoped = _settings.screenshotDir != null
-          ? await _resolveBookmarkScope(requestedDir)
-          : (path: requestedDir, token: null);
-      try {
-        await _saveScreenshot(
-          bytes: bytes,
-          dir: scoped.path,
-          source: source,
-          fmt: fmt,
-          l10n: l10n,
-        );
-      } finally {
-        final token = scoped.token;
-        if (token != null && token.isNotEmpty) {
-          unawaited(BookmarkService.stop(token));
-        }
+      final saver = ScreenshotSaver(
+        capture: (mime) => _playerService.screenshot(format: mime),
+        resolveScope: _resolveBookmarkScope,
+        releaseScope: BookmarkService.stop,
+      );
+      final result = await saver.save(
+        source: source,
+        format: _settings.screenshotFormat,
+        customDirectory: _settings.screenshotDir,
+      );
+      switch (result.outcome) {
+        case ScreenshotSaveOutcome.noFrame:
+          _showOsdMessage(l10n.osdScreenshotFailed);
+        case ScreenshotSaveOutcome.directoryUnavailable:
+          _log(
+            'screenshot_dir_create_failed',
+            message: result.error.toString(),
+            details: {'dir': result.directory},
+            severity: DebugSeverity.warn,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.snackScreenshotDirInaccessible)),
+            );
+          }
+          _showOsdMessage(l10n.osdScreenshotSaveFailed);
+        case ScreenshotSaveOutcome.saved:
+          _showOsdMessage(l10n.osdScreenshotSaved);
+          _log('screenshot_saved', detailsBuilder: () => {'path': result.path});
+        case ScreenshotSaveOutcome.writeFailed:
+          _showOsdMessage(l10n.osdScreenshotSaveFailed);
+          _log(
+            'screenshot_save_failed',
+            message: result.error.toString(),
+            severity: DebugSeverity.warn,
+          );
       }
     } finally {
       final done = widget.screenshotOperationForTesting;
@@ -3952,102 +3979,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         done.complete();
       }
     }
-  }
-
-  Future<void> _saveScreenshot({
-    required List<int> bytes,
-    required String dir,
-    required PlayableSource source,
-    required String fmt,
-    required AppLocalizations l10n,
-  }) async {
-    try {
-      Directory(dir).createSync(recursive: true);
-    } catch (e) {
-      _log(
-        'screenshot_dir_create_failed',
-        message: e.toString(),
-        details: {'dir': dir},
-        severity: DebugSeverity.warn,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.snackScreenshotDirInaccessible)),
-        );
-      }
-      _showOsdMessage(l10n.osdScreenshotSaveFailed);
-      return;
-    }
-    final base = ScreenshotPathPolicy.baseNameForSource(
-      isFile: source.isFile,
-      sourceValue: source.value,
-      displayName: source.displayName,
-    );
-    final outPath = ScreenshotPathPolicy.uniqueOutputPath(
-      path: ScreenshotPathPolicy.buildOutputPath(
-        directory: dir,
-        baseName: base,
-        format: fmt,
-        timestamp: DateTime.now(),
-      ),
-      exists: (candidate) => File(candidate).existsSync(),
-    );
-    try {
-      File(outPath).writeAsBytesSync(bytes, flush: true);
-      _showOsdMessage(l10n.osdScreenshotSaved);
-      _log(
-        'screenshot_saved',
-        detailsBuilder: () => {'path': outPath, 'bytes': bytes.length},
-      );
-    } catch (e) {
-      _showOsdMessage(l10n.osdScreenshotSaveFailed);
-      _log(
-        'screenshot_save_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    }
-  }
-
-  String _defaultScreenshotDir() {
-    final home =
-        Platform.environment['HOME'] ??
-        Platform.environment['USERPROFILE'] ??
-        '.';
-    if (LinuxInstallDetector.isFlatpak) {
-      String? userDirs;
-      try {
-        final configHome = Platform.environment['XDG_CONFIG_HOME'];
-        final userDirsPath = p.join(
-          configHome ?? p.join(home, '.config'),
-          'user-dirs.dirs',
-        );
-        final file = File(userDirsPath);
-        if (file.existsSync()) userDirs = file.readAsStringSync();
-      } catch (_) {
-        userDirs = null;
-      }
-      final pictures = FlatpakPicturesDir.resolve(
-        environment: Platform.environment,
-        userDirsContents: userDirs,
-        directoryExists: (path) => Directory(path).existsSync(),
-      );
-      if (pictures != null) return _screenshotFolderIn(pictures);
-    }
-    return _screenshotFolderIn(p.join(home, 'Pictures'));
-  }
-
-  /// Screenshots go to `Pictures/Dacx`. Releases before 1.0 used `DACX`; keep
-  /// using that folder when it exists so screenshots do not split across two
-  /// folders on case-sensitive file systems.
-  String _screenshotFolderIn(String pictures) {
-    final legacy = p.join(pictures, 'DACX');
-    try {
-      if (Directory(legacy).existsSync()) return legacy;
-    } catch (_) {
-      // Fall through to the current name.
-    }
-    return p.join(pictures, 'Dacx');
   }
 
   Directory _mediaSessionArtDirectory() {
@@ -4263,6 +4194,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     });
   }
 
+  void _syncIdleInhibit() {
+    unawaited(
+      _idleInhibit.setPlaying(
+        _player.isPlaying,
+        hasVideo: !_player.isAudioFile,
+      ),
+    );
+  }
+
   void _onMediaSessionCommand(MediaSessionCommand cmd) {
     final dispatch = MediaSessionCommandDispatch.resolve(
       cmd,
@@ -4317,7 +4257,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         unawaited(windowManager.show().catchError((_) {}));
         unawaited(windowManager.focus().catchError((_) {}));
       case MediaSessionDispatchKind.quit:
-        unawaited(windowManager.close().catchError((_) {}));
+        final onQuit = widget.onQuitRequest;
+        if (onQuit != null) {
+          unawaited(onQuit());
+        } else {
+          unawaited(() async {
+            await AppExitHooks.runAll();
+            if (_isDisposed) return;
+            try {
+              await windowManager.setPreventClose(false);
+            } catch (_) {}
+            await windowManager.destroy().catchError((_) {});
+          }());
+        }
       case MediaSessionDispatchKind.noop:
         break;
     }

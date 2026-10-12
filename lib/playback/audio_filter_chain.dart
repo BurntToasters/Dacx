@@ -8,8 +8,8 @@ class AudioFilterApplyResult {
     required this.failed,
   });
 
-  /// Chain last written to mpv (`''` when cleared).
-  final String appliedChain;
+  /// Chain last written to mpv (`''` when cleared, null when unknown).
+  final String? appliedChain;
 
   /// True when the requested chain matched [lastAppliedChain].
   final bool skipped;
@@ -65,8 +65,8 @@ abstract final class AudioFilterChain {
       );
     }
 
-    return AudioFilterApplyResult(
-      appliedChain: lastAppliedChain ?? '',
+    return const AudioFilterApplyResult(
+      appliedChain: null,
       skipped: false,
       failed: true,
     );
