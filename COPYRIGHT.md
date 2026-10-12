@@ -12,9 +12,9 @@ As copyright holder, `rosie.run` may offer its own original code under other lic
 
 ## Dacx name and logo
 
-The `Dacx` name is project branding. The GPL-3.0 does not grant trademark rights (Section 7(e)). Original logo artwork is copyrighted by `rosie.run` and is not licensed under GPL-3.0 unless a file or notice says otherwise.
+The `Dacx` name and logo are project branding. They are not licensed under the GPL-3.0 or any other open source license for this project. The GPL-3.0 does not grant trademark rights (Section 7(e)). Logo artwork is copyrighted by `rosie.run`.
 
-Modified versions must be marked as different from the original (GPL-3.0 Section 7(c)). Do not use the name or logo to suggest official status, endorsement, or affiliation without permission. Accurate references to Dacx remain permitted.
+Modified versions must be marked as different from the original (GPL-3.0 Section 7(c)). You may redistribute unmodified official Dacx releases with their included branding. This permission is separate from the GPL-3.0 and does not extend to modified versions. Do not use the name or logo to suggest official status, endorsement, or affiliation without permission. Accurate references to Dacx remain permitted.
 
 ## Third-party material
 
