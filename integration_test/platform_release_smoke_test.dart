@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'package:dacx/l10n/app_localizations.dart';
 import 'package:dacx/screens/player_screen.dart';
@@ -49,6 +50,11 @@ void main() {
     if (!fixtureFile.existsSync()) fail('Fixture does not exist: $fixture');
 
     MediaKit.ensureInitialized();
+    // Mirrors main(): macOS window_manager force-unwraps its window until
+    // ensureInitialized runs, and PlayerScreen queries it on first frame. The
+    // runner hides the window at launch; a hidden window gets no vsync.
+    await windowManager.ensureInitialized();
+    await windowManager.show();
     final prefs = await SharedPreferences.getInstance();
     final settings = SettingsService(prefs);
     final debugLog = DebugLogService(isEnabled: () => false);
@@ -158,6 +164,9 @@ void main() {
     output.writeAsStringSync(
       '${const JsonEncoder.withIndent('  ').convert(report)}\n',
     );
+    // The macOS sandbox keeps the report inside the app container, which the
+    // host shell cannot read; the runner log carries a copy.
+    debugPrint('DACX_E2E_REPORT_JSON ${jsonEncode(report)}');
 
     for (final subscription in subscriptions) {
       await subscription.cancel();

@@ -54,6 +54,10 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  config:
+    # media_kit_video (CocoaPods) links Mpv from the Frameworks dir that only
+    # media_kit_libs_macos_video's podspec `make` creates; SwiftPM skips it.
+    enable-swift-package-manager: false
   assets:
     - assets/cacert.pem
     - assets/icon/icon.png
