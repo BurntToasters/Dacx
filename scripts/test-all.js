@@ -45,7 +45,10 @@ export function flutterTestOutputLooksFailed(output) {
   const clean = stripAnsi(output);
   if (/Failed to load/i.test(clean)) return true;
   if (/Some tests failed/i.test(clean)) return true;
-  if (/^\d+:\d+\s+\+\d+\s+-\d+:/m.test(clean)) return true;
+  // Only failed test lines carry the [E] marker. A bare negative count can
+  // appear in a progress line whose test ultimately passes, which used to
+  // report a green run as failed.
+  if (/^\d+:\d+\s+\+\d+\s+-\d+:.*\[E\]\s*$/m.test(clean)) return true;
   return false;
 }
 
