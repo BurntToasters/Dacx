@@ -11,7 +11,12 @@ const test = require('node:test');
 
 const root = path.dirname(path.dirname(__filename));
 const artifactDir = path.join(root, 'test-results', 'ensure-draft-release');
-const copiedScripts = ['ensure-draft-release.cjs', 'github-cli.cjs', 'release-notes.cjs'];
+const copiedScripts = [
+  'ensure-draft-release.cjs',
+  'github-cli.cjs',
+  'release-notes.cjs',
+  'release-version.cjs',
+];
 const report = [];
 
 const skip = process.platform === 'win32' ? 'stub gh is a POSIX shebang script' : false;

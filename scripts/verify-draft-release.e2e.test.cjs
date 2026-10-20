@@ -8,7 +8,7 @@ const test = require('node:test');
 
 const root = path.dirname(path.dirname(__filename));
 const script = path.join(root, 'scripts', 'verify-draft-release.cjs');
-const version = '1.0.0-beta.1';
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const primary = [
   'Dacx-Windows-x64.msi',
   'Dacx-macOS.dmg',
