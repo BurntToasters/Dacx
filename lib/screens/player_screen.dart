@@ -174,7 +174,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   bool _isDisposed = false;
   bool _stopInProgress = false;
-  String? _appliedVideoHwDec;
   Timer? _fullscreenChromeHideTimer;
   Timer? _mediaSurfaceTapTimer;
   bool _fullscreenChromeVisible = true;
@@ -310,7 +309,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             enableHardwareAcceleration: hwEnabled,
           ),
         );
-        _appliedVideoHwDec = hwDec;
       }
     }
     _mediaSession = MediaSessionService(debugLog: widget.debugLog);
@@ -914,7 +912,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _initializePlatformFileOpenBridge() {
-    final initialFile = widget.initialFile?.trim();
+    final initialFile = _resolveInitialFile(widget.initialFile);
     unawaited(
       _openFileBridge.bootstrap(
         subscriptions: _subscriptions,
@@ -924,6 +922,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         ],
       ),
     );
+  }
+
+  /// Resolves a relative CLI path against this process's working directory,
+  /// which is only valid for the process's own argv. URLs and URIs pass through.
+  static String? _resolveInitialFile(String? raw) {
+    final trimmed = raw?.trim();
+    if (trimmed == null || trimmed.isEmpty) return trimmed;
+    if (PlayableSource.isSupportedUrl(trimmed)) return trimmed;
+    if (RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]+:').hasMatch(trimmed)) return trimmed;
+    return p.normalize(p.absolute(trimmed));
   }
 
   /// macOS application menu → Flutter (Preferences, updates, File menu).
@@ -1140,19 +1148,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             );
           }),
     );
-    if (_headlessMedia || widget.videoController != null) return;
-    if (_appliedVideoHwDec == value && _videoController != null) return;
-    final native = _playerService;
-    if (native is! PlayerService) return;
-    _videoController = VideoController(
-      native.player,
-      configuration: VideoControllerConfiguration(
-        hwdec: value,
-        enableHardwareAcceleration: _shouldEnableHardwareAcceleration(value),
-      ),
-    );
-    _appliedVideoHwDec = value;
-    if (mounted) setState(() {});
+    // media_kit reuses one native controller per player, so a new
+    // VideoController cannot change hwdec at runtime. Only the mpv property
+    // above applies; the controller from initState stays in place.
   }
 
   /// Keeps settings, playlist, and OS media-session shuffle in sync.

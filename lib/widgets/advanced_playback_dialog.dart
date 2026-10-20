@@ -424,30 +424,10 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
     BuildContext context,
     PlaybackMarker marker,
   ) async {
-    final text = TextEditingController(text: marker.label);
     final next = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(ctx).advancedMarkerRename),
-        content: TextField(
-          controller: text,
-          autofocus: true,
-          maxLength: 80,
-          onSubmitted: (value) => Navigator.pop(ctx, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(ctx).actionCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, text.text),
-            child: Text(AppLocalizations.of(ctx).actionSave),
-          ),
-        ],
-      ),
+      builder: (ctx) => _RenameMarkerDialog(initialLabel: marker.label),
     );
-    text.dispose();
     if (next != null) _controller.renameMarker(marker.id, next);
   }
 
@@ -479,5 +459,51 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
     final m = value.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = value.inSeconds.remainder(60).toString().padLeft(2, '0');
     return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+}
+
+// Owns the text controller so it is disposed only after the dialog has left
+// the tree, including its exit transition.
+class _RenameMarkerDialog extends StatefulWidget {
+  const _RenameMarkerDialog({required this.initialLabel});
+
+  final String initialLabel;
+
+  @override
+  State<_RenameMarkerDialog> createState() => _RenameMarkerDialogState();
+}
+
+class _RenameMarkerDialogState extends State<_RenameMarkerDialog> {
+  late final TextEditingController _text = TextEditingController(
+    text: widget.initialLabel,
+  );
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(AppLocalizations.of(context).advancedMarkerRename),
+      content: TextField(
+        controller: _text,
+        autofocus: true,
+        maxLength: 80,
+        onSubmitted: (value) => Navigator.pop(context, value),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(AppLocalizations.of(context).actionCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _text.text),
+          child: Text(AppLocalizations.of(context).actionSave),
+        ),
+      ],
+    );
   }
 }

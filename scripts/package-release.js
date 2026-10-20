@@ -30,6 +30,7 @@ import { fileURLToPath } from "url";
 import { loadLocalDotEnv } from "./xcode-env.js";
 import releaseVersion from "./release-version.cjs";
 import { checkWindowsLibmpvArchives } from "./check-native-libs.js";
+import { checkUnwantedNativeLibs } from "./check-unwanted-native-libs.js";
 
 const { toMsiVersion } = releaseVersion;
 import {
@@ -508,6 +509,16 @@ function renderWixApplicationSearchRegistrationComponent({ indent }) {
   ].join("\n");
 }
 
+function assertNoUnwantedNativeLibs(bundleDir) {
+  const unwanted = checkUnwantedNativeLibs(bundleDir);
+  if (unwanted.passed) return;
+  for (const failure of unwanted.failures) console.error(failure);
+  console.error(
+    "Remove dartjni from the bundle and confirm CMAKE_DISABLE_FIND_PACKAGE_JNI is set in the desktop CMake shell, then rebuild.",
+  );
+  process.exit(1);
+}
+
 function listFilesRecursive(baseDir) {
   const out = [];
 
@@ -554,6 +565,7 @@ function packageWindows() {
   }
 
   assertWindowsRuntimeDllsPresent(buildDir);
+  assertNoUnwantedNativeLibs(buildDir);
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
   installLegalFilesInDir(buildDir);
 
@@ -869,6 +881,7 @@ function packageLinux() {
     console.error("Run 'npm run build:linux' first.");
     process.exit(1);
   }
+  assertNoUnwantedNativeLibs(buildDir);
 
   const packagingDir = path.join(root, "linux", "packaging");
   const desktopFile = path.join(packagingDir, "dacx.desktop");

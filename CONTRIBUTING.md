@@ -19,7 +19,7 @@ VS Code / Cursor uses `"dart.flutterSdkPath": ".fvm/flutter_sdk"` (see `.vscode/
 npm run test:all
 ```
 
-This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **55%**. Required sources (`player_screen`) must appear in the lcov report but are excluded from the scoped gate. CI runs a subset plus multi-OS build smoke on `main` and `beta` only; interim branches and tags are skipped to save minutes.
+This runs version sync, static checks, hygiene, analyze, format, unit tests, coverage, and a build smoke. Coverage gates (`scripts/check-coverage.js`): overall minimum **40%**; scoped (non-required sources) minimum **68%** (`MIN_COVERAGE`). Required sources (`player_screen`) must appear in the lcov report but are excluded from the scoped gate. CI (`.github/workflows/test.yml`) runs a subset on pushes to `main`, `beta`, `prepare-for-v*` and `next-*`, and on pull requests to `main`, `beta` and `prepare-for-v*`. The `build-smoke` job runs on Ubuntu, Windows and macOS: it builds the host desktop app, runs `flutter test` natively on Windows and macOS, runs the real desktop integration E2E (`integration_test/platform_release_smoke_test.dart`, `integration_test/libmpv_contract_test.dart`), and uploads `desktop-e2e-<os>` evidence. Tags do not trigger CI.
 
 Before a stable cut, run the manual checklist in [docs/QA.md](docs/QA.md).
 

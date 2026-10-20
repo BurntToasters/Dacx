@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Size;
+import 'package:nativeapi_flutter/nativeapi_flutter.dart' show SizeToNative;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -96,7 +97,7 @@ class TrayService {
       icon.icon = trayImage;
       if (Platform.isMacOS) {
         icon.isIconTemplate = true;
-        icon.iconSize = const Size(22, 22);
+        icon.iconSize = const Size(22, 22).toNative();
       }
       icon.setTooltip('Dacx');
       icon.setContextMenu(menu);

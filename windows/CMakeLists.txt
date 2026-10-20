@@ -59,6 +59,10 @@ add_subdirectory("runner")
 add_subdirectory("update_helper")
 
 
+# Dacx never uses JNI on desktop; disabling it keeps the jni plugin from building
+# and bundling dartjni.dll when a JDK is installed on the build machine.
+set(CMAKE_DISABLE_FIND_PACKAGE_JNI ON)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
