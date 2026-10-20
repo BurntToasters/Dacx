@@ -27,6 +27,7 @@ import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 import 'services/trusted_http.dart';
 import 'services/update_service.dart';
+import 'theme/window_visual_inputs.dart';
 import 'theme/window_visuals.dart';
 import 'widgets/missing_playback_runtime_app.dart';
 
@@ -412,6 +413,8 @@ class _DacxAppState extends State<DacxApp>
   _ThemeInputs? _cachedThemeInputs;
   late final TrayService _tray;
   bool _trayLabelsSynced = false;
+  late WindowVisualInputs _visualInputs;
+  late bool _minimizeToTray;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
     if (!settings.windowBlurEnabled) return false;
@@ -515,6 +518,8 @@ class _DacxAppState extends State<DacxApp>
     );
     WidgetsBinding.instance.addObserver(this);
     windowManager.addListener(this);
+    _visualInputs = WindowVisualInputs.fromSettings(widget.settings);
+    _minimizeToTray = widget.settings.minimizeToTray;
     widget.settings.addListener(_onSettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_applyWindowVisualSettings());
@@ -545,8 +550,16 @@ class _DacxAppState extends State<DacxApp>
         'experimental_features': widget.settings.experimentalFeaturesEnabled,
       },
     );
-    unawaited(_applyWindowVisualSettings());
-    unawaited(_syncMinimizeToTray());
+    final visuals = WindowVisualInputs.fromSettings(widget.settings);
+    if (visuals != _visualInputs) {
+      _visualInputs = visuals;
+      unawaited(_applyWindowVisualSettings());
+    }
+    final minimizeToTray = widget.settings.minimizeToTray;
+    if (minimizeToTray != _minimizeToTray) {
+      _minimizeToTray = minimizeToTray;
+      unawaited(_syncMinimizeToTray());
+    }
   }
 
   Future<void> _syncMinimizeToTray({AppLocalizations? l10n}) async {
