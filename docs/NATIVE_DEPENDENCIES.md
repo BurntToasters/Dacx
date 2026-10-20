@@ -14,6 +14,51 @@ typically bundle or depend on:
 
 Refresh the CA bundle from [curl.se’s CA extract](https://curl.se/docs/caextract.html) **manually** when you intend to (`npm run cacert:update`). The script validates the download before overwriting; it is **not** run automatically by `release:*`. Optional: `npm run check:cacert` (strict) or the advisory step in `test:all`.
 
+## libmpv / FFmpeg pinning and refresh
+
+Dacx plays files from anywhere, so the bundled decoders are security-relevant.
+
+| Platform | Source | Pinned build |
+| -------- | ------ | ------------ |
+| Windows | `media_kit_libs_windows_video` from the official [media-kit](https://github.com/media-kit/media-kit) repository, pinned by commit in `pubspec.yaml` `dependency_overrides` | `mpv-dev-x86_64-20241021-git-0f78584.7z` (mpv v0.39.0-179, FFmpeg N-117622) |
+| macOS | `media_kit_libs_macos_video` from the same commit | `libmpv-darwin-build` v0.7.2 |
+| Linux | System libmpv (`.deb` depends on the distro package; the tarball and Flatpak vendor the build host's copy) | Refreshed with the release VM's distro updates |
+
+The published pub.dev packages still bundle 2023 builds (FFmpeg n6.0), which is
+why the override exists. Checks:
+
+- `npm run check:native-libs` verifies the downloaded Windows archive against
+  the SHA-256 in `scripts/check-native-libs.js` (upstream only checks MD5).
+  Windows packaging runs it and fails on an unpinned or altered archive.
+- `integration_test/libmpv_contract_test.dart` reads `ffmpeg-version` from the
+  running library and fails on Windows/macOS when it is older than
+  `NativeLibPolicy` (FFmpeg 7.1 or git revision 117622).
+- After changing the pin, delete `build/windows/x64/libmpv` and old
+  `mpv-dev-*.7z` files; the plugin does not re-extract over an existing folder.
+
+Refresh routine (at least every six months, and on any FFmpeg security
+advisory): move the override to a newer official media-kit commit, update the
+SHA-256 pin and `NativeLibPolicy` minimums, run the contract and release smoke
+tests on all three platforms, and update the table above. Use only official
+media-kit sources; if Windows needs a newer build than media-kit publishes,
+build it with media-kit's own `libmpv-win32-video-cmake` tooling and pin the
+result the same way.
+
+## Plugin health
+
+| Package | Status | Plan |
+| ------- | ------ | ---- |
+| `anni_mpris_service` 0.1.0 | Last release 2022-09 (Linux media controls) | Replace with an in-repo MPRIS service on the existing `dbus` package when it next needs changes. |
+| `flutter_acrylic` 1.1.4 | Last release 2024-06 (window blur) | Keep while it works; macOS blur already uses `macos_window_utils` directly. |
+| `tray_manager` 0.7.0 | 0.8.0 (2026-10-08) changes the API and adds C build hooks | Adopt after it has aged and the tray code is migrated. |
+| `dbus` 0.7.x | 0.8 blocked by `desktop_drop`'s constraint | Move when `desktop_drop` allows it. |
+
+Preferences on Windows and Linux are one JSON file rewritten in place by
+`shared_preferences`. Dacx moves an unreadable file aside at startup
+(`PreferencesRecovery`) and keeps high-churn resume positions in its own
+atomically written, merge-on-write `resume_positions.json`. With multiple
+instances, other settings still follow last-writer-wins.
+
 ## Linux packaging notes
 
 `media_kit_video` **links** libmpv (`DT_NEEDED`). Official **AppImage, tar, and

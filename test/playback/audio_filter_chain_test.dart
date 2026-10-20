@@ -63,7 +63,7 @@ void main() {
         setAudioFilter: (_) async => false,
       );
       expect(result.failed, isTrue);
-      expect(result.appliedChain, 'existing');
+      expect(result.appliedChain, isNull);
     });
   });
 }

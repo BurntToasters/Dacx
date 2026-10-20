@@ -104,9 +104,37 @@ duration, playing state, matching version/run ID/fixture, and no error, can
 complete playback proof.
 
 `--extract` prepares MSI administrative installs, macOS DMG/ZIP bundles, and
-Linux tarballs into report-local staging. Linux AppImage launches directly on
-Linux. Flatpak requires an explicit wrapper executable such as
-`flatpak run run.rosie.dacx`; deb/rpm install policy stays outside harness.
+Linux tarballs and debs into report-local staging. Linux AppImage launches
+directly on Linux. Flatpak requires an explicit wrapper executable such as
+`flatpak run run.rosie.dacx`; rpm install policy stays outside harness.
+
+Prove every Linux artifact on a Linux host before release:
+
+```text
+node scripts/platform-release-smoke.js package --platform linux \
+  --artifact release/Dacx-Linux-x86_64.AppImage \
+  --expected-sha256 <64-hex-digest> \
+  --proof-metadata <release-proof.json> \
+  --version <version> \
+  --playback-report test-results/release-proof/<version>/appimage-playback.json \
+  --report test-results/release-proof/<version>/linux-appimage.json
+node scripts/platform-release-smoke.js package --platform linux \
+  --artifact release/Dacx-Linux-amd64.deb \
+  --extract \
+  --expected-sha256 <64-hex-digest> \
+  --proof-metadata <release-proof.json> \
+  --version <version> \
+  --playback-report test-results/release-proof/<version>/deb-playback.json \
+  --report test-results/release-proof/<version>/linux-deb.json
+node scripts/platform-release-smoke.js package --platform linux \
+  --artifact release/Dacx-Linux-x86_64.flatpak \
+  --launcher flatpak --launch-arg run --launch-arg run.rosie.dacx \
+  --expected-sha256 <64-hex-digest> \
+  --proof-metadata <release-proof.json> \
+  --version <version> \
+  --playback-report test-results/release-proof/<version>/flatpak-playback.json \
+  --report test-results/release-proof/<version>/linux-flatpak.json
+```
 
 Current dependency boundary: `dbus` remains on 0.7.15 because `desktop_drop`
 0.8.4 requires `dbus ^0.7.10`. Upgrade `dbus` only after a compatible

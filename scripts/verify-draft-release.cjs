@@ -209,11 +209,12 @@ function verifyChecksums(localDir) {
   };
 }
 
-function readPinnedManifestPublicKey() {
+function readPinnedManifestPublicKeys() {
   const source = fs.readFileSync(PINNED_TRUST_CONFIG, 'utf8');
-  const match = source.match(/windowsManifestPublicKeyBase64\s*=\s*['"]([^'"]+)['"]/u);
-  if (!match) throw new Error(`Pinned Windows manifest key not found in ${PINNED_TRUST_CONFIG}`);
-  return match[1];
+  const block = source.match(/windowsManifestPublicKeysBase64\s*=\s*\[([^\]]*)\]/u);
+  const keys = block ? [...block[1].matchAll(/['"]([^'"]+)['"]/gu)].map((m) => m[1].trim()) : [];
+  if (!keys.length) throw new Error(`Pinned Windows manifest keys not found in ${PINNED_TRUST_CONFIG}`);
+  return keys;
 }
 
 function ed25519PublicKey(base64) {
@@ -241,7 +242,9 @@ function verifyManifest(localDir, version, explicitPublicKey = null) {
     const msiPath = path.join(localDir, 'Dacx-Windows-x64.msi');
     const expectedHash = manifest.assets?.['Dacx-Windows-x64.msi'];
     const actualHash = fs.existsSync(msiPath) ? sha256(msiPath) : null;
-    const publicKey = ed25519PublicKey(explicitPublicKey || readPinnedManifestPublicKey());
+    const publicKeys = (explicitPublicKey
+      ? [explicitPublicKey].flat()
+      : readPinnedManifestPublicKeys()).map(ed25519PublicKey);
     let signatureValid = false;
     let signatureError = null;
     try {
@@ -249,7 +252,7 @@ function verifyManifest(localDir, version, explicitPublicKey = null) {
       if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(signatureText)) throw new Error('signature is not base64');
       const signatureBytes = Buffer.from(signatureText, 'base64');
       if (signatureBytes.length !== 64) throw new Error('signature must contain 64 bytes');
-      signatureValid = crypto.verify(null, manifestBytes, publicKey, signatureBytes);
+      signatureValid = publicKeys.some((publicKey) => crypto.verify(null, manifestBytes, publicKey, signatureBytes));
     } catch (error) {
       signatureError = error.message;
     }
@@ -564,6 +567,7 @@ module.exports = {
   verifyAssetSet,
   verifyChecksums,
   verifyManifest,
+  readPinnedManifestPublicKeys,
   verifyProofs,
   verifyRemoteAssets,
   run,

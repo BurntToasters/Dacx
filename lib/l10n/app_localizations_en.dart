@@ -832,6 +832,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionSave => 'Save';
 
   @override
+  String get actionReassign => 'Reassign';
+
+  @override
+  String get dialogKeybindConflictTitle => 'Shortcut already in use';
+
+  @override
+  String keybindConflictBody(String key, String action, String target) {
+    return '$key is already used by $action. Move it to $target?';
+  }
+
+  @override
   String get actionOpen => 'Open';
 
   @override
@@ -1136,6 +1147,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutOpenUrl => 'Open URL';
+
+  @override
+  String get eqPresetCustom => 'Custom';
 
   @override
   String get eqPresetFlat => 'Flat';

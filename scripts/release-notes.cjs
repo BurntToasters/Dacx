@@ -1,3 +1,4 @@
+const { isPrereleaseVersion } = require('./release-version.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -59,7 +60,7 @@ function validateReleaseNotes(notes, version, options = {}) {
     0,
     firstHeadingIndex < 0 ? visibleNotes.length : firstHeadingIndex,
   );
-  const isPrerelease = version.includes('beta') || version.includes('alpha');
+  const isPrerelease = isPrereleaseVersion(version);
 
   if (isPrerelease && !visibleNotes.startsWith('> [!')) {
     failures.push('CHANGELOG.md must begin with a release notice');

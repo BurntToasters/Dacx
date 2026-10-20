@@ -1528,6 +1528,24 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get actionSave;
 
+  /// No description provided for @actionReassign.
+  ///
+  /// In en, this message translates to:
+  /// **'Reassign'**
+  String get actionReassign;
+
+  /// No description provided for @dialogKeybindConflictTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortcut already in use'**
+  String get dialogKeybindConflictTitle;
+
+  /// No description provided for @keybindConflictBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} is already used by {action}. Move it to {target}?'**
+  String keybindConflictBody(String key, String action, String target);
+
   /// No description provided for @actionOpen.
   ///
   /// In en, this message translates to:
@@ -2079,6 +2097,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open URL'**
   String get shortcutOpenUrl;
+
+  /// No description provided for @eqPresetCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get eqPresetCustom;
 
   /// No description provided for @eqPresetFlat.
   ///

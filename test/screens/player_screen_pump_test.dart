@@ -1334,8 +1334,7 @@ void main() {
   testWidgets('failed external audio load shows snackbar', (tester) async {
     PlayerScreenHarness.configureDesktopViewport(tester);
     final services = await PlayerScreenHarness.createServices();
-    final player = HeadlessPlayerService()
-      ..failProperties(const ['audio-files-append']);
+    final player = HeadlessPlayerService()..failCommands(const ['audio-add']);
     PlayerScreenHarness.filePickerPaths = ['/media/extra.flac'];
 
     await tester.pumpWidget(

@@ -494,6 +494,12 @@ func performSwap(newAppPath: String,
     }
     dacxLog("pre-move validation passed; proceeding with swap")
 
+    if getuid() == 0 {
+        if let failure = matchOwnership(of: newAppPath, to: installedAppPath) {
+            return .failed(failure)
+        }
+    }
+
     let backupPath = installedAppPath + ".bak"
     if fm.fileExists(atPath: backupPath) {
         try? fm.removeItem(atPath: backupPath)
@@ -535,6 +541,24 @@ func performSwap(newAppPath: String,
     try? fm.removeItem(atPath: backupPath)
     dacxLog("swap complete; new bundle installed at \(installedAppPath)")
     return .ok
+}
+
+func matchOwnership(of newAppPath: String, to installedAppPath: String) -> String? {
+    let attributes: [FileAttributeKey: Any]
+    do {
+        attributes = try FileManager.default.attributesOfItem(atPath: installedAppPath)
+    } catch {
+        return "could not read installed app ownership: \(error)"
+    }
+    guard let owner = (attributes[.ownerAccountID] as? NSNumber)?.uint32Value,
+          let group = (attributes[.groupOwnerAccountID] as? NSNumber)?.uint32Value else {
+        return "could not read installed app ownership"
+    }
+    let (code, output) = runCommand("/usr/sbin/chown", ["-R", "-h", "\(owner):\(group)", newAppPath])
+    if code != 0 {
+        return "could not match installed app ownership: \(output)"
+    }
+    return nil
 }
 
 // MARK: - Worker / root re-exec plumbing
@@ -621,6 +645,7 @@ func runWorkerInstall() -> Int32 {
     dacxLog("worker: parent exited, beginning install")
 
     let needsRoot = installNeedsRoot(installedAppPath: args.installedAppPath)
+    var exitCode: Int32 = 0
 
     if needsRoot {
         let selfPath = Bundle.main.executablePath
@@ -629,7 +654,7 @@ func runWorkerInstall() -> Int32 {
         dacxLog("worker: install path not writable, escalating via osascript")
         let code = runRootInstallViaOSAScript(selfPath: selfPath, args: args)
         if code != 0 {
-            return 7
+            exitCode = 7
         }
     } else {
         let status = performSwap(newAppPath: args.newAppPath,
@@ -641,15 +666,22 @@ func runWorkerInstall() -> Int32 {
             break
         case .failed(let message):
             dacxLog("worker: swap failed: \(message)")
-            return 6
+            exitCode = 6
         }
     }
 
     if args.relaunch {
-        relaunchInUserSession(args.installedAppPath)
+        if bundleExists(args.installedAppPath) {
+            if exitCode != 0 {
+                dacxLog("worker: update not installed (\(exitCode)); relaunching current version")
+            }
+            relaunchInUserSession(args.installedAppPath)
+        } else {
+            dacxLog("worker: relaunch skipped; \(args.installedAppPath) is missing")
+        }
     }
 
-    return 0
+    return exitCode
 }
 
 func relaunchInUserSession(_ appPath: String) {

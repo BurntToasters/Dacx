@@ -39,6 +39,51 @@ const SYSTEM_LIB_NAMES = new Set([
   "libcairo.so.2",
   "libcairo-gobject.so.2",
   "libatk-1.0.so.0",
+  "libatk-bridge-2.0.so.0",
+  "libatspi.so.0",
+  "libepoxy.so.0",
+  "libfontconfig.so.1",
+  "libfreetype.so.6",
+  "libharfbuzz.so.0",
+  "libharfbuzz-subset.so.0",
+  "libfribidi.so.0",
+  "libpcre2-8.so.0",
+  "libpcre2-16.so.0",
+  "libpcre2-32.so.0",
+  "libffi.so.8",
+  "libmount.so.1",
+  "libblkid.so.1",
+  "libuuid.so.1",
+  "libselinux.so.1",
+  "libexpat.so.1",
+  "libssl.so.3",
+  "libcrypto.so.3",
+  "libcurl.so.4",
+  "libnghttp2.so.14",
+  "libpsl.so.5",
+  "libxml2.so.2",
+  "libsqlite3.so.0",
+  "libz.so.1",
+  "liblzma.so.5",
+  "libzstd.so.1",
+  "liblz4.so.1",
+  "libbrotlidec.so.1",
+  "libbrotlicommon.so.1",
+  "libdbus-1.so.0",
+  "libdbus-1.so.3",
+  "libgpg-error.so.0",
+  "libgcrypt.so.20",
+  "libgssapi_krb5.so.2",
+  "libkrb5.so.3",
+  "libk5crypto.so.3",
+  "libcom_err.so.2",
+  "libkeyutils.so.1",
+  "libldap.so.2",
+  "liblber.so.2",
+  "libsasl2.so.2",
+  "libssh.so.4",
+  "libunistring.so.2",
+  "libidn2.so.0",
   "libGL.so.1",
   "libEGL.so.1",
   "libGLdispatch.so.0",
@@ -77,6 +122,28 @@ const SYSTEM_LIB_NAMES = new Set([
   "libxcb-xfixes.so.0",
   "libxkbcommon.so.0",
   "libxkbcommon-x11.so.1",
+  "libxkbfile.so.1",
+  "libICE.so.6",
+  "libSM.so.6",
+  "libgraphite2.so.3",
+  "libthai.so.0",
+  "libdatrie.so.1",
+  "libpng16.so.16",
+  "libjpeg.so.8",
+  "libpixman-1.so.0",
+  "libudev.so.1",
+  "libsystemd.so.0",
+  "libcap.so.2",
+  "libxcb-render.so.0",
+  "libxcb-shm.so.0",
+  "libxcb-shape.so.0",
+  "libxcb-xkb.so.1",
+  "libxcb-icccm.so.4",
+  "libxcb-image.so.0",
+  "libxcb-keysyms.so.1",
+  "libxcb-render-util.so.0",
+  "libxcb-util.so.1",
+  "libxcb-cursor.so.0",
 ]);
 
 const SYSTEM_LIB_PREFIXES = [
@@ -85,6 +152,21 @@ const SYSTEM_LIB_PREFIXES = [
   "libnss_",
   "libnvidia",
   "libcuda",
+  "libharfbuzz",
+  "libpcre2",
+  "libffi.so",
+  "libmount.so",
+  "libblkid.so",
+  "libselinux.so",
+  "libfontconfig.so",
+  "libfreetype.so",
+  "libfribidi.so",
+  "libssl.so",
+  "libcrypto.so",
+  "libcurl.so",
+  "libxml2.so",
+  "libsqlite3.so",
+  "libdbus-1.so",
 ];
 
 const REQUIRED_SONAMES = ["libmpv.so.2", "libmpv.so"];
@@ -225,6 +307,55 @@ export function ensureOriginRpath(file, { patchelf } = {}) {
   return next;
 }
 
+export function ensureBinaryRpath(binary, { patchelf } = {}) {
+  const run =
+    patchelf ||
+    ((args) =>
+      spawnSync("patchelf", args, { encoding: "utf8", windowsHide: true }));
+  const printed = run(["--print-rpath", binary]);
+  if (printed.status !== 0) {
+    throw new Error(
+      `patchelf --print-rpath ${binary} failed: ${(printed.stderr || "").trim()}`,
+    );
+  }
+  const current = (printed.stdout || "").trim();
+  if (current.split(":").includes("$ORIGIN/lib")) return current;
+  const next = current ? `${current}:$ORIGIN/lib` : "$ORIGIN/lib";
+  const set = run(["--set-rpath", next, binary]);
+  if (set.status !== 0) {
+    throw new Error(
+      `patchelf --set-rpath ${binary} failed: ${(set.stderr || "").trim()}`,
+    );
+  }
+  return next;
+}
+
+export function ensureBinaryLibRpath(binary, { patchelf } = {}) {
+  const run =
+    patchelf ||
+    ((args) =>
+      spawnSync("patchelf", args, { encoding: "utf8", windowsHide: true }));
+  const printed = run(["--print-rpath", binary]);
+  if (printed.status !== 0) {
+    throw new Error(
+      `patchelf --print-rpath ${binary} failed: ${(printed.stderr || "").trim()}`,
+    );
+  }
+  const current = (printed.stdout || "").trim();
+  const parts = current ? current.split(":") : [];
+  if (parts.includes("$ORIGIN/lib") || parts.includes("$ORIGIN/$ORIGIN/lib")) {
+    return current;
+  }
+  const next = current ? `${current}:$ORIGIN/lib` : "$ORIGIN/lib";
+  const set = run(["--set-rpath", next, binary]);
+  if (set.status !== 0) {
+    throw new Error(
+      `patchelf --set-rpath ${binary} failed: ${(set.stderr || "").trim()}`,
+    );
+  }
+  return next;
+}
+
 /**
  * Copy host libmpv (and other non-system plugin deps) into [bundleDir]/lib
  * and set `$ORIGIN` RPATH so tar/AppImage/Flatpak resolve DT_NEEDED locally.
@@ -271,6 +402,7 @@ export function vendorLinuxNativeLibs(
     for (const file of listSharedObjects(libDir)) {
       ensureOriginRpath(file, { patchelf });
     }
+    ensureBinaryRpath(binary, { patchelf });
   }
 
   if (typeof log === "function") {
@@ -279,18 +411,4 @@ export function vendorLinuxNativeLibs(
     );
   }
   return { copied, libDir };
-}
-
-export function overlayLibDirectory(fromLibDir, toLibDir) {
-  fs.mkdirSync(toLibDir, { recursive: true });
-  const copied = [];
-  for (const name of fs.readdirSync(fromLibDir)) {
-    if (!name.includes(".so")) continue;
-    const src = path.join(fromLibDir, name);
-    const dest = path.join(toLibDir, name);
-    if (fs.statSync(src).isDirectory()) continue;
-    fs.copyFileSync(src, dest);
-    copied.push(name);
-  }
-  return copied;
 }

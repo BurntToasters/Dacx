@@ -92,6 +92,7 @@ void main() {
     for (var i = 0; i < 30 && !playing; i += 1) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    final initialPlaybackObserved = playing;
 
     // Exercise the same native mpv property boundary used by opt-in advanced
     // playback. Keep this opt-in so the default smoke remains minimalist.
@@ -113,9 +114,10 @@ void main() {
     final transport = await _exerciseTransport(tester, player);
     final passed =
         duration > Duration.zero &&
-        playing &&
+        initialPlaybackObserved &&
         error.isEmpty &&
         advancedRoundTrip &&
+        transport['completed'] == true &&
         transport['passed'] == true;
     final report = <String, Object?>{
       'schema': 'dacx.e2e.desktop-playback.v1',
@@ -132,7 +134,11 @@ void main() {
       },
       'checks': {
         'durationMs': duration.inMilliseconds,
-        'playing': playing,
+        // Keep this v1 proof field for package-proof consumers. It records
+        // initial playback before the transport test reaches end-of-file.
+        'playing': initialPlaybackObserved,
+        'initialPlaybackObserved': initialPlaybackObserved,
+        'playingAfterTransport': transport['playingAtTransportEnd'],
         'error': error.isEmpty ? null : error,
         'advancedPlayback': {
           'enabled': settings.advancedPlaybackToolsEnabled,
@@ -225,6 +231,7 @@ Future<Map<String, Object?>> _exerciseTransport(
       'seekObservedMs': seekPosition.inMilliseconds,
       'seekOk': seekOk,
       'completed': completed,
+      'playingAtTransportEnd': playing,
       'passed': volumeOk && rateOk && pauseOk && seekOk && completed,
     };
   } finally {

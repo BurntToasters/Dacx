@@ -53,14 +53,20 @@ Future<void> showEqualizerDialog({
                       unawaited(onApply());
                       setLocal(() {});
                     },
-                    items: kEqPresets
-                        .map(
-                          (p) => DropdownMenuItem(
-                            value: p.id,
-                            child: Text(eqPresetLabel(l10n, p.id)),
-                          ),
-                        )
-                        .toList(),
+                    items: [
+                      ...kEqPresets.map(
+                        (p) => DropdownMenuItem(
+                          value: p.id,
+                          child: Text(eqPresetLabel(l10n, p.id)),
+                        ),
+                      ),
+                      if (EqualizerService.presetById(settings.eqPreset) ==
+                          null)
+                        DropdownMenuItem(
+                          value: settings.eqPreset,
+                          child: Text(eqPresetLabel(l10n, settings.eqPreset)),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -150,6 +156,6 @@ String eqPresetLabel(AppLocalizations l10n, String id) {
     'acoustic' => l10n.eqPresetAcoustic,
     'loudness' => l10n.eqPresetLoudness,
     'classical' => l10n.eqPresetClassical,
-    _ => id,
+    _ => l10n.eqPresetCustom,
   };
 }

@@ -36,13 +36,14 @@ Future<void> runManualUpdateCheck({
     }
     if (update != null) {
       onLog?.call('manual_update_available');
+      final rootContext = Navigator.of(context, rootNavigator: true).context;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.snackUpdateAvailable(update.version)),
           action: SnackBarAction(
             label: updateActionLabel(l10n),
             onPressed: () => triggerUpdateAction(
-              context: context,
+              context: rootContext,
               info: update,
               updateService: updateService,
               channelName: settings.updateChannel.name,

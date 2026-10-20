@@ -214,7 +214,6 @@ class PlayerService implements IPlayerService {
     switch (name) {
       case 'chapter':
       case 'hwdec':
-      case 'af':
       case 'lavfi-complex':
         return true;
       default:
@@ -250,15 +249,30 @@ class PlayerService implements IPlayerService {
   }
 
   @override
-  Future<bool> addExternalAudio(String path) {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return Future.value(false);
-    return setProperty('audio-files-append', path);
-  }
+  Future<bool> addExternalAudio(String path) => _addTrack('audio-add', path);
 
   @override
-  Future<bool> addExternalSubtitle(String path) {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return Future.value(false);
-    return setProperty('sub-files-append', path);
+  Future<bool> addExternalSubtitle(String path) => _addTrack('sub-add', path);
+
+  Future<bool> _addTrack(String command, String path) async {
+    if (PlayerPathUtils.isUnsafeOpenPath(path)) return false;
+    return await _guardValue<bool>(command, () async {
+          final platform = player.platform;
+          if (platform is! NativePlayer) return false;
+          Future<int> count() async =>
+              int.tryParse(
+                (await platform.getProperty('track-list/count')).trim(),
+              ) ??
+              0;
+          final before = await count();
+          await platform.command([command, path, 'select']);
+          for (var i = 0; i < 20; i++) {
+            if (await count() > before) return true;
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+          return false;
+        }) ??
+        false;
   }
 
   @override

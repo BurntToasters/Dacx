@@ -15,6 +15,7 @@ analyzer:
     invalid_annotation_target: ignore
   exclude:
     - build/**
+    - test-results/**
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - windows/**

@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 const lcovPath = path.join(root, "coverage", "lcov.info");
-const minCoverage = Number.parseFloat(process.env.MIN_COVERAGE ?? "55");
+const minCoverage = Number.parseFloat(process.env.MIN_COVERAGE ?? "68");
 const minOverallCoverage = Number.parseFloat(
   process.env.MIN_OVERALL_COVERAGE ?? "40",
 );

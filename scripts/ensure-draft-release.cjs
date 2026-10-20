@@ -39,10 +39,11 @@ const WAIT_POLL_INTERVAL_MS = Number.parseInt(
   10
 );
 
+const { isPrereleaseVersion } = require('./release-version.cjs');
 const packageJson = require('../package.json');
 const VERSION = packageJson.version;
 const TAG_NAME = 'v' + VERSION;
-const IS_PRERELEASE = VERSION.includes('beta') || VERSION.includes('alpha');
+const IS_PRERELEASE = isPrereleaseVersion(VERSION);
 const RELEASE_BODY = readReleaseNotes();
 assertValidReleaseNotes(RELEASE_BODY, VERSION);
 const RELEASE_BRANCH = IS_PRERELEASE ? 'beta' : 'main';

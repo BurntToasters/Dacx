@@ -451,6 +451,23 @@ function prepareDmgExtraction({ artifact, staging, run }) {
   return outcome;
 }
 
+function prepareDebExtraction({ artifact, staging, run }) {
+  const result = run("dpkg-deb", ["-x", artifact, staging]);
+  if (result.code !== 0) {
+    return {
+      executable: null,
+      cleanup: staging,
+      status: "failed",
+      reason: "Linux deb extraction failed",
+    };
+  }
+  return {
+    executable: findPackagedExecutable(staging),
+    cleanup: staging,
+    status: "passed",
+  };
+}
+
 function prepareTarExtraction({ artifact, staging, run }) {
   const listing = run("tar", ["-tzf", artifact]);
   if (listing.code !== 0) {
@@ -661,6 +678,15 @@ function preparePackageExecutable({ platform, format, artifact, args, log }) {
       : prepareDmgExtraction({ artifact, staging, run });
   } else if (platform === "linux" && format === "tar.gz") {
     prepared = prepareTarExtraction({ artifact, staging, run });
+  } else if (platform === "linux" && format === "deb") {
+    prepared = !commandExists("dpkg-deb")
+      ? {
+          executable: null,
+          cleanup: staging,
+          status: "skipped",
+          reason: "dpkg-deb unavailable",
+        }
+      : prepareDebExtraction({ artifact, staging, run });
   } else {
     prepared = {
       executable: null,

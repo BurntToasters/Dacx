@@ -463,6 +463,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (bookmark != null && bookmark.isNotEmpty) {
                 _s.setFileBookmark(picked, bookmark);
               }
+              if (!mounted) {
+                _s.screenshotDir = picked;
+                return;
+              }
               setState(() {
                 _s.screenshotDir = picked;
                 _log(

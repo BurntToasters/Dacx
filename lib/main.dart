@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:macos_window_utils/macos_window_utils.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import 'l10n/app_localizations.dart';
@@ -21,6 +21,8 @@ import 'services/error_log_store.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/macos_install_location_service.dart';
+import 'services/preferences_recovery.dart';
+import 'services/resume_position_store.dart';
 import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 import 'services/trusted_http.dart';
@@ -131,13 +133,34 @@ void main(List<String> args) async {
   final playbackRuntimeReady = _ensurePlaybackRuntime();
   await Window.initialize();
 
-  final prefs = await SharedPreferences.getInstance();
-  final settings = SettingsService(prefs);
+  String? recoveredPreferences;
+  final prefs = await PreferencesRecovery.load(
+    onRecovered: (movedTo) => recoveredPreferences = movedTo,
+  );
+  final settings = SettingsService(
+    prefs,
+    resumeStore: FileResumePositionStore(
+      p.join(
+        p.dirname(InstanceModeService.flagFilePath()),
+        'resume_positions.json',
+      ),
+      maxEntries: SettingsService.maxResumeEntries,
+    ),
+  );
   unawaited(settings.syncInstanceModeFlag());
   final debugLog = DebugLogService(
     isEnabled: () => settings.debugModeEnabled,
     errorStore: ErrorLogStore.forCurrentUser(),
   );
+  if (recoveredPreferences != null) {
+    debugLog.log(
+      category: DebugLogCategory.error,
+      event: 'preferences_recovered',
+      message: 'Unreadable preferences were moved aside; defaults loaded.',
+      details: {'moved_to': recoveredPreferences},
+      severity: DebugSeverity.error,
+    );
+  }
   _installAsyncErrorHandler(debugLog);
   _installFrameworkErrorLogging(debugLog);
   // Prime macOS hardware-acceleration probes off the UI isolate so the first
@@ -886,6 +909,7 @@ class _DacxAppState extends State<DacxApp>
             debugLog: widget.debugLog,
             updateService: widget.updateService,
             initialFile: widget.initialFile,
+            onQuitRequest: _quitFromTray,
           ),
         );
       },

@@ -238,9 +238,11 @@ abstract final class PlayerScreenHarness {
     List<ChapterInfo>? initialChapters,
     List<String>? initialDropPaths,
     PlayableSource? initialPendingLoad,
+    String? initialFile,
     ValueNotifier<String?>? osdMessageProbe,
     Completer<void>? screenshotOperationForTesting,
     StreamController<MediaSessionCommand>? mediaSessionCommandsForTesting,
+    Future<void> Function()? onQuitRequest,
   }) {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey);
     return MaterialApp(
@@ -264,9 +266,11 @@ abstract final class PlayerScreenHarness {
         initialChapters: initialChapters,
         initialDropPaths: initialDropPaths,
         initialPendingLoad: initialPendingLoad,
+        initialFile: initialFile,
         osdMessageProbe: osdMessageProbe,
         screenshotOperationForTesting: screenshotOperationForTesting,
         mediaSessionCommandsForTesting: mediaSessionCommandsForTesting,
+        onQuitRequest: onQuitRequest,
       ),
     );
   }

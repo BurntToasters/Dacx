@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/playable_source.dart';
@@ -42,6 +44,8 @@ class AdvancedPlaybackController extends ChangeNotifier {
   bool _lastEnabled;
   bool _runtimeApplied = false;
 
+  Future<void> _delayQueue = Future<void>.value();
+
   AdvancedPlaybackError? _error;
 
   String? get source => _source;
@@ -62,6 +66,12 @@ class AdvancedPlaybackController extends ChangeNotifier {
     if (_error == error) return;
     _error = error;
     notifyListeners();
+  }
+
+  Future<void> _serializeDelay(Future<void> Function() action) {
+    final run = _delayQueue.then((_) => action());
+    _delayQueue = run.catchError((Object _) {});
+    return run;
   }
 
   bool get enabled => _settings.advancedPlaybackToolsEnabled;
@@ -156,81 +166,91 @@ class AdvancedPlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> adjustAudioDelay(int deltaMs) async {
-    if (!enabled || _source == null) return;
-    final current = adjustment;
+  Future<void> adjustAudioDelay(int deltaMs) => _serializeDelay(() async {
+    final source = _source;
+    if (!enabled || source == null) return;
+    final current = _settings.playbackAdjustmentFor(source);
     final next = (current.audioMs + deltaMs).clamp(
       -SettingsService.playbackDelayLimitMs,
       SettingsService.playbackDelayLimitMs,
     );
     final applied = await _player.setProperty('audio-delay', _delayValue(next));
+    if (_source != source) return;
     if (!applied) {
       _setError(AdvancedPlaybackError.applyAudioDelay);
       return;
     }
+    final latest = _settings.playbackAdjustmentFor(source);
     _settings.setPlaybackAdjustment(
-      _source!,
+      source,
       audioMs: next,
-      subtitleMs: current.subtitleMs,
+      subtitleMs: latest.subtitleMs,
     );
     _setError(null);
     notifyListeners();
-  }
+  });
 
-  Future<void> adjustSubtitleDelay(int deltaMs) async {
-    if (!enabled || _source == null) return;
-    final current = adjustment;
+  Future<void> adjustSubtitleDelay(int deltaMs) => _serializeDelay(() async {
+    final source = _source;
+    if (!enabled || source == null) return;
+    final current = _settings.playbackAdjustmentFor(source);
     final next = (current.subtitleMs + deltaMs).clamp(
       -SettingsService.playbackDelayLimitMs,
       SettingsService.playbackDelayLimitMs,
     );
     final applied = await _player.setProperty('sub-delay', _delayValue(next));
+    if (_source != source) return;
     if (!applied) {
       _setError(AdvancedPlaybackError.applySubtitleDelay);
       return;
     }
+    final latest = _settings.playbackAdjustmentFor(source);
     _settings.setPlaybackAdjustment(
-      _source!,
-      audioMs: current.audioMs,
+      source,
+      audioMs: latest.audioMs,
       subtitleMs: next,
     );
     _setError(null);
     notifyListeners();
-  }
+  });
 
-  Future<void> resetAudioDelay() async {
-    if (!enabled || _source == null) return;
-    final current = adjustment;
+  Future<void> resetAudioDelay() => _serializeDelay(() async {
+    final source = _source;
+    if (!enabled || source == null) return;
     final applied = await _player.setProperty('audio-delay', '0');
+    if (_source != source) return;
     if (!applied) {
       _setError(AdvancedPlaybackError.resetAudioDelay);
       return;
     }
+    final latest = _settings.playbackAdjustmentFor(source);
     _settings.setPlaybackAdjustment(
-      _source!,
+      source,
       audioMs: 0,
-      subtitleMs: current.subtitleMs,
+      subtitleMs: latest.subtitleMs,
     );
     _setError(null);
     notifyListeners();
-  }
+  });
 
-  Future<void> resetSubtitleDelay() async {
-    if (!enabled || _source == null) return;
-    final current = adjustment;
+  Future<void> resetSubtitleDelay() => _serializeDelay(() async {
+    final source = _source;
+    if (!enabled || source == null) return;
     final applied = await _player.setProperty('sub-delay', '0');
+    if (_source != source) return;
     if (!applied) {
       _setError(AdvancedPlaybackError.resetSubtitleDelay);
       return;
     }
+    final latest = _settings.playbackAdjustmentFor(source);
     _settings.setPlaybackAdjustment(
-      _source!,
-      audioMs: current.audioMs,
+      source,
+      audioMs: latest.audioMs,
       subtitleMs: 0,
     );
     _setError(null);
     notifyListeners();
-  }
+  });
 
   Future<void> resetDelays() async {
     await resetAudioDelay();
@@ -274,8 +294,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
       }
       _a = null;
       _b = null;
-      _setError(null);
-      return;
+      _error = null;
     }
     notifyListeners();
   }

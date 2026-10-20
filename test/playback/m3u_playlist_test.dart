@@ -41,6 +41,31 @@ https://user:pass@evil.example/x.mp3
       expect(sources.single.value, '/safe/track.mp3');
     });
 
+    test('skips unconvertible file URIs and keeps neighboring entries', () {
+      const baseDir = '/music';
+      final m3u = M3uPlaylist.parse('''
+#EXTM3U
+before.mp3
+file:///C:/music/bad.wav?query=1
+after.mp3
+''', baseDir: baseDir);
+      expect(m3u.map((source) => source.value).toList(), [
+        p.normalize('/music/before.mp3'),
+        p.normalize('/music/after.mp3'),
+      ]);
+
+      final pls = M3uPlaylist.parse('''
+[playlist]
+File1=before.mp3
+File2=file:///C:/music/bad.wav?query=1
+File3=after.mp3
+''', baseDir: baseDir);
+      expect(pls.map((source) => source.value).toList(), [
+        p.normalize('/music/before.mp3'),
+        p.normalize('/music/after.mp3'),
+      ]);
+    });
+
     test('parses pls FileN entries in order', () {
       final sources = M3uPlaylist.parse('''
 [playlist]
@@ -71,7 +96,7 @@ NumberOfEntries=2
         PlayableSource.file('/music/a.mp3'),
         PlayableSource.url('https://cdn.example/b.flac'),
       ]);
-      expect(encoded, startsWith('#EXTM3U\n'));
+      expect(encoded, startsWith('\uFEFF#EXTM3U\n'));
       expect(encoded, contains('/music/a.mp3\n'));
       expect(encoded, contains('https://cdn.example/b.flac\n'));
     });

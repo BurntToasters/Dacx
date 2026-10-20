@@ -44,7 +44,7 @@ function getAfterPackLocation(env = process.env) {
 function isBetaReleaseVersion(version) {
   const numeric = "(?:0|[1-9]\\d*)";
   return new RegExp(
-    `^${numeric}\\.${numeric}\\.${numeric}-beta\\.${numeric}$`,
+    `^${numeric}\\.${numeric}\\.${numeric}-(?:beta|rc)\\.${numeric}$`,
   ).test(String(version ?? ""));
 }
 

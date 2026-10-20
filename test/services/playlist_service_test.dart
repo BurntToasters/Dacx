@@ -74,6 +74,28 @@ void main() {
       expect(s.items.map((e) => e.value), isNot(contains('/t999.mp3')));
     });
 
+    test('playNext preserves current item at every queue position', () {
+      const lastIndex = PlaylistService.maxQueueItems - 1;
+      for (final selectedIndex in [0, lastIndex ~/ 2, lastIndex]) {
+        final s = PlaylistService();
+        s.replace(
+          List.generate(lastIndex + 1, (i) => '/track$i.mp3'),
+          startIndex: selectedIndex,
+        );
+
+        s.playNextSource(PlayableSource.file('/next.mp3'));
+
+        final expectedIndex = selectedIndex == lastIndex
+            ? selectedIndex - 1
+            : selectedIndex;
+        expect(s.length, PlaylistService.maxQueueItems);
+        expect(s.index, expectedIndex);
+        expect(s.current?.value, '/track$selectedIndex.mp3');
+        expect(s.items[expectedIndex + 1].value, '/next.mp3');
+        s.dispose();
+      }
+    });
+
     test('setPlayingSource jumps or replaces without exceeding cap', () {
       final s = PlaylistService();
       s.replace(

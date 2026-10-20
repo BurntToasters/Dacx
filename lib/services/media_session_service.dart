@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:anni_mpris_service/anni_mpris_service.dart';
 import 'package:dbus/dbus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../playback/playback_speed_policy.dart';
@@ -33,6 +34,29 @@ class MediaSessionService {
   MediaSessionService({required this.debugLog});
 
   final DebugLogService debugLog;
+
+  static const mprisBaseName = 'dacx';
+
+  @visibleForTesting
+  static String mprisPlayerName({
+    required bool baseNameTaken,
+    required int pid,
+  }) => baseNameTaken ? '$mprisBaseName.instance$pid' : mprisBaseName;
+
+  static Future<bool> _mprisBaseNameTaken() async {
+    DBusClient? client;
+    try {
+      client = DBusClient.session();
+      return await client
+          .nameHasOwner('org.mpris.MediaPlayer2.$mprisBaseName')
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {
+      return false;
+    } finally {
+      unawaited(client?.close().catchError((_) {}));
+    }
+  }
+
   static const _channel = MethodChannel('run.rosie.dacx/media_session');
 
   bool _enabled = false;
@@ -54,9 +78,13 @@ class MediaSessionService {
       return;
     }
     if (Platform.isLinux) {
+      final name = mprisPlayerName(
+        baseNameTaken: await _mprisBaseNameTaken(),
+        pid: pid,
+      );
       runZonedGuarded(
         () {
-          _mpris = _MprisAdapter(_dispatchCommand, debugLog);
+          _mpris = _MprisAdapter(name, _dispatchCommand, debugLog);
         },
         (e, st) {
           _platformAvailable = false;
@@ -242,9 +270,8 @@ class MediaSessionCommand {
 
 /// Linux MPRIS adapter built atop `anni_mpris_service`.
 class _MprisAdapter extends MPRISService {
-  _MprisAdapter(this._dispatch, this._log)
+  _MprisAdapter(super.name, this._dispatch, this._log)
     : super(
-        'dacx',
         identity: 'Dacx',
         desktopEntry: IdleInhibitService.mprisDesktopEntry(),
         emitSeekedSignal: false,

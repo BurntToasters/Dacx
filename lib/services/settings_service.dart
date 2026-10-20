@@ -14,6 +14,7 @@ import '../playback/playback_mix_policy.dart';
 import 'bookmark_service.dart';
 import 'instance_mode_service.dart';
 import 'path_probe.dart';
+import 'resume_position_store.dart';
 
 enum AccentColor {
   blueGrey(Colors.blueGrey, 'Blue Grey'),
@@ -45,15 +46,47 @@ enum LoopMode {
 class SettingsService extends ChangeNotifier {
   final SharedPreferences _prefs;
 
-  SettingsService(this._prefs) {
+  SettingsService(this._prefs, {ResumePositionStore? resumeStore})
+    : _resumeStore = resumeStore ?? PrefsResumePositionStore(_prefs) {
     _runMigrationsIfNeeded();
+    _migrateResumePositionsToStore();
+  }
+
+  final ResumePositionStore _resumeStore;
+  final Set<String> _removedResumeKeys = {};
+
+  void _migrateResumePositionsToStore() {
+    if (_resumeStore is PrefsResumePositionStore) return;
+    if (!_prefs.containsKey(_kResumePositions)) return;
+    final legacy = ResumePositionStore.decode(
+      _prefs.getString(_kResumePositions),
+    );
+    Map<String, ResumeEntry> disk;
+    try {
+      disk = _resumeStore.load();
+    } catch (_) {
+      disk = <String, ResumeEntry>{};
+    }
+    final merged = Map<String, ResumeEntry>.of(disk);
+    legacy.forEach((key, entry) {
+      final existing = merged[key];
+      if (existing == null || entry.lastAccessMs >= existing.lastAccessMs) {
+        merged[key] = entry;
+      }
+    });
+    _raiseResumeCounter(merged);
+    _resumePositionsCache = Map<String, ResumeEntry>.of(merged);
+    if (legacy.isNotEmpty) {
+      unawaited(_resumeStore.save(merged));
+    }
+    unawaited(_prefs.remove(_kResumePositions));
   }
 
   @override
   void dispose() {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
-    unawaited(_persistResumePositionsToPrefs());
+    unawaited(_persistResumePositions());
     super.dispose();
   }
 
@@ -62,12 +95,12 @@ class SettingsService extends ChangeNotifier {
   Future<void> flushResumePositions() {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
-    return _persistResumePositionsToPrefs();
+    return _persistResumePositions();
   }
 
   List<double>? _eqBandsCache;
   Map<String, List<String>>? _keybindsCache;
-  Map<String, _ResumeEntry>? _resumePositionsCache;
+  Map<String, ResumeEntry>? _resumePositionsCache;
   Timer? _resumePersistTimer;
   int _resumeAccessCounter = 0;
   int _lastResumeTouchWallMs = 0;
@@ -1003,6 +1036,7 @@ class SettingsService extends ChangeNotifier {
   bool get shouldCheckForUpdate {
     if (!updateCheckEnabled) return false;
     final now = DateTime.now().millisecondsSinceEpoch;
+    if (lastUpdateCheck > now) return true;
     return (now - lastUpdateCheck) > const Duration(hours: 24).inMilliseconds;
   }
 
@@ -1276,49 +1310,23 @@ class SettingsService extends ChangeNotifier {
     await InstanceModeService.setAllowMultipleInstances(allowMultipleInstances);
   }
 
-  Map<String, _ResumeEntry> _readResumePositions() {
+  Map<String, ResumeEntry> _readResumePositions() {
     final cached = _resumePositionsCache;
     if (cached != null) {
-      return Map<String, _ResumeEntry>.of(cached);
+      return Map<String, ResumeEntry>.of(cached);
     }
-    final raw = _prefs.getString(_kResumePositions);
-    Map<String, _ResumeEntry> result;
-    if (raw == null) {
-      result = <String, _ResumeEntry>{};
-    } else {
-      try {
-        final decoded = jsonDecode(raw);
-        if (decoded is! Map) {
-          result = <String, _ResumeEntry>{};
-        } else {
-          result = <String, _ResumeEntry>{};
-          decoded.forEach((key, value) {
-            if (key is String && value is Map) {
-              final p = value['p'];
-              final t = value['t'];
-              if (p is int && p > 0 && t is int && t > 0) {
-                result[key] = _ResumeEntry(positionMs: p, lastAccessMs: t);
-              }
-            }
-          });
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('Dacx: resume positions decode failed: $e');
-        }
-        result = <String, _ResumeEntry>{};
-      }
-    }
-    if (result.isNotEmpty) {
-      final maxAccess = result.values
-          .map((entry) => entry.lastAccessMs)
-          .fold<int>(0, (max, value) => value > max ? value : max);
-      if (maxAccess > _resumeAccessCounter) {
-        _resumeAccessCounter = maxAccess;
-      }
-    }
-    _resumePositionsCache = Map<String, _ResumeEntry>.of(result);
+    final result = _resumeStore.load();
+    _raiseResumeCounter(result);
+    _resumePositionsCache = Map<String, ResumeEntry>.of(result);
     return result;
+  }
+
+  void _raiseResumeCounter(Map<String, ResumeEntry> entries) {
+    for (final entry in entries.values) {
+      if (entry.lastAccessMs > _resumeAccessCounter) {
+        _resumeAccessCounter = entry.lastAccessMs;
+      }
+    }
   }
 
   /// Returns saved resume position in milliseconds, or null if none.
@@ -1342,11 +1350,11 @@ class SettingsService extends ChangeNotifier {
         ? entry.lastAccessMs + 1
         : ++_resumeAccessCounter;
     _resumeAccessCounter = nextAccess;
-    positions[normalized] = _ResumeEntry(
+    positions[normalized] = ResumeEntry(
       positionMs: entry.positionMs,
       lastAccessMs: nextAccess,
     );
-    _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
+    _resumePositionsCache = Map<String, ResumeEntry>.of(positions);
     _scheduleResumePersist();
     return entry.positionMs;
   }
@@ -1355,20 +1363,27 @@ class SettingsService extends ChangeNotifier {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = Timer(_resumePersistDebounce, () {
       _resumePersistTimer = null;
-      unawaited(_persistResumePositionsToPrefs());
+      unawaited(_persistResumePositions());
     });
   }
 
-  Future<void> _persistResumePositionsToPrefs() async {
+  Future<void> _persistResumePositions() async {
     final positions = _resumePositionsCache ?? _readResumePositions();
-    if (positions.isEmpty) {
-      await _prefs.remove(_kResumePositions);
-      return;
+    final removed = Set<String>.of(_removedResumeKeys);
+    _removedResumeKeys.clear();
+    try {
+      final merged = await _resumeStore.save(positions, removed: removed);
+      if (_resumePersistTimer == null &&
+          identical(_resumePositionsCache, positions)) {
+        _raiseResumeCounter(merged);
+        _resumePositionsCache = Map<String, ResumeEntry>.of(merged);
+      }
+    } catch (e) {
+      _removedResumeKeys.addAll(removed);
+      if (kDebugMode) {
+        debugPrint('Dacx: resume positions save failed: $e');
+      }
     }
-    await _prefs.setString(
-      _kResumePositions,
-      _encodeResumePositions(positions),
-    );
   }
 
   /// Stores [positionMs] for [path]. Pass null/0 to clear.
@@ -1378,9 +1393,11 @@ class SettingsService extends ChangeNotifier {
     final positions = _readResumePositions();
     if (positionMs == null || positionMs <= 0) {
       if (positions.remove(normalized) == null) return;
+      _removedResumeKeys.add(normalized);
     } else {
+      _removedResumeKeys.remove(normalized);
       final nextAccess = ++_resumeAccessCounter;
-      positions[normalized] = _ResumeEntry(
+      positions[normalized] = ResumeEntry(
         positionMs: positionMs,
         lastAccessMs: nextAccess,
       );
@@ -1392,25 +1409,20 @@ class SettingsService extends ChangeNotifier {
       final overflow = positions.length - maxResumeEntries;
       for (var i = 0; i < overflow; i++) {
         positions.remove(entries[i].key);
+        _removedResumeKeys.add(entries[i].key);
       }
     }
-    _resumePositionsCache = Map<String, _ResumeEntry>.of(positions);
+    _resumePositionsCache = Map<String, ResumeEntry>.of(positions);
     _scheduleResumePersist();
-  }
-
-  String _encodeResumePositions(Map<String, _ResumeEntry> positions) {
-    final out = <String, Map<String, int>>{};
-    positions.forEach((k, v) {
-      out[k] = {'p': v.positionMs, 't': v.lastAccessMs};
-    });
-    return jsonEncode(out);
   }
 
   void clearAllResumePositions() {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
-    _resumePositionsCache = <String, _ResumeEntry>{};
+    _resumePositionsCache = <String, ResumeEntry>{};
+    _removedResumeKeys.clear();
     _prefs.remove(_kResumePositions);
+    unawaited(_resumeStore.clear());
     notifyListeners();
   }
 
@@ -1422,7 +1434,10 @@ class SettingsService extends ChangeNotifier {
     _eqBandsCache = null;
     _keybindsCache = null;
     _resumePositionsCache = null;
+    _removedResumeKeys.clear();
+    await _resumeStore.clear();
     await _prefs.clear();
+    await syncInstanceModeFlag();
     notifyListeners();
   }
 
@@ -1485,10 +1500,4 @@ class SettingsService extends ChangeNotifier {
       await BookmarkService.stop(resolved.token);
     }
   }
-}
-
-class _ResumeEntry {
-  final int positionMs;
-  final int lastAccessMs;
-  const _ResumeEntry({required this.positionMs, required this.lastAccessMs});
 }

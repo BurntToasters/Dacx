@@ -40,7 +40,9 @@ Future<http.StreamedResponse> fetchAllowedGetFollowingRedirects({
     }
 
     final location = response.headers['location'];
-    await response.stream.drain<void>();
+    // Redirect bodies are irrelevant to the next request. Cancel them instead
+    // of draining so a server that stalls after headers cannot block updates.
+    await response.stream.listen((_) {}, onError: (Object _) {}).cancel();
     if (location == null || location.trim().isEmpty) {
       throw StateError('HTTP ${response.statusCode} redirect missing Location');
     }

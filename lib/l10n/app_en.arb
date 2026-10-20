@@ -319,6 +319,16 @@
   "dialogClearQueueBody": "This removes every queued item. Playing media will stop.",
   "actionCancel": "Cancel",
   "actionSave": "Save",
+  "actionReassign": "Reassign",
+  "dialogKeybindConflictTitle": "Shortcut already in use",
+  "keybindConflictBody": "{key} is already used by {action}. Move it to {target}?",
+  "@keybindConflictBody": {
+    "placeholders": {
+      "key": {"type": "String"},
+      "action": {"type": "String"},
+      "target": {"type": "String"}
+    }
+  },
   "actionOpen": "Open",
   "actionRemove": "Remove",
   "actionRemoveMissing": "Remove missing",
@@ -459,6 +469,7 @@
   "shortcutCycleSpeed": "Cycle playback speed",
   "shortcutOpenUrl": "Open URL",
 
+  "eqPresetCustom": "Custom",
   "eqPresetFlat": "Flat",
   "eqPresetBassBoost": "Bass Boost",
   "eqPresetBassReduce": "Bass Reduce",

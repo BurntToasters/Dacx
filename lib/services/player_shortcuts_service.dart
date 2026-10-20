@@ -162,8 +162,9 @@ class PlayerShortcutsService {
   /// Default behavior preserves the original built-in mapping. When
   /// [customBindings] is provided (action name -> accelerator strings), those
   /// bindings are checked first and **overlay** the defaults: unlisted actions
-  /// still use built-in accelerators. A custom accelerator that collides with
-  /// a default wins (custom match is preferred).
+  /// still use built-in accelerators, and a listed action no longer answers
+  /// to its built-in accelerator. A custom accelerator that collides with a
+  /// default wins (custom match is preferred).
   static PlayerShortcutAction? resolve({
     required KeyEvent event,
     required bool hasMedia,
@@ -186,7 +187,7 @@ class PlayerShortcutsService {
         alt: isAltPressed,
       );
       for (final entry in customBindings.entries) {
-        if (!entry.value.contains(accel)) continue;
+        if (!entry.value.map(normalizeAccelerator).contains(accel)) continue;
         final action = _actionByName(entry.key);
         if (action == null) continue;
         if (event is! KeyDownEvent && !_isRepeatableAction(action)) {
@@ -200,13 +201,54 @@ class PlayerShortcutsService {
       // Fall through so unbound actions keep their defaults.
     }
 
-    return _defaultResolve(
-      event: event,
-      hasMedia: hasMedia,
-      isMetaPressed: isMetaPressed,
-      isControlPressed: isControlPressed,
-      isShiftPressed: isShiftPressed,
+    return _unlessRebound(
+      _defaultResolve(
+        event: event,
+        hasMedia: hasMedia,
+        isMetaPressed: isMetaPressed,
+        isControlPressed: isControlPressed,
+        isShiftPressed: isShiftPressed,
+      ),
+      customBindings,
     );
+  }
+
+  static PlayerShortcutAction? _unlessRebound(
+    PlayerShortcutAction? action,
+    Map<String, List<String>>? customBindings,
+  ) {
+    if (action == null || customBindings == null) return action;
+    return customBindings.containsKey(action.name) ? null : action;
+  }
+
+  static PlayerShortcutAction? actionUsing(
+    String accelerator,
+    Map<String, List<String>> customBindings, {
+    required PlayerShortcutAction except,
+    bool includeAdvanced = true,
+  }) {
+    final needle = _conflictKey(accelerator);
+    for (final action in PlayerShortcutAction.values) {
+      if (action == except) continue;
+      if (!includeAdvanced && isAdvancedAction(action)) continue;
+      final bound =
+          customBindings[action.name] ?? defaultKeybinds[action] ?? const [];
+      if (bound.map(_conflictKey).contains(needle)) {
+        return action;
+      }
+    }
+    return null;
+  }
+
+  static String _conflictKey(String accelerator) {
+    var key = normalizeAccelerator(accelerator);
+    key = key.replaceAll('Meta+', 'Ctrl+');
+    final parts = key.split('+');
+    if (parts.length > 1) {
+      final modifiers = parts.sublist(0, parts.length - 1)..sort();
+      return [...modifiers, parts.last].join('+');
+    }
+    return key;
   }
 
   static PlayerShortcutAction? _defaultResolve({
@@ -351,10 +393,24 @@ class PlayerShortcutsService {
     required bool isMetaPressed,
     required bool isControlPressed,
     required bool isShiftPressed,
+    Map<String, List<String>>? customBindings,
   }) {
     if (event is! KeyDownEvent) return null;
-    final key = event.logicalKey;
-    final primary = isMetaPressed || isControlPressed;
+    return _unlessRebound(
+      _defaultResolveAdvanced(
+        key: event.logicalKey,
+        primary: isMetaPressed || isControlPressed,
+        isShiftPressed: isShiftPressed,
+      ),
+      customBindings,
+    );
+  }
+
+  static PlayerShortcutAction? _defaultResolveAdvanced({
+    required LogicalKeyboardKey key,
+    required bool primary,
+    required bool isShiftPressed,
+  }) {
     if (primary && key == LogicalKeyboardKey.keyB) {
       return PlayerShortcutAction.addPlaybackMarker;
     }
@@ -433,7 +489,17 @@ class PlayerShortcutsService {
     );
   }
 
+  static String normalizeAccelerator(String accelerator) {
+    if (accelerator == ' ') return 'Space';
+    var normalized = accelerator;
+    if (normalized.endsWith('+ ')) {
+      normalized = '${normalized.substring(0, normalized.length - 1)}Space';
+    }
+    return normalized.replaceAll('Meta+', 'Ctrl+');
+  }
+
   static String _keyLabel(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.space) return 'Space';
     final label = key.keyLabel;
     if (label.isNotEmpty) {
       return label.length == 1 ? label.toUpperCase() : label;

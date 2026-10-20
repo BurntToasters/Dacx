@@ -51,12 +51,13 @@ class IdleInhibitService {
     return LinuxInstallDetector.isFlatpak ? 'run.rosie.dacx' : 'dacx';
   }
 
-  Future<void> setPlaying(bool playing) {
+  Future<void> setPlaying(bool playing, {bool hasVideo = true}) {
     final ticket = ++_setPlayingTicket;
     final run = _setPlayingSerial.then((_) async {
       if (ticket != _setPlayingTicket) return;
+      final wantDisplay = playing && hasVideo;
       if (Platform.isLinux) {
-        if (playing) {
+        if (wantDisplay) {
           await _inhibitLinux();
         } else {
           await _uninhibitLinux();
@@ -64,7 +65,7 @@ class IdleInhibitService {
         return;
       }
       if (Platform.isWindows || Platform.isMacOS) {
-        await _setNativeInhibit(playing);
+        await _setNativeInhibit(wantDisplay);
       }
     });
     _setPlayingSerial = run.catchError((Object _) {});
