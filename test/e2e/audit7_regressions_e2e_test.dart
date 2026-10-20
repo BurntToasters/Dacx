@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dbus/dbus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -241,13 +242,28 @@ void main() {
 
     test('video playback still holds the display awake', () async {
       final service = IdleInhibitService();
-      await service.setPlaying(true, hasVideo: true);
-      final inhibits = PlayerScreenHarness.windowMethodsCalls.where(
-        (c) =>
-            c.method == IdleInhibitService.setIdleInhibitMethod &&
-            c.arguments == true,
-      );
-      expect(inhibits, isNotEmpty);
+      if (Platform.isLinux) {
+        var inhibited = false;
+        service.linuxCallMethodForTesting =
+            (interface, method, values, {replySignature}) async {
+              if (method == 'Inhibit') {
+                inhibited = true;
+                expect(values, hasLength(2));
+              }
+              return DBusMethodSuccessResponse(const [DBusUint32(7)]);
+            };
+        await service.setPlaying(true, hasVideo: true);
+        expect(inhibited, isTrue);
+        expect(service.isInhibited, isTrue);
+      } else {
+        await service.setPlaying(true, hasVideo: true);
+        final inhibits = PlayerScreenHarness.windowMethodsCalls.where(
+          (c) =>
+              c.method == IdleInhibitService.setIdleInhibitMethod &&
+              c.arguments == true,
+        );
+        expect(inhibits, isNotEmpty);
+      }
       await service.dispose();
     });
   });

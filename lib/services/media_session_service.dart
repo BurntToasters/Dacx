@@ -43,16 +43,41 @@ class MediaSessionService {
     required int pid,
   }) => baseNameTaken ? '$mprisBaseName.instance$pid' : mprisBaseName;
 
-  static Future<bool> _mprisBaseNameTaken() async {
+  Timer? _mprisProbeTimeout;
+  Completer<bool>? _mprisProbeCompleter;
+  bool _disposed = false;
+
+  Future<bool> _mprisBaseNameTaken() async {
     DBusClient? client;
+    final completer = Completer<bool>();
+    final timeout = Timer(const Duration(seconds: 2), () {
+      if (!completer.isCompleted) completer.complete(false);
+    });
+    _mprisProbeTimeout = timeout;
+    _mprisProbeCompleter = completer;
     try {
       client = DBusClient.session();
-      return await client
-          .nameHasOwner('org.mpris.MediaPlayer2.$mprisBaseName')
-          .timeout(const Duration(seconds: 2));
+      unawaited(
+        client
+            .nameHasOwner('org.mpris.MediaPlayer2.$mprisBaseName')
+            .then(
+              (taken) {
+                if (!completer.isCompleted) completer.complete(taken);
+              },
+              onError: (Object _) {
+                if (!completer.isCompleted) completer.complete(false);
+              },
+            ),
+      );
+      return await completer.future;
     } catch (_) {
       return false;
     } finally {
+      timeout.cancel();
+      if (identical(_mprisProbeTimeout, timeout)) _mprisProbeTimeout = null;
+      if (identical(_mprisProbeCompleter, completer)) {
+        _mprisProbeCompleter = null;
+      }
       unawaited(client?.close().catchError((_) {}));
     }
   }
@@ -78,10 +103,9 @@ class MediaSessionService {
       return;
     }
     if (Platform.isLinux) {
-      final name = mprisPlayerName(
-        baseNameTaken: await _mprisBaseNameTaken(),
-        pid: pid,
-      );
+      final baseNameTaken = await _mprisBaseNameTaken();
+      if (_disposed) return;
+      final name = mprisPlayerName(baseNameTaken: baseNameTaken, pid: pid);
       runZonedGuarded(
         () {
           _mpris = _MprisAdapter(name, _dispatchCommand, debugLog);
@@ -212,6 +236,12 @@ class MediaSessionService {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _mprisProbeTimeout?.cancel();
+    _mprisProbeTimeout = null;
+    final probe = _mprisProbeCompleter;
+    _mprisProbeCompleter = null;
+    if (probe != null && !probe.isCompleted) probe.complete(false);
     final mpris = _mpris;
     // Null out the field before awaiting so concurrent calls (e.g. a final
     // updateMetadata firing during shutdown) don't double-dispose or race
