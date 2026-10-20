@@ -41,19 +41,34 @@ export function stripAnsi(value) {
   return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
+// Matches the runner's closing line, e.g. "01:05 +1019 ~2 -1: Some tests failed."
+const flutterSummaryLine =
+  /^\d+:\d+\s+\+\d+(?:\s+~\d+)?(\s+-\d+)?:\s+(All tests passed!|Some tests failed\.)\s*$/gm;
+
+function lastFlutterSummary(clean) {
+  const matches = [...clean.matchAll(flutterSummaryLine)];
+  if (!matches.length) return null;
+  const [, failureCount, message] = matches[matches.length - 1];
+  return { passed: !failureCount && message === "All tests passed!" };
+}
+
 export function flutterTestOutputLooksFailed(output) {
   const clean = stripAnsi(output);
-  if (/Failed to load/i.test(clean)) return true;
-  if (/Some tests failed/i.test(clean)) return true;
+  // Match the test runner's own load error, not any app or plugin log that
+  // happens to say "failed to load" (e.g. native library probes on Windows).
+  if (/^\s*Failed to load ".*":/m.test(clean)) return true;
   // Only failed test lines carry the [E] marker. A bare negative count can
   // appear in a progress line whose test ultimately passes, which used to
   // report a green run as failed.
-  if (/^\d+:\d+\s+\+\d+\s+-\d+:.*\[E\]\s*$/m.test(clean)) return true;
-  return false;
+  if (/^\d+:\d+\s+\+\d+(?:\s+~\d+)?\s+-\d+:.*\[E\]\s*$/m.test(clean)) {
+    return true;
+  }
+  const summary = lastFlutterSummary(clean);
+  return summary !== null && !summary.passed;
 }
 
 export function flutterTestOutputLooksFullyPassed(output) {
-  return /All\s+(?:\d+\s+)?tests?\s+passed!?/i.test(stripAnsi(output));
+  return lastFlutterSummary(stripAnsi(output))?.passed === true;
 }
 
 export function flutterTestRunSucceeded(output, exitStatus) {
