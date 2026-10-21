@@ -1,5 +1,5 @@
 Package: dacx
-Version: 1.0.0~beta.2
+Version: 1.0.0
 Section: sound
 Priority: optional
 Architecture: amd64

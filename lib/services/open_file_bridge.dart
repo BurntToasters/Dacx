@@ -131,7 +131,7 @@ class OpenFileBridge {
       _batchTimer = null;
       final requests = List<OpenFileRequest>.of(_batch);
       _batch.clear();
-      unawaited(_deliver(requests));
+      unawaited(_deliverSafely(requests, retry: false));
     });
   }
 

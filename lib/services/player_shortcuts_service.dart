@@ -186,8 +186,11 @@ class PlayerShortcutsService {
         shift: isShiftPressed,
         alt: isAltPressed,
       );
+      final liveKey = _bindingKey(accel);
       for (final entry in customBindings.entries) {
-        if (!entry.value.map(normalizeAccelerator).contains(accel)) continue;
+        if (!entry.value.any((bound) => _bindingKey(bound) == liveKey)) {
+          continue;
+        }
         final action = _actionByName(entry.key);
         if (action == null) continue;
         if (event is! KeyDownEvent && !_isRepeatableAction(action)) {
@@ -240,15 +243,27 @@ class PlayerShortcutsService {
     return null;
   }
 
-  static String _conflictKey(String accelerator) {
-    var key = normalizeAccelerator(accelerator);
-    key = key.replaceAll('Meta+', 'Ctrl+');
-    final parts = key.split('+');
-    if (parts.length > 1) {
-      final modifiers = parts.sublist(0, parts.length - 1)..sort();
-      return [...modifiers, parts.last].join('+');
-    }
-    return key;
+  static String _conflictKey(String accelerator) => _bindingKey(accelerator);
+
+  /// Canonical form for comparing accelerators. Cmd (Meta) and Ctrl are the
+  /// same primary modifier, duplicates collapse, and modifier order is
+  /// ignored, so a stored "Meta+O" matches a live Cmd+O and "Shift+Ctrl+O"
+  /// matches Ctrl+Shift+O.
+  static String _bindingKey(String accelerator) {
+    final normalized = normalizeAccelerator(accelerator);
+    final keyStart = normalized.endsWith('+') && normalized.length > 1
+        ? normalized.length - 1
+        : normalized.lastIndexOf('+') + 1;
+    final key = normalized.substring(keyStart);
+    final modifiers =
+        normalized
+            .substring(0, keyStart)
+            .split('+')
+            .where((m) => m.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return [...modifiers, key].join('+');
   }
 
   static PlayerShortcutAction? _defaultResolve({
