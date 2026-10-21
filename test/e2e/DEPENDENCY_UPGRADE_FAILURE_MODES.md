@@ -66,6 +66,11 @@ Drag and drop (desktop_drop 0.9):
 
 Native and build:
 
+- Linux MPRIS is started against the real session bus by widget tests;
+  dbus 0.7.15 can then emit an unhandled `DBusClosedException` from a
+  cancelled signal stream during teardown. Proof: E2E on the Linux CI job;
+  `MediaSessionService` skips MPRIS when `FLUTTER_TEST` is set, and the
+  name probe runs in a guarded zone.
 - `dbus` resolves to 0.8 and breaks Linux MPRIS (`anni_mpris_service`
   requires `^0.7.6`). Proof: BUILD (`pub deps` must show `dbus 0.7.x`).
 - Generated plugin registrants (macOS `GeneratedPluginRegistrant.swift`,
