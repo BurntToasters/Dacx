@@ -115,28 +115,9 @@ class InstanceModeService {
     }
   }
 
-  static Future<bool> openNewWindow() async {
-    if (isAllowMultipleInstancesEnabled()) {
-      if (kDebugMode) {
-        debugPrint(
-          'Dacx: openNewWindow → spawnNewInstance (allow_multi_instance flag set)',
-        );
-      }
-      return spawnNewInstance();
-    }
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      if (kDebugMode) {
-        debugPrint(
-          'Dacx: openNewWindow → spawnNewInstance (separate process on ${Platform.operatingSystem})',
-        );
-      }
-      return spawnNewInstance();
-    }
-    if (kDebugMode) {
-      debugPrint('Dacx: openNewWindow → spawnNewInstance (fallback)');
-    }
-    return spawnNewInstance();
-  }
+  /// Every desktop platform opens a new window as a separate process,
+  /// whether or not multiple instances are allowed.
+  static Future<bool> openNewWindow() => spawnNewInstance();
 
   static Future<bool> spawnNewInstance({String? filePath}) async {
     try {
@@ -152,7 +133,11 @@ class InstanceModeService {
         args.add('--args');
         args.add(newInstanceFlag);
         if (filePath != null && filePath.isNotEmpty) args.add(filePath);
-        await Process.start('open', args, mode: ProcessStartMode.detached);
+        await Process.start(
+          '/usr/bin/open',
+          args,
+          mode: ProcessStartMode.detached,
+        );
         return true;
       }
       final args = <String>[newInstanceFlag];

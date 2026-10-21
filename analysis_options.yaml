@@ -15,6 +15,7 @@ analyzer:
     invalid_annotation_target: ignore
   exclude:
     - build/**
+    - test-results/**
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - windows/**
@@ -41,7 +42,6 @@ linter:
     test_types_in_equals: true
     throw_in_finally: true
     unawaited_futures: true
-    unnecessary_await_in_return: true
     unnecessary_lambdas: true
     unnecessary_null_aware_assignments: true
     use_build_context_synchronously: true

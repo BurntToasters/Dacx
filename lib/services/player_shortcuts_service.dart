@@ -28,6 +28,12 @@ enum PlayerShortcutAction {
   speedFaster,
   cycleSpeed,
   openUrl,
+  cycleAdvancedLoop,
+  subtitleDelayBack,
+  subtitleDelayForward,
+  audioDelayBack,
+  audioDelayForward,
+  addPlaybackMarker,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -57,6 +63,12 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.speedFaster: [']'],
   PlayerShortcutAction.cycleSpeed: ['\\'],
   PlayerShortcutAction.openUrl: ['Ctrl+U'],
+  PlayerShortcutAction.cycleAdvancedLoop: ['L'],
+  PlayerShortcutAction.subtitleDelayBack: ['Z'],
+  PlayerShortcutAction.subtitleDelayForward: ['Shift+Z'],
+  PlayerShortcutAction.audioDelayBack: ['Ctrl+-'],
+  PlayerShortcutAction.audioDelayForward: ['Ctrl+='],
+  PlayerShortcutAction.addPlaybackMarker: ['Ctrl+B'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -88,6 +100,13 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.speedFaster => l10n.shortcutSpeedFaster,
       PlayerShortcutAction.cycleSpeed => l10n.shortcutCycleSpeed,
       PlayerShortcutAction.openUrl => l10n.shortcutOpenUrl,
+      PlayerShortcutAction.cycleAdvancedLoop => l10n.shortcutCycleAdvancedLoop,
+      PlayerShortcutAction.subtitleDelayBack => l10n.shortcutSubtitleDelayBack,
+      PlayerShortcutAction.subtitleDelayForward =>
+        l10n.shortcutSubtitleDelayForward,
+      PlayerShortcutAction.audioDelayBack => l10n.shortcutAudioDelayBack,
+      PlayerShortcutAction.audioDelayForward => l10n.shortcutAudioDelayForward,
+      PlayerShortcutAction.addPlaybackMarker => l10n.shortcutAddPlaybackMarker,
     };
   }
   return switch (a) {
@@ -116,17 +135,36 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.speedFaster => 'Increase playback speed',
     PlayerShortcutAction.cycleSpeed => 'Cycle playback speed',
     PlayerShortcutAction.openUrl => 'Open URL',
+    PlayerShortcutAction.cycleAdvancedLoop => 'Cycle A-B repeat',
+    PlayerShortcutAction.subtitleDelayBack => 'Decrease subtitle delay',
+    PlayerShortcutAction.subtitleDelayForward => 'Increase subtitle delay',
+    PlayerShortcutAction.audioDelayBack => 'Decrease audio delay',
+    PlayerShortcutAction.audioDelayForward => 'Increase audio delay',
+    PlayerShortcutAction.addPlaybackMarker => 'Add playback marker',
   };
 }
 
 class PlayerShortcutsService {
+  static bool isAdvancedAction(PlayerShortcutAction action) {
+    return switch (action) {
+      PlayerShortcutAction.cycleAdvancedLoop ||
+      PlayerShortcutAction.subtitleDelayBack ||
+      PlayerShortcutAction.subtitleDelayForward ||
+      PlayerShortcutAction.audioDelayBack ||
+      PlayerShortcutAction.audioDelayForward ||
+      PlayerShortcutAction.addPlaybackMarker => true,
+      _ => false,
+    };
+  }
+
   /// Resolves a key event into an action.
   ///
   /// Default behavior preserves the original built-in mapping. When
   /// [customBindings] is provided (action name -> accelerator strings), those
   /// bindings are checked first and **overlay** the defaults: unlisted actions
-  /// still use built-in accelerators. A custom accelerator that collides with
-  /// a default wins (custom match is preferred).
+  /// still use built-in accelerators, and a listed action no longer answers
+  /// to its built-in accelerator. A custom accelerator that collides with a
+  /// default wins (custom match is preferred).
   static PlayerShortcutAction? resolve({
     required KeyEvent event,
     required bool hasMedia,
@@ -148,8 +186,11 @@ class PlayerShortcutsService {
         shift: isShiftPressed,
         alt: isAltPressed,
       );
+      final liveKey = _bindingKey(accel);
       for (final entry in customBindings.entries) {
-        if (!entry.value.contains(accel)) continue;
+        if (!entry.value.any((bound) => _bindingKey(bound) == liveKey)) {
+          continue;
+        }
         final action = _actionByName(entry.key);
         if (action == null) continue;
         if (event is! KeyDownEvent && !_isRepeatableAction(action)) {
@@ -163,13 +204,66 @@ class PlayerShortcutsService {
       // Fall through so unbound actions keep their defaults.
     }
 
-    return _defaultResolve(
-      event: event,
-      hasMedia: hasMedia,
-      isMetaPressed: isMetaPressed,
-      isControlPressed: isControlPressed,
-      isShiftPressed: isShiftPressed,
+    return _unlessRebound(
+      _defaultResolve(
+        event: event,
+        hasMedia: hasMedia,
+        isMetaPressed: isMetaPressed,
+        isControlPressed: isControlPressed,
+        isShiftPressed: isShiftPressed,
+      ),
+      customBindings,
     );
+  }
+
+  static PlayerShortcutAction? _unlessRebound(
+    PlayerShortcutAction? action,
+    Map<String, List<String>>? customBindings,
+  ) {
+    if (action == null || customBindings == null) return action;
+    return customBindings.containsKey(action.name) ? null : action;
+  }
+
+  static PlayerShortcutAction? actionUsing(
+    String accelerator,
+    Map<String, List<String>> customBindings, {
+    required PlayerShortcutAction except,
+    bool includeAdvanced = true,
+  }) {
+    final needle = _conflictKey(accelerator);
+    for (final action in PlayerShortcutAction.values) {
+      if (action == except) continue;
+      if (!includeAdvanced && isAdvancedAction(action)) continue;
+      final bound =
+          customBindings[action.name] ?? defaultKeybinds[action] ?? const [];
+      if (bound.map(_conflictKey).contains(needle)) {
+        return action;
+      }
+    }
+    return null;
+  }
+
+  static String _conflictKey(String accelerator) => _bindingKey(accelerator);
+
+  /// Canonical form for comparing accelerators. Cmd (Meta) and Ctrl are the
+  /// same primary modifier, duplicates collapse, and modifier order is
+  /// ignored, so a stored "Meta+O" matches a live Cmd+O and "Shift+Ctrl+O"
+  /// matches Ctrl+Shift+O.
+  static String _bindingKey(String accelerator) {
+    final normalized = normalizeAccelerator(accelerator);
+    final keyStart = normalized.endsWith('+') && normalized.length > 1
+        ? normalized.length - 1
+        : normalized.lastIndexOf('+') + 1;
+    final key = normalized.substring(keyStart);
+    final modifiers =
+        normalized
+            .substring(0, keyStart)
+            .split('+')
+            .where((m) => m.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return [...modifiers, key].join('+');
   }
 
   static PlayerShortcutAction? _defaultResolve({
@@ -305,6 +399,57 @@ class PlayerShortcutsService {
     return null;
   }
 
+  /// Resolves the opt-in advanced playback accelerators. Kept separate from
+  /// the legacy default resolver so callers that rely on its historical
+  /// minimalist mapping remain compatible; PlayerScreen invokes this only
+  /// after the advanced tools gate is enabled.
+  static PlayerShortcutAction? resolveAdvanced({
+    required KeyEvent event,
+    required bool isMetaPressed,
+    required bool isControlPressed,
+    required bool isShiftPressed,
+    Map<String, List<String>>? customBindings,
+  }) {
+    if (event is! KeyDownEvent) return null;
+    return _unlessRebound(
+      _defaultResolveAdvanced(
+        key: event.logicalKey,
+        primary: isMetaPressed || isControlPressed,
+        isShiftPressed: isShiftPressed,
+      ),
+      customBindings,
+    );
+  }
+
+  static PlayerShortcutAction? _defaultResolveAdvanced({
+    required LogicalKeyboardKey key,
+    required bool primary,
+    required bool isShiftPressed,
+  }) {
+    if (primary && key == LogicalKeyboardKey.keyB) {
+      return PlayerShortcutAction.addPlaybackMarker;
+    }
+    if (primary &&
+        (key == LogicalKeyboardKey.minus ||
+            key == LogicalKeyboardKey.numpadSubtract)) {
+      return PlayerShortcutAction.audioDelayBack;
+    }
+    if (primary &&
+        (key == LogicalKeyboardKey.equal ||
+            key == LogicalKeyboardKey.numpadAdd)) {
+      return PlayerShortcutAction.audioDelayForward;
+    }
+    if (!primary && key == LogicalKeyboardKey.keyL) {
+      return PlayerShortcutAction.cycleAdvancedLoop;
+    }
+    if (!primary && key == LogicalKeyboardKey.keyZ) {
+      return isShiftPressed
+          ? PlayerShortcutAction.subtitleDelayForward
+          : PlayerShortcutAction.subtitleDelayBack;
+    }
+    return null;
+  }
+
   static bool _isRepeatableAction(PlayerShortcutAction a) =>
       a == PlayerShortcutAction.seekForward ||
       a == PlayerShortcutAction.seekBack ||
@@ -359,7 +504,17 @@ class PlayerShortcutsService {
     );
   }
 
+  static String normalizeAccelerator(String accelerator) {
+    if (accelerator == ' ') return 'Space';
+    var normalized = accelerator;
+    if (normalized.endsWith('+ ')) {
+      normalized = '${normalized.substring(0, normalized.length - 1)}Space';
+    }
+    return normalized.replaceAll('Meta+', 'Ctrl+');
+  }
+
   static String _keyLabel(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.space) return 'Space';
     final label = key.keyLabel;
     if (label.isNotEmpty) {
       return label.length == 1 ? label.toUpperCase() : label;

@@ -28,8 +28,12 @@ import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import { loadLocalDotEnv } from "./xcode-env.js";
+import releaseVersion from "./release-version.cjs";
+import { checkWindowsLibmpvArchives } from "./check-native-libs.js";
+import { checkUnwantedNativeLibs } from "./check-unwanted-native-libs.js";
+
+const { toMsiVersion } = releaseVersion;
 import {
-  overlayLibDirectory,
   vendorLinuxNativeLibs,
 } from "./bundle-linux-native-libs.js";
 
@@ -505,6 +509,16 @@ function renderWixApplicationSearchRegistrationComponent({ indent }) {
   ].join("\n");
 }
 
+function assertNoUnwantedNativeLibs(bundleDir) {
+  const unwanted = checkUnwantedNativeLibs(bundleDir);
+  if (unwanted.passed) return;
+  for (const failure of unwanted.failures) console.error(failure);
+  console.error(
+    "Remove dartjni from the bundle and confirm CMAKE_DISABLE_FIND_PACKAGE_JNI is set in the desktop CMake shell, then rebuild.",
+  );
+  process.exit(1);
+}
+
 function listFilesRecursive(baseDir) {
   const out = [];
 
@@ -523,45 +537,6 @@ function listFilesRecursive(baseDir) {
   return out;
 }
 
-function toMsiVersion(version) {
-  const match = String(version).match(
-    /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/,
-  );
-  if (!match) {
-    throw new Error(
-      `Cannot convert version "${version}" to MSI version. Expected semver like 1.2.3 or 1.2.3-beta.4`,
-    );
-  }
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3]);
-  const prerelease = match[4];
-
-  if (patch > 654) {
-    throw new Error(
-      `Patch ${patch} exceeds 654; MSI build field would overflow (max 65535).`,
-    );
-  }
-
-  if (!prerelease) {
-    return `${major}.${minor}.${patch * 100 + 99}`;
-  }
-
-  const tagMatch = prerelease.match(/^beta\.(\d+)$/);
-  if (!tagMatch) {
-    throw new Error(
-      `Cannot encode prerelease "${prerelease}"; only beta.N is supported (e.g. beta.5).`,
-    );
-  }
-  const n = Number(tagMatch[1]);
-  if (n < 1 || n > 98) {
-    throw new Error(
-      `Beta counter ${n} out of range (1..98). Bump patch and reset.`,
-    );
-  }
-  return `${major}.${minor}.${patch * 100 + n}`;
-}
-
 // ── Windows ────────────────────────────────────────────────────
 
 function packageWindows() {
@@ -578,8 +553,19 @@ function packageWindows() {
     console.error("Run 'npm run build:win' first.");
     process.exit(1);
   }
+  const nativeLibs = checkWindowsLibmpvArchives(
+    path.join(root, "build", "windows", "x64"),
+  );
+  if (!nativeLibs.passed) {
+    for (const failure of nativeLibs.failures) console.error(failure);
+    console.error(
+      "Delete build/windows/x64/libmpv and any unpinned mpv-dev archive, then rebuild.",
+    );
+    process.exit(1);
+  }
 
   assertWindowsRuntimeDllsPresent(buildDir);
+  assertNoUnwantedNativeLibs(buildDir);
   const audioIconFileName = ensureWindowsAudioFileIcon(buildDir);
   installLegalFilesInDir(buildDir);
 
@@ -895,6 +881,7 @@ function packageLinux() {
     console.error("Run 'npm run build:linux' first.");
     process.exit(1);
   }
+  assertNoUnwantedNativeLibs(buildDir);
 
   const packagingDir = path.join(root, "linux", "packaging");
   const desktopFile = path.join(packagingDir, "dacx.desktop");
@@ -919,11 +906,7 @@ function packageLinux() {
 
   buildAppImage(portableBundle, desktopFile, iconFile);
 
-  overlayLibDirectory(
-    path.join(portableBundle, "lib"),
-    path.join(buildDir, "lib"),
-  );
-  buildFlatpak();
+  buildFlatpak(portableBundle);
 }
 
 function stagePortableLinuxBundle(buildDir) {
@@ -1233,12 +1216,14 @@ function buildAppImage(buildDir, desktopFile, iconFile) {
     }
   }
 
-  // AppRun entry point
+  // AppRun entry point. Vendored media libs resolve through the binary's
+  // $ORIGIN/lib RPATH (set when the portable bundle was staged); the
+  // runtime's own GTK/GLib stack must keep resolving to the host, so this
+  // launcher deliberately sets no LD_LIBRARY_PATH.
   fs.writeFileSync(
     path.join(appDir, "AppRun"),
     `#!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
-export LD_LIBRARY_PATH="$HERE/opt/dacx/lib:$LD_LIBRARY_PATH"
 exec "$HERE/opt/dacx/dacx" "$@"
 `,
     { mode: 0o755 },
@@ -1260,7 +1245,7 @@ exec "$HERE/opt/dacx/dacx" "$@"
   console.log(`  ✓ ${appImageName}`);
 }
 
-function buildFlatpak() {
+function buildFlatpak(portableBundle) {
   if (process.platform !== "linux") {
     console.warn(
       "  ⚠ Flatpak bundling requires a Linux host; skipping .flatpak",
@@ -1274,6 +1259,13 @@ function buildFlatpak() {
       "    Install: sudo apt-get install -y flatpak flatpak-builder",
     );
     console.warn("    Then re-run: npm run setup:linux");
+    return;
+  }
+
+  if (!fs.existsSync(path.join(portableBundle, "dacx"))) {
+    console.warn(
+      `  ⚠ Portable bundle missing at ${portableBundle}; skipping .flatpak`,
+    );
     return;
   }
 

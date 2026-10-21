@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:anni_mpris_service/anni_mpris_service.dart';
+import 'package:dbus/dbus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+import '../playback/playback_speed_policy.dart';
 
 import 'debug_log_service.dart';
 import 'idle_inhibit_service.dart';
@@ -30,6 +34,54 @@ class MediaSessionService {
   MediaSessionService({required this.debugLog});
 
   final DebugLogService debugLog;
+
+  static const mprisBaseName = 'dacx';
+
+  @visibleForTesting
+  static String mprisPlayerName({
+    required bool baseNameTaken,
+    required int pid,
+  }) => baseNameTaken ? '$mprisBaseName.instance$pid' : mprisBaseName;
+
+  Timer? _mprisProbeTimeout;
+  Completer<bool>? _mprisProbeCompleter;
+  bool _disposed = false;
+
+  Future<bool> _mprisBaseNameTaken() async {
+    DBusClient? client;
+    final completer = Completer<bool>();
+    final timeout = Timer(const Duration(seconds: 2), () {
+      if (!completer.isCompleted) completer.complete(false);
+    });
+    _mprisProbeTimeout = timeout;
+    _mprisProbeCompleter = completer;
+    try {
+      client = DBusClient.session();
+      unawaited(
+        client
+            .nameHasOwner('org.mpris.MediaPlayer2.$mprisBaseName')
+            .then(
+              (taken) {
+                if (!completer.isCompleted) completer.complete(taken);
+              },
+              onError: (Object _) {
+                if (!completer.isCompleted) completer.complete(false);
+              },
+            ),
+      );
+      return await completer.future;
+    } catch (_) {
+      return false;
+    } finally {
+      timeout.cancel();
+      if (identical(_mprisProbeTimeout, timeout)) _mprisProbeTimeout = null;
+      if (identical(_mprisProbeCompleter, completer)) {
+        _mprisProbeCompleter = null;
+      }
+      unawaited(client?.close().catchError((_) {}));
+    }
+  }
+
   static const _channel = MethodChannel('run.rosie.dacx/media_session');
 
   bool _enabled = false;
@@ -51,9 +103,12 @@ class MediaSessionService {
       return;
     }
     if (Platform.isLinux) {
+      final baseNameTaken = await _mprisBaseNameTaken();
+      if (_disposed) return;
+      final name = mprisPlayerName(baseNameTaken: baseNameTaken, pid: pid);
       runZonedGuarded(
         () {
-          _mpris = _MprisAdapter(_dispatchCommand, debugLog);
+          _mpris = _MprisAdapter(name, _dispatchCommand, debugLog);
         },
         (e, st) {
           _platformAvailable = false;
@@ -181,6 +236,12 @@ class MediaSessionService {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _mprisProbeTimeout?.cancel();
+    _mprisProbeTimeout = null;
+    final probe = _mprisProbeCompleter;
+    _mprisProbeCompleter = null;
+    if (probe != null && !probe.isCompleted) probe.complete(false);
     final mpris = _mpris;
     // Null out the field before awaiting so concurrent calls (e.g. a final
     // updateMetadata firing during shutdown) don't double-dispose or race
@@ -239,10 +300,9 @@ class MediaSessionCommand {
 
 /// Linux MPRIS adapter built atop `anni_mpris_service`.
 class _MprisAdapter extends MPRISService {
-  _MprisAdapter(this._dispatch, this._log)
+  _MprisAdapter(super.name, this._dispatch, this._log)
     : super(
-        'dacx',
-        identity: 'DACX',
+        identity: 'Dacx',
         desktopEntry: IdleInhibitService.mprisDesktopEntry(),
         emitSeekedSignal: false,
         canPlay: true,
@@ -402,5 +462,24 @@ class _MprisAdapter extends MPRISService {
   void pushRate(double r) {
     if (!_enabled) return;
     playbackRate = r;
+  }
+
+  @override
+  Future<DBusMethodResponse> getProperty(String interface, String name) {
+    if (interface == 'org.mpris.MediaPlayer2.Player' && name == 'MinimumRate') {
+      return Future.value(
+        DBusGetPropertyResponse(
+          const DBusDouble(PlaybackSpeedPolicy.minimumRate),
+        ),
+      );
+    }
+    if (interface == 'org.mpris.MediaPlayer2.Player' && name == 'MaximumRate') {
+      return Future.value(
+        DBusGetPropertyResponse(
+          const DBusDouble(PlaybackSpeedPolicy.maximumRate),
+        ),
+      );
+    }
+    return super.getProperty(interface, name);
   }
 }

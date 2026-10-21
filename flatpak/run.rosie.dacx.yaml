@@ -1,4 +1,4 @@
-# x-version: 0.11.3
+# x-version: 1.0.0
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
@@ -19,8 +19,8 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.freedesktop.ScreenSaver
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --talk-name=org.mpris.MediaPlayer2.dacx
   - --own-name=org.mpris.MediaPlayer2.dacx
+  - --own-name=org.mpris.MediaPlayer2.dacx.*
 
 modules:
   - name: dacx
@@ -54,7 +54,7 @@ modules:
       - install -m 644 run.rosie.dacx.png /app/share/icons/hicolor/512x512/apps/run.rosie.dacx.png
     sources:
       - type: dir
-        path: build/linux/x64/release/bundle
+        path: build/linux-portable/bundle
         dest: bundle
       - type: file
         path: flatpak/dacx-launcher.sh

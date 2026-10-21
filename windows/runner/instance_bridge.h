@@ -22,6 +22,8 @@ bool ForwardToRunningInstance(const std::vector<std::string>& file_paths);
 // it. The mutex is held for the lifetime of the process.
 bool AcquireSingletonMutex();
 
+void StartOpenFilePipe();
+
 // Starts the named-pipe server that receives file paths from secondary
 // instances. Forwarded paths are dispatched to Flutter via the
 // "run.rosie.dacx/open_file" channels registered on |messenger|.

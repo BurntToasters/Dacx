@@ -1,3 +1,4 @@
+import 'package:dacx/playback/playback_speed_policy.dart';
 import 'package:dacx/services/media_session_service.dart';
 import 'package:dacx/services/settings_service.dart';
 
@@ -66,7 +67,7 @@ abstract final class MediaSessionCommandDispatch {
           seekTarget: Duration(milliseconds: cmd.positionMs!),
         );
       case 'seek_relative':
-        if (cmd.positionMs == null) {
+        if (cmd.positionMs == null || duration.inMilliseconds <= 0) {
           return const MediaSessionDispatch(MediaSessionDispatchKind.noop);
         }
         final target = position + Duration(milliseconds: cmd.positionMs!);
@@ -100,7 +101,10 @@ abstract final class MediaSessionCommandDispatch {
           volumePercent: v * 100.0,
         );
       case 'rate':
-        final r = (cmd.value ?? 1.0).clamp(0.25, 4.0);
+        final r = (cmd.value ?? 1.0).clamp(
+          PlaybackSpeedPolicy.minimumRate,
+          PlaybackSpeedPolicy.maximumRate,
+        );
         return MediaSessionDispatch(MediaSessionDispatchKind.setRate, rate: r);
       case 'raise':
         return const MediaSessionDispatch(MediaSessionDispatchKind.raise);

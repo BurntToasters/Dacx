@@ -24,13 +24,11 @@ List<UpdateAsset> _fullMacosAssets() {
   return [
     const UpdateAsset(
       name: 'Dacx-macOS.zip',
-      downloadUrl:
-          'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-macOS.zip',
+      downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-macOS.zip',
     ),
     const UpdateAsset(
       name: 'SHA256SUMS-macOS.txt',
-      downloadUrl:
-          'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/SHA256SUMS-macOS.txt',
+      downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/SHA256SUMS-macOS.txt',
     ),
   ];
 }

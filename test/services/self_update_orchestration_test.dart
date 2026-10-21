@@ -69,8 +69,7 @@ void main() {
         jsonEncode({
           'version': '0.8.0',
           'assets': {
-            'Dacx-Windows-x64.msi':
-                'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+            'Dacx-Windows-x64.msi': 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
           },
         }),
       );
@@ -125,8 +124,7 @@ void main() {
           assets: [
             UpdateAsset(
               name: 'SHA256SUMS-Windows-x64.txt',
-              downloadUrl:
-                  'https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/SHA256SUMS-Windows-x64.txt',
+              downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.8.0/SHA256SUMS-Windows-x64.txt',
             ),
           ],
         ),

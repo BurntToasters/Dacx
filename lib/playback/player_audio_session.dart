@@ -9,12 +9,10 @@ import 'player_controller.dart';
 /// the full widget tree.
 class PlayerAudioSession {
   PlayerAudioSession({
-    required IPlayerService playerService,
-    required SettingsService settings,
-    required PlayerController player,
-  }) : _playerService = playerService,
-       _settings = settings,
-       _player = player;
+    required this._playerService,
+    required this._settings,
+    required this._player,
+  });
 
   final IPlayerService _playerService;
   final SettingsService _settings;

@@ -1,10 +1,25 @@
 import 'dart:math';
-import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
 import '../models/playable_source.dart';
+import 'path_probe.dart';
+
+class PlaylistSnapshot {
+  const PlaylistSnapshot({
+    required this.items,
+    required this.index,
+    required this.shuffle,
+    required this.shuffleOrder,
+    required this.shufflePos,
+  });
+
+  final List<PlayableSource> items;
+  final int index;
+  final bool shuffle;
+  final List<int> shuffleOrder;
+  final int shufflePos;
+}
 
 /// In-memory playback queue. Snapshot persistence lives in [SettingsService];
 /// this class itself only holds the live session state. The `index` is `-1`
@@ -19,8 +34,10 @@ class PlaylistService extends ChangeNotifier {
   final List<int> _shuffleOrder = [];
   int _shufflePos = -1;
   bool _disposed = false;
+  int _revision = 0;
 
   List<PlayableSource> get items => List.unmodifiable(_items);
+  int get revision => _revision;
   int get index => _index;
   int get length => _items.length;
   bool get isEmpty => _items.isEmpty;
@@ -30,6 +47,43 @@ class PlaylistService extends ChangeNotifier {
   bool get shuffle => _shuffle;
   bool get hasNext => _peekRelative(1) != null;
   bool get hasPrevious => _peekRelative(-1) != null;
+
+  @override
+  void notifyListeners() {
+    _revision++;
+    super.notifyListeners();
+  }
+
+  PlaylistSnapshot capture() {
+    return PlaylistSnapshot(
+      items: List<PlayableSource>.of(_items),
+      index: _index,
+      shuffle: _shuffle,
+      shuffleOrder: List<int>.of(_shuffleOrder),
+      shufflePos: _shufflePos,
+    );
+  }
+
+  void restore(PlaylistSnapshot snapshot) {
+    _items
+      ..clear()
+      ..addAll(snapshot.items);
+    _shuffle = snapshot.shuffle;
+    _shuffleOrder
+      ..clear()
+      ..addAll(snapshot.shuffleOrder);
+    _shufflePos = snapshot.shufflePos;
+    if (_items.isEmpty) {
+      _index = -1;
+      _shuffleOrder.clear();
+      _shufflePos = -1;
+    } else if (snapshot.index < 0 || snapshot.index >= _items.length) {
+      _index = 0;
+    } else {
+      _index = snapshot.index;
+    }
+    notifyListeners();
+  }
 
   void setShuffle(bool value) {
     if (_shuffle == value) return;
@@ -92,7 +146,11 @@ class PlaylistService extends ChangeNotifier {
     final wasEmpty = _items.isEmpty;
     _items.addAll(toAdd);
     if (wasEmpty) _index = 0;
-    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) {
+      wasEmpty
+          ? _rebuildShuffleOrder(preserveCurrent: true)
+          : _remapShuffleOrder((i) => i);
+    }
     notifyListeners();
     return dropped;
   }
@@ -105,19 +163,27 @@ class PlaylistService extends ChangeNotifier {
     if (_items.isEmpty) {
       _items.add(source);
       _index = 0;
-    } else if (_items.length >= maxQueueItems) {
-      // Cap reached: drop the farthest item from the insert point (tail),
-      // then insert so the queue never grows past [maxQueueItems].
-      if (_index + 1 >= _items.length) {
-        _items.removeLast();
-      } else {
-        _items.removeAt(_items.length - 1);
-      }
-      _items.insert(_index + 1, source);
-    } else {
-      _items.insert(_index + 1, source);
+      if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+      notifyListeners();
+      return;
     }
-    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+    int? evictedIndex;
+    if (_items.length >= maxQueueItems) {
+      // Evict the tail unless it is current. When current is already last,
+      // evict the head and shift the current index before inserting after it.
+      evictedIndex = _index + 1 >= _items.length ? 0 : _items.length - 1;
+      _items.removeAt(evictedIndex);
+      if (evictedIndex < _index) _index--;
+    }
+    final insertAt = _index + 1;
+    _items.insert(insertAt, source);
+    if (_shuffle) {
+      _remapShuffleOrder((i) {
+        if (i == evictedIndex) return null;
+        final shifted = evictedIndex != null && i > evictedIndex ? i - 1 : i;
+        return shifted >= insertAt ? shifted + 1 : shifted;
+      }, playNext: insertAt);
+    }
     notifyListeners();
   }
 
@@ -145,32 +211,37 @@ class PlaylistService extends ChangeNotifier {
     if (newIndex == oldIndex) return;
     final item = _items.removeAt(oldIndex);
     _items.insert(newIndex, item);
-    if (_index == oldIndex) {
-      _index = newIndex;
-    } else if (oldIndex < _index && newIndex >= _index) {
-      _index--;
-    } else if (oldIndex > _index && newIndex <= _index) {
-      _index++;
+    int moved(int i) {
+      if (i == oldIndex) return newIndex;
+      if (oldIndex < i && i <= newIndex) return i - 1;
+      if (newIndex <= i && i < oldIndex) return i + 1;
+      return i;
     }
-    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+
+    _index = moved(_index);
+    if (_shuffle) _remapShuffleOrder(moved);
     notifyListeners();
   }
 
   void removeAt(int i) {
     if (i < 0 || i >= _items.length) return;
+    final shuffleNext = _shuffle && i == _index ? _peekShuffleIndex(1) : null;
     _items.removeAt(i);
+    int? removed(int k) => k == i ? null : (k > i ? k - 1 : k);
     if (_items.isEmpty) {
       _index = -1;
+    } else if (shuffleNext != null) {
+      _index = removed(shuffleNext)!;
     } else if (i < _index) {
       _index--;
     } else if (i == _index && _index >= _items.length) {
       _index = _items.length - 1;
     }
-    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) _remapShuffleOrder(removed);
     notifyListeners();
   }
 
-  Future<int> removeMissingFiles() async {
+  Future<int> removeMissingFiles({void Function()? onCurrentRemoved}) async {
     if (_items.isEmpty || _disposed) return 0;
     final checkedPaths = _items
         .where((source) => source.isFile)
@@ -178,14 +249,19 @@ class PlaylistService extends ChangeNotifier {
         .toSet();
     if (checkedPaths.isEmpty) return 0;
     final pathsToCheck = checkedPaths.toList(growable: false);
-    final existingPaths = (await Isolate.run(
-      () => _existingFilePaths(pathsToCheck),
-    )).toSet();
+    final existingPaths = await PathProbe.existingFiles(pathsToCheck);
     if (_disposed) return 0;
     final missingPaths = checkedPaths.difference(existingPaths);
     if (missingPaths.isEmpty) return 0;
     final current = this.current;
     final before = _items.length;
+    final newIndexOf = <int, int>{};
+    for (var i = 0, kept = 0; i < before; i++) {
+      final source = _items[i];
+      if (source.isFile && missingPaths.contains(source.value)) continue;
+      newIndexOf[i] = kept++;
+    }
+    final currentRemoved = _index >= 0 && !newIndexOf.containsKey(_index);
     _items.removeWhere(
       (source) => source.isFile && missingPaths.contains(source.value),
     );
@@ -199,8 +275,9 @@ class PlaylistService extends ChangeNotifier {
     } else {
       _index = _index.clamp(0, _items.length - 1);
     }
-    if (_shuffle) _rebuildShuffleOrder(preserveCurrent: true);
+    if (_shuffle) _remapShuffleOrder((i) => newIndexOf[i]);
     notifyListeners();
+    if (currentRemoved) onCurrentRemoved?.call();
     return removed;
   }
 
@@ -259,6 +336,12 @@ class PlaylistService extends ChangeNotifier {
     return _items[_index];
   }
 
+  int? _peekShuffleIndex(int delta) {
+    final pos = _shufflePos + delta;
+    if (pos < 0 || pos >= _shuffleOrder.length) return null;
+    return _shuffleOrder[pos];
+  }
+
   PlayableSource? _peekRelative(int delta) {
     if (_items.isEmpty) return null;
     if (_shuffle) {
@@ -294,16 +377,32 @@ class PlaylistService extends ChangeNotifier {
       ..addAll(indices);
     _shufflePos = preserveCurrent ? 0 : -1;
   }
-}
 
-List<String> _existingFilePaths(List<String> paths) {
-  final existing = <String>[];
-  for (final path in paths) {
-    try {
-      if (File(path).existsSync()) existing.add(path);
-    } catch (_) {
-      // Treat inaccessible paths as missing.
+  void _remapShuffleOrder(int? Function(int) remap, {int? playNext}) {
+    if (!_shuffle || _items.isEmpty || _index < 0) {
+      _rebuildShuffleOrder(preserveCurrent: true);
+      return;
     }
+    final placed = <int>{_index};
+    final played = <int>[];
+    final upcoming = <int>[];
+    for (var k = 0; k < _shuffleOrder.length; k++) {
+      final mapped = remap(_shuffleOrder[k]);
+      if (mapped == null || mapped < 0 || mapped >= _items.length) continue;
+      if (mapped == playNext || !placed.add(mapped)) continue;
+      (k < _shufflePos ? played : upcoming).add(mapped);
+    }
+    final random = Random();
+    for (var i = 0; i < _items.length; i++) {
+      if (i == playNext || !placed.add(i)) continue;
+      upcoming.insert(random.nextInt(upcoming.length + 1), i);
+    }
+    if (playNext != null && playNext != _index) upcoming.insert(0, playNext);
+    _shuffleOrder
+      ..clear()
+      ..addAll(played)
+      ..add(_index)
+      ..addAll(upcoming);
+    _shufflePos = played.length;
   }
-  return existing;
 }

@@ -59,7 +59,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
 
       expect(changed, isTrue);
       expect(service.recentFiles, [existing.path]);
@@ -78,7 +78,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
 
       expect(changed, isTrue);
       expect(service.recentFiles, [url]);
@@ -116,7 +116,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      final changed = service.pruneRecentFiles(notifyListeners: false);
+      final changed = await service.pruneRecentFiles(notifyListeners: false);
 
       expect(changed, isTrue);
       expect(service.recentFiles, [safeUrl]);
@@ -509,6 +509,23 @@ void main() {
 
       await service.syncInstanceModeFlag();
       expect(InstanceModeService.isAllowMultipleInstancesEnabled(), isTrue);
+    });
+
+    test('resetAll disables the native instance-mode flag', () async {
+      SharedPreferences.setMockInitialValues({
+        'allow_multiple_instances': true,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      await service.syncInstanceModeFlag();
+      expect(InstanceModeService.isAllowMultipleInstancesEnabled(), isTrue);
+
+      await service.resetAll();
+
+      expect(service.allowMultipleInstances, isFalse);
+      expect(InstanceModeService.isAllowMultipleInstancesEnabled(), isFalse);
+      expect(prefs.getKeys(), isEmpty);
     });
   });
 

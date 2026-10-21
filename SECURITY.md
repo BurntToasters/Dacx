@@ -46,6 +46,31 @@ Release artifacts include `THIRD_PARTY_NOTICES.txt` and `LICENSE` (generated via
 `npm run licenses` during `release:prepare`). See `docs/NATIVE_DEPENDENCIES.md`
 for bundled native runtime notes (libmpv / media_kit).
 
+## Windows update signing key
+
+Windows self-update accepts a manifest signed by any key in
+`windowsManifestPublicKeysBase64` (`lib/services/update_trust_config.dart`).
+The private key (`DACX_UPDATE_PRIVATE_KEY_PKCS8_BASE64`) signs every Windows
+release.
+
+- **Backup:** keep two offline copies of the private key (for example an
+  encrypted password-manager entry and an encrypted offline drive). If every
+  copy is lost, installed builds can no longer self-update and users must
+  reinstall from the MSI.
+- **Rotation:**
+  1. Run `node scripts/generate-update-key.js` and store the new private key
+     the same way.
+  2. Add the new public key to the list next to the current one and ship a
+     release still signed with the current key.
+  3. Once that release has been out long enough for users to update, sign
+     releases with the new key.
+  4. Remove the old public key in a later release.
+- **Compromise:** ship one release whose list contains only the new key.
+  It must still be signed with the compromised key, because installed builds
+  only trust that key. Sign every later release with the new key.
+  `scripts/verify-draft-release.cjs` checks draft manifests against the same
+  list.
+
 ## Release VM hardening
 
 Official Windows release builds require Azure Artifact Signing env vars
@@ -57,4 +82,9 @@ are fully Authenticode-signed.
 
 macOS release builds should set `APPLE_TEAM_ID` (see `scripts/flutter-build-macos.js`).
 
-The `release:finalize` and related git reset scripts are **intentionally destructive** on the release machine; run only on dedicated VMs with a clean working tree.
+`release:prepare`, `release:mirror`, and `release:finalize` update generated
+metadata and release staging files. Run them on a clean release tree and review
+their output before uploading. They do not reset Git or delete unrelated local
+files. The `b`, `r`, and `vi` scripts do run `git reset --hard` / `git clean -fd`
+and can permanently remove local changes; use those only on dedicated VMs after
+confirming the working tree is disposable.

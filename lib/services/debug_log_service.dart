@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../models/playable_source.dart';
+import 'error_log_store.dart';
 
 enum DebugLogCategory { playback, settings, update, hwaccel, ui, system, error }
 
@@ -32,9 +33,13 @@ class DebugLogService extends ChangeNotifier {
   final bool Function() _isEnabled;
   final ListQueue<DebugLogEntry> _entries = ListQueue<DebugLogEntry>();
 
-  DebugLogService({int maxEntries = 2000, required bool Function() isEnabled})
-    : _maxEntries = maxEntries,
-      _isEnabled = isEnabled;
+  final ErrorLogStore? _errorStore;
+
+  DebugLogService({
+    this._maxEntries = 2000,
+    required this._isEnabled,
+    this._errorStore,
+  });
 
   List<DebugLogEntry> get entries => List<DebugLogEntry>.unmodifiable(_entries);
 
@@ -93,34 +98,47 @@ class DebugLogService extends ChangeNotifier {
     if (_entries.length == _maxEntries) {
       _entries.removeFirst();
     }
-    _entries.add(
-      DebugLogEntry(
-        timestamp: DateTime.now(),
-        category: category,
-        severity: severity,
-        event: event,
-        message: message,
-        details: Map<String, Object?>.unmodifiable(
-          Map<String, Object?>.from(details),
-        ),
+    final entry = DebugLogEntry(
+      timestamp: DateTime.now(),
+      category: category,
+      severity: severity,
+      event: event,
+      message: message,
+      details: Map<String, Object?>.unmodifiable(
+        Map<String, Object?>.from(details),
       ),
     );
+    _entries.add(entry);
+    if (severity == DebugSeverity.error || category == DebugLogCategory.error) {
+      _errorStore?.append(formatEntry(entry));
+    }
     notifyListeners();
   }
 
   void clear() {
-    if (_entries.isEmpty) return;
+    final store = _errorStore;
+    final hadStored = store != null && store.previousSessions.isNotEmpty;
+    store?.clear();
+    if (_entries.isEmpty && !hadStored) return;
     _entries.clear();
     notifyListeners();
   }
 
   String exportText({bool redactSensitive = true}) {
-    if (_entries.isEmpty) return 'No debug log entries.';
+    final previous = _errorStore?.previousSessions ?? '';
     final lines = <String>[];
     for (final entry in _entries) {
       lines.add(formatEntry(entry, redactSensitive: redactSensitive));
     }
-    return lines.join('\n');
+    if (lines.isEmpty && previous.isEmpty) return 'No debug log entries.';
+    if (previous.isEmpty) return lines.join('\n');
+    // Stored lines were redacted when written.
+    return [
+      '--- Errors from earlier sessions ---',
+      previous,
+      '--- This session ---',
+      if (lines.isEmpty) 'No debug log entries.' else ...lines,
+    ].join('\n');
   }
 
   static String formatEntry(
@@ -178,9 +196,17 @@ class DebugLogService extends ChangeNotifier {
       return _redactPath(trimmed);
     }
     return value
+        // `file://` URIs (debug stack frames) redact as plain paths.
+        .replaceAll(_fileUriPrefix, '')
         .replaceAllMapped(_urlPattern, (match) {
           final candidate = match.group(0) ?? '';
           return PlayableSource.displaySafeUrl(candidate);
+        })
+        // Quoted paths first: the quotes mark the full extent, spaces included.
+        .replaceAllMapped(_quotedPathPattern, (match) {
+          final quote = match.group(1) ?? '';
+          final candidate = match.group(2) ?? '';
+          return '$quote${_redactPath(candidate)}$quote';
         })
         .replaceAllMapped(_pathPattern, (match) {
           final prefix = match.group(1) ?? '';
@@ -245,8 +271,21 @@ class DebugLogService extends ChangeNotifier {
     return '<path:$basename>';
   }
 
+  static final RegExp _fileUriPrefix = RegExp(
+    r'file://(?=/|[A-Za-z]:)',
+    caseSensitive: false,
+  );
+
+  static final RegExp _quotedPathPattern = RegExp(
+    r"""(['"])((?:[A-Za-z]:[\\/]|\\\\|/(?!/))[^'"\n]*)\1""",
+  );
+
+  /// Unquoted paths. A path may contain single spaces (`John Smith`), so a
+  /// match continues across a space unless the next word starts with `(` (an
+  /// OS error suffix). Over-redacting trailing words is safer than leaking a
+  /// user or folder name.
   static final RegExp _pathPattern = RegExp(
-    r"""(^|[\s(="'])((?:[A-Za-z]:[\\/]|\\\\)[^\s,|;"')]+|/(?!/)[^\s,|;"')]+(?:/[^\s,|;"')]+)*)""",
+    r"""(^|[\s(="'])((?:[A-Za-z]:[\\/]|\\\\|/(?!/))[^\s,|;"'<>()]+(?: (?![(])[^\s,|;"'<>()]+)*)""",
     multiLine: true,
   );
 

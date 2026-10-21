@@ -216,8 +216,8 @@ function setupLinux() {
   // System packages for Flutter desktop + media_kit (libmpv)
   const packages = [
     'clang', 'cmake', 'ninja-build', 'pkg-config',
-    'libgtk-3-dev', 'libepoxy-dev', 'libmpv-dev', 'mpv',
-    'libayatana-appindicator3-dev',
+    'libgtk-3-dev', 'libx11-dev', 'libxi-dev', 'libepoxy-dev',
+    'libmpv-dev', 'mpv',
     'libunwind-dev',
     'patchelf',
     'curl', 'git', 'unzip', 'xz-utils', 'zip',

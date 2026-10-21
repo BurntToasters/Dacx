@@ -172,8 +172,11 @@ final class MediaSessionBridge {
 
   private func makeArtwork(_ image: NSImage) -> MPMediaItemArtwork {
     let size = image.size
+    var proposed = CGRect(origin: .zero, size: size)
+    let cgImage = image.cgImage(forProposedRect: &proposed, context: nil, hints: nil)
     return MPMediaItemArtwork(boundsSize: size) { requested in
-      return resizedImage(image, to: requested) ?? image
+      guard let cgImage else { return image }
+      return resizedImage(cgImage, to: requested) ?? image
     }
   }
 
@@ -323,15 +326,25 @@ private func loadLocalArtwork(_ uri: String) -> NSImage? {
   return NSImage(contentsOf: URL(fileURLWithPath: uri))
 }
 
-private func resizedImage(_ source: NSImage, to size: CGSize) -> NSImage? {
-  guard size.width > 0, size.height > 0 else { return source }
-  let result = NSImage(size: size)
-  result.lockFocus()
-  source.draw(
-    in: NSRect(origin: .zero, size: size),
-    from: NSRect(origin: .zero, size: source.size),
-    operation: .copy,
-    fraction: 1.0)
-  result.unlockFocus()
-  return result
+private func resizedImage(_ source: CGImage, to size: CGSize) -> NSImage? {
+  let width = Int(size.width.rounded(.up))
+  let height = Int(size.height.rounded(.up))
+  guard width > 0, height > 0 else {
+    return NSImage(cgImage: source, size: .zero)
+  }
+  guard let context = CGContext(
+    data: nil,
+    width: width,
+    height: height,
+    bitsPerComponent: 8,
+    bytesPerRow: 0,
+    space: CGColorSpaceCreateDeviceRGB(),
+    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+  ) else {
+    return nil
+  }
+  context.interpolationQuality = .high
+  context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+  guard let scaled = context.makeImage() else { return nil }
+  return NSImage(cgImage: scaled, size: size)
 }

@@ -44,6 +44,7 @@ class HeadlessPlayerService implements IPlayerService {
   final List<({String name, String value})> _propertyCalls = [];
   final List<PlaylistMode> _playlistModeCalls = [];
   Object? _openError;
+  final Set<String> _failOpenPaths = <String>{};
   Uint8List? screenshotBytes;
   Duration _openDelay = Duration.zero;
   final Set<String> _failPropertyNames = <String>{};
@@ -52,6 +53,13 @@ class HeadlessPlayerService implements IPlayerService {
 
   @visibleForTesting
   set openError(Object? value) => _openError = value;
+
+  @visibleForTesting
+  void failOpenPaths(Iterable<String> paths) {
+    _failOpenPaths
+      ..clear()
+      ..addAll(paths);
+  }
 
   @visibleForTesting
   set screenshotResult(Uint8List? value) => screenshotBytes = value;
@@ -104,6 +112,9 @@ class HeadlessPlayerService implements IPlayerService {
   Future<void> open(String filePath, {bool play = true}) async {
     if (_disposed) return;
     if (_openError != null) throw _openError!;
+    if (_failOpenPaths.contains(filePath)) {
+      throw Exception('open failed: $filePath');
+    }
     if (_openDelay > Duration.zero) {
       await Future<void>.delayed(_openDelay);
     }
@@ -235,6 +246,10 @@ class HeadlessPlayerService implements IPlayerService {
   List<({String name, String value})> get propertyCalls =>
       List.unmodifiable(_propertyCalls);
 
+  /// Snapshot of mpv-style properties for desktop E2E/widget assertions.
+  @visibleForTesting
+  Map<String, String> get properties => Map.unmodifiable(_properties);
+
   @override
   Future<bool> setProperty(String name, String value) async {
     if (_disposed) return false;
@@ -269,15 +284,24 @@ class HeadlessPlayerService implements IPlayerService {
   }
 
   @override
-  Future<bool> addExternalAudio(String path) {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return Future.value(false);
-    return setProperty('audio-files-append', path);
-  }
+  Future<bool> addExternalAudio(String path) => _addTrack('audio-add', path);
 
   @override
-  Future<bool> addExternalSubtitle(String path) {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return Future.value(false);
-    return setProperty('sub-files-append', path);
+  Future<bool> addExternalSubtitle(String path) => _addTrack('sub-add', path);
+
+  final Set<String> _failCommandNames = {};
+  final List<List<String>> _commandCalls = [];
+
+  @visibleForTesting
+  void failCommands(Iterable<String> names) => _failCommandNames.addAll(names);
+
+  @visibleForTesting
+  List<List<String>> get commandCalls => List.unmodifiable(_commandCalls);
+
+  Future<bool> _addTrack(String command, String path) async {
+    if (_disposed || PlayerPathUtils.isUnsafeOpenPath(path)) return false;
+    _commandCalls.add([command, path, 'select']);
+    return !_failCommandNames.contains(command);
   }
 
   /// Test helper to push synthetic stream events into listeners.

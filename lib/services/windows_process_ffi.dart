@@ -4,42 +4,48 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 
-typedef _CreateProcessWNative =
-    Int32 Function(
-      Pointer<Utf16> lpApplicationName,
-      Pointer<Utf16> lpCommandLine,
-      Pointer<Void> lpProcessAttributes,
-      Pointer<Void> lpThreadAttributes,
-      Int32 bInheritHandles,
-      Uint32 dwCreationFlags,
-      Pointer<Void> lpEnvironment,
-      Pointer<Utf16> lpCurrentDirectory,
-      Pointer<Uint8> lpStartupInfo,
-      Pointer<Uint8> lpProcessInformation,
-    );
-typedef _CreateProcessWDart =
-    int Function(
-      Pointer<Utf16> lpApplicationName,
-      Pointer<Utf16> lpCommandLine,
-      Pointer<Void> lpProcessAttributes,
-      Pointer<Void> lpThreadAttributes,
-      int bInheritHandles,
-      int dwCreationFlags,
-      Pointer<Void> lpEnvironment,
-      Pointer<Utf16> lpCurrentDirectory,
-      Pointer<Uint8> lpStartupInfo,
-      Pointer<Uint8> lpProcessInformation,
-    );
+typedef _CreateProcessWNative = Int32 Function(
+  Pointer<Utf16> lpApplicationName,
+  Pointer<Utf16> lpCommandLine,
+  Pointer<Void> lpProcessAttributes,
+  Pointer<Void> lpThreadAttributes,
+  Int32 bInheritHandles,
+  Uint32 dwCreationFlags,
+  Pointer<Void> lpEnvironment,
+  Pointer<Utf16> lpCurrentDirectory,
+  Pointer<Uint8> lpStartupInfo,
+  Pointer<Uint8> lpProcessInformation,
+);
+typedef _CreateProcessWDart = int Function(
+  Pointer<Utf16> lpApplicationName,
+  Pointer<Utf16> lpCommandLine,
+  Pointer<Void> lpProcessAttributes,
+  Pointer<Void> lpThreadAttributes,
+  int bInheritHandles,
+  int dwCreationFlags,
+  Pointer<Void> lpEnvironment,
+  Pointer<Utf16> lpCurrentDirectory,
+  Pointer<Uint8> lpStartupInfo,
+  Pointer<Uint8> lpProcessInformation,
+);
 
-typedef _WaitForSingleObjectNative =
-    Uint32 Function(IntPtr hHandle, Uint32 dwMilliseconds);
-typedef _WaitForSingleObjectDart =
-    int Function(int hHandle, int dwMilliseconds);
+typedef _WaitForSingleObjectNative = Uint32 Function(
+  IntPtr hHandle,
+  Uint32 dwMilliseconds,
+);
+typedef _WaitForSingleObjectDart = int Function(
+  int hHandle,
+  int dwMilliseconds,
+);
 
-typedef _GetExitCodeProcessNative =
-    Int32 Function(IntPtr hProcess, Pointer<Uint32> lpExitCode);
-typedef _GetExitCodeProcessDart =
-    int Function(int hProcess, Pointer<Uint32> lpExitCode);
+typedef _GetExitCodeProcessNative = Int32 Function(
+  IntPtr hProcess,
+  Pointer<Uint32> lpExitCode,
+);
+typedef _GetExitCodeProcessDart = int Function(
+  int hProcess,
+  Pointer<Uint32> lpExitCode,
+);
 
 typedef _CloseHandleNative = Int32 Function(IntPtr hObject);
 typedef _CloseHandleDart = int Function(int hObject);

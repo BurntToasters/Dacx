@@ -14,8 +14,10 @@ export '../models/update_channel.dart';
 
 typedef PackageInfoLoader = Future<PackageInfo> Function();
 typedef CurrentVersionLoader = Future<String> Function(PackageInfo packageInfo);
-typedef HttpGet =
-    Future<http.Response> Function(Uri uri, {Map<String, String>? headers});
+typedef HttpGet = Future<http.Response> Function(
+  Uri uri, {
+  Map<String, String>? headers,
+});
 typedef CanLaunchUrlFn = Future<bool> Function(Uri uri);
 typedef LaunchUrlFn = Future<bool> Function(Uri uri, {LaunchMode mode});
 
@@ -38,16 +40,14 @@ class UpdateService {
   UpdateChannel? _lastEffectiveChannel;
 
   UpdateService({
-    DebugLogService? debugLog,
-    String debugSource = 'unknown',
+    this._debugLog,
+    this._debugSource = 'unknown',
     PackageInfoLoader? packageInfoLoader,
     CurrentVersionLoader? currentVersionLoader,
     HttpGet? httpGet,
     CanLaunchUrlFn? canLaunch,
     LaunchUrlFn? launch,
-  }) : _debugLog = debugLog,
-       _debugSource = debugSource,
-       _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
+  }) : _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
        _currentVersionLoader =
            currentVersionLoader ?? currentVersionFromPackageInfo,
        _httpGet = httpGet ?? platformHttpGetFn,
@@ -423,9 +423,10 @@ class UpdateService {
   }
 
   static List<int> _numericParts(String version) {
-    return _stripPreRelease(
-      version,
-    ).split('.').map((p) => int.tryParse(p) ?? 0).toList(growable: false);
+    return _stripPreRelease(version)
+        .split('.')
+        .map((p) => int.tryParse(p) ?? 0)
+        .toList(growable: false);
   }
 
   static String _stripPreRelease(String v) =>

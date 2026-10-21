@@ -75,6 +75,45 @@ void main() {
       ]);
     });
 
+    test('cancels a stalled redirect body before following Location', () async {
+      var cancelled = false;
+      final body = StreamController<List<int>>(
+        onCancel: () => cancelled = true,
+      );
+      final calls = <Uri>[];
+      final pending = fetchAllowedGetFollowingRedirects(
+        url: allowedStart,
+        timeout: const Duration(seconds: 5),
+        bodyIdleTimeout: const Duration(milliseconds: 20),
+        httpStream: (request) async {
+          calls.add(request.url);
+          if (calls.length == 1) {
+            return http.StreamedResponse(
+              body.stream,
+              302,
+              headers: {'location': allowedCdn},
+            );
+          }
+          return response(status: 200, body: [7]);
+        },
+        isAllowedUrl: SelfUpdateService.isAllowedDownloadUrl,
+      );
+
+      try {
+        final result = await pending.timeout(const Duration(milliseconds: 250));
+        expect(result.statusCode, 200);
+        expect(await result.stream.toBytes(), [7]);
+        expect(calls.map((uri) => uri.toString()).toList(), [
+          allowedStart,
+          allowedCdn,
+        ]);
+        expect(cancelled, isTrue);
+      } finally {
+        await body.close();
+        await pending;
+      }
+    });
+
     test('rejects initial non-allowlisted URL', () async {
       await expectLater(
         fetchAllowedGetFollowingRedirects(

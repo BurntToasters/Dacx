@@ -377,53 +377,47 @@ void main() {
       expect(update?.version, '0.7.4-beta.2');
     });
 
-    test(
-      'auto uses effective current version so normalized macOS beta checks beta channel',
-      () async {
-        final requestedUris = <Uri>[];
-        final svc = UpdateService(
-          packageInfoLoader: () async => info('0.8.0.1'),
-          currentVersionLoader: (packageInfo) async => '0.8.0-beta.1',
-          httpGet: (uri, {headers}) async {
-            requestedUris.add(uri);
-            return http.Response(
-              '[{"tag_name":"v0.8.0-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.2","body":"notes","prerelease":true,"draft":false}]',
-              200,
-            );
-          },
-        );
-
-        final update = await svc.checkForUpdate();
-
-        expect(
-          requestedUris.any((u) {
-            final s = u.toString();
-            return s.contains('/releases') && !s.contains('/releases/latest');
-          }),
-          isTrue,
-          reason: 'beta channel must hit the releases list endpoint',
-        );
-        expect(update?.version, '0.8.0-beta.2');
-      },
-    );
-
-    test(
-      'beta compares against effective current version, not normalized macOS version',
-      () async {
-        final svc = UpdateService(
-          packageInfoLoader: () async => info('0.8.0.1'),
-          currentVersionLoader: (packageInfo) async => '0.8.0-beta.1',
-          httpGet: (uri, {headers}) async => http.Response(
+    test('auto uses effective current version so normalized macOS beta checks beta channel', () async {
+      final requestedUris = <Uri>[];
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('0.8.0.1'),
+        currentVersionLoader: (packageInfo) async => '0.8.0-beta.1',
+        httpGet: (uri, {headers}) async {
+          requestedUris.add(uri);
+          return http.Response(
             '[{"tag_name":"v0.8.0-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.2","body":"notes","prerelease":true,"draft":false}]',
             200,
-          ),
-        );
+          );
+        },
+      );
 
-        final update = await svc.checkForUpdate(channel: UpdateChannel.beta);
+      final update = await svc.checkForUpdate();
 
-        expect(update?.version, '0.8.0-beta.2');
-      },
-    );
+      expect(
+        requestedUris.any((u) {
+          final s = u.toString();
+          return s.contains('/releases') && !s.contains('/releases/latest');
+        }),
+        isTrue,
+        reason: 'beta channel must hit the releases list endpoint',
+      );
+      expect(update?.version, '0.8.0-beta.2');
+    });
+
+    test('beta compares against effective current version, not normalized macOS version', () async {
+      final svc = UpdateService(
+        packageInfoLoader: () async => info('0.8.0.1'),
+        currentVersionLoader: (packageInfo) async => '0.8.0-beta.1',
+        httpGet: (uri, {headers}) async => http.Response(
+          '[{"tag_name":"v0.8.0-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.2","body":"notes","prerelease":true,"draft":false}]',
+          200,
+        ),
+      );
+
+      final update = await svc.checkForUpdate(channel: UpdateChannel.beta);
+
+      expect(update?.version, '0.8.0-beta.2');
+    });
 
     test(
       'beta manual fallback targets exact prerelease, not latest stable',
@@ -455,19 +449,22 @@ void main() {
       expect(update?.url, 'https://rosie.run/dacx/update?from=v0.5.0');
     });
 
-    test('beta skips drafts and non-prereleases, picks first prerelease', () async {
-      final svc = UpdateService(
-        packageInfoLoader: () async => info('0.7.0'),
-        httpGet: (uri, {headers}) async => http.Response(
-          '[{"tag_name":"v0.7.5","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.7.5","body":"","prerelease":false,"draft":false},'
-          '{"tag_name":"v0.8.0-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.2","body":"","prerelease":true,"draft":true},'
-          '{"tag_name":"v0.8.0-beta.1","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.1","body":"","prerelease":true,"draft":false}]',
-          200,
-        ),
-      );
-      final update = await svc.checkForUpdate(channel: UpdateChannel.beta);
-      expect(update?.version, '0.8.0-beta.1');
-    });
+    test(
+      'beta skips drafts and non-prereleases, picks first prerelease',
+      () async {
+        final svc = UpdateService(
+          packageInfoLoader: () async => info('0.7.0'),
+          httpGet: (uri, {headers}) async => http.Response(
+            '[{"tag_name":"v0.7.5","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.7.5","body":"","prerelease":false,"draft":false},'
+            '{"tag_name":"v0.8.0-beta.2","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.2","body":"","prerelease":true,"draft":true},'
+            '{"tag_name":"v0.8.0-beta.1","html_url":"https://github.com/BurntToasters/Dacx/releases/tag/v0.8.0-beta.1","body":"","prerelease":true,"draft":false}]',
+            200,
+          ),
+        );
+        final update = await svc.checkForUpdate(channel: UpdateChannel.beta);
+        expect(update?.version, '0.8.0-beta.1');
+      },
+    );
 
     test('beta returns null when no prereleases exist', () async {
       final svc = UpdateService(

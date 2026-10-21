@@ -110,18 +110,16 @@ class DebugLogPanel extends StatelessWidget {
     );
     if (!context.mounted) return;
     final l10n = AppLocalizations.of(context);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCopied)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCopied)));
   }
 
   void _clearDebugLog(BuildContext context) {
     debugLog.clear();
     if (!context.mounted) return;
     final l10n = AppLocalizations.of(context);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCleared)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCleared)));
   }
 
   static String renderDebugEntry(DebugLogEntry entry) {

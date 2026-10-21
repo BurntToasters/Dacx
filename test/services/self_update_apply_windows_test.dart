@@ -25,23 +25,19 @@ List<UpdateAsset> _fullWindowsAssets({required String msiHash}) {
   return [
     const UpdateAsset(
       name: 'Dacx-Windows-x64.msi',
-      downloadUrl:
-          'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Windows-x64.msi',
+      downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-Windows-x64.msi',
     ),
     const UpdateAsset(
       name: 'SHA256SUMS-Windows-x64.txt',
-      downloadUrl:
-          'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/SHA256SUMS-Windows-x64.txt',
+      downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/SHA256SUMS-Windows-x64.txt',
     ),
     const UpdateAsset(
       name: 'Dacx-update-manifest-Windows-x64.json',
-      downloadUrl:
-          'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-update-manifest-Windows-x64.json',
+      downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-update-manifest-Windows-x64.json',
     ),
     const UpdateAsset(
       name: 'Dacx-update-manifest-Windows-x64.json.sig',
-      downloadUrl:
-          'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-update-manifest-Windows-x64.json.sig',
+      downloadUrl: 'https://github.com/BurntToasters/Dacx/releases/download/v0.10.0/Dacx-update-manifest-Windows-x64.json.sig',
     ),
   ];
 }
@@ -310,13 +306,12 @@ void main() {
           return '';
         },
         fetchBytes: (url) async => manifestBytes,
-        validateWindowsManifest:
-            ({
-              required manifestBytes,
-              required signatureBytes,
-              required version,
-              required assetName,
-            }) async => const SelfUpdateResult(SelfUpdateOutcome.spawned),
+        validateWindowsManifest: ({
+          required manifestBytes,
+          required signatureBytes,
+          required version,
+          required assetName,
+        }) async => const SelfUpdateResult(SelfUpdateOutcome.spawned),
         processRun: (_, _) async =>
             ProcessResult(0, 0, 'NotSigned|A1B2C3|unsigned', ''),
       );
@@ -355,13 +350,12 @@ void main() {
           return '';
         },
         fetchBytes: (url) async => manifestBytes,
-        validateWindowsManifest:
-            ({
-              required manifestBytes,
-              required signatureBytes,
-              required version,
-              required assetName,
-            }) async => const SelfUpdateResult(SelfUpdateOutcome.spawned),
+        validateWindowsManifest: ({
+          required manifestBytes,
+          required signatureBytes,
+          required version,
+          required assetName,
+        }) async => const SelfUpdateResult(SelfUpdateOutcome.spawned),
       );
 
       final result = await svc.applyWindowsUpdate(

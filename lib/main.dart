@@ -8,21 +8,26 @@ import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:macos_window_utils/macos_window_utils.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import 'l10n/app_localizations.dart';
 import 'models/playable_source.dart';
 import 'playback/native_runtime_probe.dart';
 import 'screens/player_screen.dart';
+import 'services/app_exit_hooks.dart';
 import 'services/debug_log_service.dart';
+import 'services/error_log_store.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
 import 'services/macos_install_location_service.dart';
+import 'services/preferences_recovery.dart';
+import 'services/resume_position_store.dart';
 import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 import 'services/trusted_http.dart';
 import 'services/update_service.dart';
+import 'theme/window_visual_inputs.dart';
 import 'theme/window_visuals.dart';
 import 'widgets/missing_playback_runtime_app.dart';
 
@@ -51,12 +56,56 @@ void _installKeyboardStateRecovery() {
   };
 }
 
+/// Records build, layout, and paint errors in the debug log (and its on-disk
+/// error store). Chains to the existing handler so keyboard recovery and
+/// console output keep running.
+void _installFrameworkErrorLogging(DebugLogService debugLog) {
+  final previousOnError = FlutterError.onError;
+  var reporting = false;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    if (!reporting) {
+      reporting = true;
+      try {
+        debugLog.log(
+          category: DebugLogCategory.error,
+          event: 'uncaught_flutter_error',
+          message: details.exceptionAsString(),
+          details: {
+            if (details.library != null) 'library': details.library,
+            if (details.context != null) 'context': details.context.toString(),
+            if (details.stack != null) 'stack': _topFrames(details.stack!),
+          },
+          severity: DebugSeverity.error,
+        );
+      } catch (_) {
+        // A failure while logging must not recurse into this handler.
+      } finally {
+        reporting = false;
+      }
+    }
+    previousOnError?.call(details);
+  };
+}
+
+/// First stack frames, joined on one line. Enough to locate a crash without
+/// filling the persistent error log; redaction still applies on export.
+String _topFrames(StackTrace stack, {int count = 12}) {
+  return stack
+      .toString()
+      .split('\n')
+      .where((line) => line.trim().isNotEmpty)
+      .take(count)
+      .map((line) => line.trim())
+      .join(' <- ');
+}
+
 void _installAsyncErrorHandler(DebugLogService debugLog) {
   PlatformDispatcher.instance.onError = (error, stack) {
     debugLog.log(
       category: DebugLogCategory.error,
       event: 'uncaught_async_error',
       message: error.toString(),
+      details: {'stack': _topFrames(stack)},
       severity: DebugSeverity.error,
     );
     // Let the platform fallback path still report the failure in production
@@ -85,15 +134,41 @@ void main(List<String> args) async {
   final playbackRuntimeReady = _ensurePlaybackRuntime();
   await Window.initialize();
 
-  final prefs = await SharedPreferences.getInstance();
-  final settings = SettingsService(prefs);
+  String? recoveredPreferences;
+  final prefs = await PreferencesRecovery.load(
+    onRecovered: (movedTo) => recoveredPreferences = movedTo,
+  );
+  final settings = SettingsService(
+    prefs,
+    resumeStore: FileResumePositionStore(
+      p.join(
+        p.dirname(InstanceModeService.flagFilePath()),
+        'resume_positions.json',
+      ),
+      maxEntries: SettingsService.maxResumeEntries,
+    ),
+  );
   unawaited(settings.syncInstanceModeFlag());
-  final debugLog = DebugLogService(isEnabled: () => settings.debugModeEnabled);
+  final debugLog = DebugLogService(
+    isEnabled: () => settings.debugModeEnabled,
+    errorStore: ErrorLogStore.forCurrentUser(),
+  );
+  if (recoveredPreferences != null) {
+    debugLog.log(
+      category: DebugLogCategory.error,
+      event: 'preferences_recovered',
+      message: 'Unreadable preferences were moved aside; defaults loaded.',
+      details: {'moved_to': recoveredPreferences},
+      severity: DebugSeverity.error,
+    );
+  }
   _installAsyncErrorHandler(debugLog);
+  _installFrameworkErrorLogging(debugLog);
   // Prime macOS hardware-acceleration probes off the UI isolate so the first
-  // frame is not blocked by sysctl + system_profiler subprocesses. No-op
-  // elsewhere.
-  unawaited(HardwareAccelerationService.prime());
+  // frame is not blocked by sysctl + system_profiler subprocesses. Awaited
+  // before runApp: PlayerScreen reads the result in initState and would
+  // otherwise rerun the probes synchronously. No-op elsewhere.
+  final hardwareProbe = HardwareAccelerationService.prime();
   if (Platform.isWindows) {
     unawaited(primeWindowsTlsTrust());
   }
@@ -188,6 +263,7 @@ void main(List<String> args) async {
   } else {
     final cliFile = _parseCliFilePath(args);
     final updateService = UpdateService(debugLog: debugLog, debugSource: 'app');
+    await hardwareProbe;
     runApp(
       DacxApp(
         settings: settings,
@@ -337,6 +413,8 @@ class _DacxAppState extends State<DacxApp>
   _ThemeInputs? _cachedThemeInputs;
   late final TrayService _tray;
   bool _trayLabelsSynced = false;
+  late WindowVisualInputs _visualInputs;
+  late bool _minimizeToTray;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
     if (!settings.windowBlurEnabled) return false;
@@ -440,6 +518,8 @@ class _DacxAppState extends State<DacxApp>
     );
     WidgetsBinding.instance.addObserver(this);
     windowManager.addListener(this);
+    _visualInputs = WindowVisualInputs.fromSettings(widget.settings);
+    _minimizeToTray = widget.settings.minimizeToTray;
     widget.settings.addListener(_onSettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_applyWindowVisualSettings());
@@ -470,8 +550,16 @@ class _DacxAppState extends State<DacxApp>
         'experimental_features': widget.settings.experimentalFeaturesEnabled,
       },
     );
-    unawaited(_applyWindowVisualSettings());
-    unawaited(_syncMinimizeToTray());
+    final visuals = WindowVisualInputs.fromSettings(widget.settings);
+    if (visuals != _visualInputs) {
+      _visualInputs = visuals;
+      unawaited(_applyWindowVisualSettings());
+    }
+    final minimizeToTray = widget.settings.minimizeToTray;
+    if (minimizeToTray != _minimizeToTray) {
+      _minimizeToTray = minimizeToTray;
+      unawaited(_syncMinimizeToTray());
+    }
   }
 
   Future<void> _syncMinimizeToTray({AppLocalizations? l10n}) async {
@@ -504,7 +592,29 @@ class _DacxAppState extends State<DacxApp>
     }
   }
 
+  /// Saves state that would otherwise die with the process: `destroy()` and
+  /// Cmd+Q skip widget `dispose`.
+  Future<void> _runExitHooks() async {
+    final pendingGeometry = _geometrySaveDebounce?.isActive ?? false;
+    _geometrySaveDebounce?.cancel();
+    if (pendingGeometry) {
+      try {
+        await _saveGeometry().timeout(AppExitHooks.defaultTimeout);
+      } catch (_) {
+        // Losing one geometry update must not block quitting.
+      }
+    }
+    await AppExitHooks.runAll();
+  }
+
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    await _runExitHooks();
+    return AppExitResponse.exit;
+  }
+
   Future<void> _quitFromTray() async {
+    await _runExitHooks();
     try {
       await windowManager.setPreventClose(false);
     } catch (_) {}
@@ -529,6 +639,7 @@ class _DacxAppState extends State<DacxApp>
       await _tray.hideToTray();
       return;
     }
+    await _runExitHooks();
     try {
       await windowManager.setPreventClose(false);
     } catch (_) {}
@@ -811,6 +922,7 @@ class _DacxAppState extends State<DacxApp>
             debugLog: widget.debugLog,
             updateService: widget.updateService,
             initialFile: widget.initialFile,
+            onQuitRequest: _quitFromTray,
           ),
         );
       },

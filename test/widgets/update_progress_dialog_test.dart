@@ -116,23 +116,17 @@ void main() {
       const cases = <SelfUpdateOutcome, String>{
         SelfUpdateOutcome.missingAsset:
             'The release does not include an installer for this platform.',
-        SelfUpdateOutcome.missingChecksums:
-            'The release does not include a checksums file. Cannot verify download.',
-        SelfUpdateOutcome.missingSignature:
-            'The release does not include a signed update manifest. Cannot verify update authenticity.',
+        SelfUpdateOutcome.missingChecksums: 'The release does not include a checksums file. Cannot verify download.',
+        SelfUpdateOutcome.missingSignature: 'The release does not include a signed update manifest. Cannot verify update authenticity.',
         SelfUpdateOutcome.downloadFailed: 'Download failed.',
         SelfUpdateOutcome.extractionFailed:
             'Could not extract the update package.',
         SelfUpdateOutcome.signatureInvalid:
             'Downloaded app failed code-signature verification.',
-        SelfUpdateOutcome.bundleIdentifierMismatch:
-            'Downloaded app has an unexpected bundle identifier. Refusing to install.',
-        SelfUpdateOutcome.versionMismatch:
-            'Downloaded app version does not match the selected update. Refusing to install.',
-        SelfUpdateOutcome.teamIdMismatch:
-            'Downloaded app is signed by an unexpected developer. Refusing to install.',
-        SelfUpdateOutcome.gatekeeperRejected:
-            'Self-update is not available on this build (missing signing configuration).',
+        SelfUpdateOutcome.bundleIdentifierMismatch: 'Downloaded app has an unexpected bundle identifier. Refusing to install.',
+        SelfUpdateOutcome.versionMismatch: 'Downloaded app version does not match the selected update. Refusing to install.',
+        SelfUpdateOutcome.teamIdMismatch: 'Downloaded app is signed by an unexpected developer. Refusing to install.',
+        SelfUpdateOutcome.gatekeeperRejected: 'Self-update is not available on this build (missing signing configuration).',
         SelfUpdateOutcome.spawnFailed: 'Could not launch the installer.',
       };
 

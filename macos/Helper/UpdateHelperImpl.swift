@@ -11,6 +11,64 @@ func dacxLog(_ s: String) {
     os_log("%{public}@", log: helperLog, type: .info, s)
 }
 
+private let zipinfoEntryPattern = try! NSRegularExpression(
+    pattern: #"^([-dlbcps][-rwxstST]{9})\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s(.+)$"#
+)
+
+func zipinfoEntry(_ line: String) -> (isSymlink: Bool, name: String)? {
+    let range = NSRange(line.startIndex..., in: line)
+    guard let match = zipinfoEntryPattern.firstMatch(in: line, range: range),
+          let modeRange = Range(match.range(at: 1), in: line),
+          let nameRange = Range(match.range(at: 2), in: line) else {
+        return nil
+    }
+    return (line[modeRange].first == "l", String(line[nameRange]))
+}
+
+func zipEntryNestedUnderSymlink(_ listing: String) -> String? {
+    var symlinks: [String] = []
+    var names: [String] = []
+    for raw in listing.split(separator: "\n") {
+        guard let entry = zipinfoEntry(String(raw)) else { continue }
+        names.append(entry.name)
+        if entry.isSymlink {
+            var link = entry.name
+            while link.hasSuffix("/") { link.removeLast() }
+            symlinks.append(link)
+        }
+    }
+    for link in symlinks {
+        let prefix = link + "/"
+        if let nested = names.first(where: { $0.hasPrefix(prefix) }) {
+            return nested
+        }
+    }
+    return nil
+}
+
+func symlinkEscapingRoot(_ root: String) -> String? {
+    let fm = FileManager.default
+    let rootPath = (root as NSString).standardizingPath
+    if (try? fm.destinationOfSymbolicLink(atPath: rootPath)) != nil {
+        return rootPath
+    }
+    guard let enumerator = fm.enumerator(atPath: rootPath) else { return nil }
+    while let rel = enumerator.nextObject() as? String {
+        let full = (rootPath as NSString).appendingPathComponent(rel)
+        guard let destination = try? fm.destinationOfSymbolicLink(atPath: full) else {
+            continue
+        }
+        if destination.hasPrefix("/") { return rel }
+        let parent = (full as NSString).deletingLastPathComponent
+        let resolved = ((parent as NSString).appendingPathComponent(destination) as NSString)
+            .standardizingPath
+        if resolved != rootPath && !resolved.hasPrefix(rootPath + "/") {
+            return rel
+        }
+    }
+    return nil
+}
+
 // MARK: - Shell helpers
 
 @discardableResult
@@ -288,7 +346,9 @@ func downloadToTemp(_ url: URL) -> Result<URL, DownloadFailure> {
     var result: Result<URL, DownloadFailure> = .failure(DownloadFailure(description: "download did not complete"))
 
     var request = URLRequest(url: url)
-    request.timeoutInterval = 600
+    // Idle timeout: fail when no data arrives for 60s. A slow but steady
+    // download still completes.
+    request.timeoutInterval = 60
     let redirectDelegate = AllowlistedRedirectDelegate()
     let session = URLSession(configuration: .ephemeral,
                              delegate: redirectDelegate,
@@ -434,6 +494,12 @@ func performSwap(newAppPath: String,
     }
     dacxLog("pre-move validation passed; proceeding with swap")
 
+    if getuid() == 0 {
+        if let failure = matchOwnership(of: newAppPath, to: installedAppPath) {
+            return .failed(failure)
+        }
+    }
+
     let backupPath = installedAppPath + ".bak"
     if fm.fileExists(atPath: backupPath) {
         try? fm.removeItem(atPath: backupPath)
@@ -475,6 +541,24 @@ func performSwap(newAppPath: String,
     try? fm.removeItem(atPath: backupPath)
     dacxLog("swap complete; new bundle installed at \(installedAppPath)")
     return .ok
+}
+
+func matchOwnership(of newAppPath: String, to installedAppPath: String) -> String? {
+    let attributes: [FileAttributeKey: Any]
+    do {
+        attributes = try FileManager.default.attributesOfItem(atPath: installedAppPath)
+    } catch {
+        return "could not read installed app ownership: \(error)"
+    }
+    guard let owner = (attributes[.ownerAccountID] as? NSNumber)?.uint32Value,
+          let group = (attributes[.groupOwnerAccountID] as? NSNumber)?.uint32Value else {
+        return "could not read installed app ownership"
+    }
+    let (code, output) = runCommand("/usr/sbin/chown", ["-R", "-h", "\(owner):\(group)", newAppPath])
+    if code != 0 {
+        return "could not match installed app ownership: \(output)"
+    }
+    return nil
 }
 
 // MARK: - Worker / root re-exec plumbing
@@ -561,6 +645,7 @@ func runWorkerInstall() -> Int32 {
     dacxLog("worker: parent exited, beginning install")
 
     let needsRoot = installNeedsRoot(installedAppPath: args.installedAppPath)
+    var exitCode: Int32 = 0
 
     if needsRoot {
         let selfPath = Bundle.main.executablePath
@@ -569,7 +654,7 @@ func runWorkerInstall() -> Int32 {
         dacxLog("worker: install path not writable, escalating via osascript")
         let code = runRootInstallViaOSAScript(selfPath: selfPath, args: args)
         if code != 0 {
-            return 7
+            exitCode = 7
         }
     } else {
         let status = performSwap(newAppPath: args.newAppPath,
@@ -581,15 +666,22 @@ func runWorkerInstall() -> Int32 {
             break
         case .failed(let message):
             dacxLog("worker: swap failed: \(message)")
-            return 6
+            exitCode = 6
         }
     }
 
     if args.relaunch {
-        relaunchInUserSession(args.installedAppPath)
+        if bundleExists(args.installedAppPath) {
+            if exitCode != 0 {
+                dacxLog("worker: update not installed (\(exitCode)); relaunching current version")
+            }
+            relaunchInUserSession(args.installedAppPath)
+        } else {
+            dacxLog("worker: relaunch skipped; \(args.installedAppPath) is missing")
+        }
     }
 
-    return 0
+    return exitCode
 }
 
 func relaunchInUserSession(_ appPath: String) {
@@ -847,6 +939,17 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
                     return
                 }
             }
+            let (zipinfoLongCode, zipinfoLongOutput) = runCommand("/usr/bin/zipinfo", [
+                zipFileUrl.path,
+            ])
+            if zipinfoLongCode != 0 {
+                reply(false, "zip containment check failed: zipinfo exited \(zipinfoLongCode): \(zipinfoLongOutput)")
+                return
+            }
+            if let nested = zipEntryNestedUnderSymlink(zipinfoLongOutput) {
+                reply(false, "zip containment check failed: entry '\(nested)' is under a symlink")
+                return
+            }
 
             // 3. Extract with ditto (un-sandboxed; no com.apple.provenance stamped)
             let extractDir = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -866,6 +969,10 @@ private let helperOperationDeadlineSeconds: TimeInterval = 840
             ])
             if dittoCode != 0 {
                 reply(false, "ditto extraction failed: \(dittoOutput)")
+                return
+            }
+            if let escaping = symlinkEscapingRoot(extractDir.path) {
+                reply(false, "zip containment check failed: symlink '\(escaping)' points outside the bundle")
                 return
             }
             if abortIfExpired("extraction") { return }

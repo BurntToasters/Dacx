@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'instance_mode_service.dart';
-import 'idle_inhibit_service.dart';
 
 /// Windows shell helpers: Jump Lists + taskbar progress.
 abstract final class WindowsShellService {
@@ -14,28 +13,40 @@ abstract final class WindowsShellService {
 
   static const updateJumpListMethod = 'updateJumpList';
   static const setTaskbarProgressMethod = 'setTaskbarProgress';
-  static const setIdleInhibitMethod = IdleInhibitService.setIdleInhibitMethod;
 
-  /// Prevents system/display idle sleep while [inhibit] is true.
-  static Future<void> setIdleInhibit(bool inhibit) async {
-    if (!Platform.isWindows) return;
-    try {
-      await _channel.invokeMethod<bool>(setIdleInhibitMethod, inhibit);
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Dacx: setIdleInhibit failed: $e');
+  static List<String> filterJumpListPaths(List<String> paths) {
+    final out = <String>[];
+    for (final raw in paths) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.startsWith('\\\\')) continue;
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null &&
+          uri.hasScheme &&
+          !RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed)) {
+        continue;
       }
+      out.add(trimmed);
+      if (out.length >= 12) break;
     }
+    return out;
   }
 
-  /// Pushes recent local/URL paths into the taskbar Jump List.
+  /// Pushes recent local paths into the taskbar Jump List. Stream URLs are
+  /// never included so private query tokens stay out of the OS shell.
   static Future<void> updateJumpList(List<String> paths) async {
     if (!Platform.isWindows) return;
-    final cleaned = paths
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .take(12)
-        .toList(growable: false);
+    final cleaned = filterJumpListPaths(paths);
+    if (cleaned.isEmpty) {
+      try {
+        await _channel.invokeMethod<bool>(updateJumpListMethod, const []);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Dacx: updateJumpList failed: $e');
+        }
+      }
+      return;
+    }
     try {
       await _channel.invokeMethod<bool>(updateJumpListMethod, cleaned);
     } catch (e) {

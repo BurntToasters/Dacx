@@ -14,6 +14,7 @@ import 'package:dacx/models/playable_source.dart';
 import 'package:dacx/screens/player_screen.dart';
 import 'package:dacx/services/debug_log_service.dart';
 import 'package:dacx/services/open_file_bridge.dart';
+import 'package:dacx/services/path_probe.dart';
 import 'package:dacx/services/headless_player_service.dart';
 import 'package:dacx/services/media_session_service.dart';
 import 'package:dacx/services/player_service.dart';
@@ -79,6 +80,7 @@ abstract final class PlayerScreenHarness {
   }
 
   static void installChannelMocks() {
+    PathProbe.runInline = true;
     _fullscreen = false;
     fullscreenCalls.clear();
     _windowSize = const Size(1200, 800);
@@ -209,6 +211,7 @@ abstract final class PlayerScreenHarness {
   }
 
   static void uninstallChannelMocks() {
+    PathProbe.runInline = false;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(windowManagerChannel, null);
@@ -235,9 +238,11 @@ abstract final class PlayerScreenHarness {
     List<ChapterInfo>? initialChapters,
     List<String>? initialDropPaths,
     PlayableSource? initialPendingLoad,
+    String? initialFile,
     ValueNotifier<String?>? osdMessageProbe,
     Completer<void>? screenshotOperationForTesting,
     StreamController<MediaSessionCommand>? mediaSessionCommandsForTesting,
+    Future<void> Function()? onQuitRequest,
   }) {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey);
     return MaterialApp(
@@ -261,9 +266,11 @@ abstract final class PlayerScreenHarness {
         initialChapters: initialChapters,
         initialDropPaths: initialDropPaths,
         initialPendingLoad: initialPendingLoad,
+        initialFile: initialFile,
         osdMessageProbe: osdMessageProbe,
         screenshotOperationForTesting: screenshotOperationForTesting,
         mediaSessionCommandsForTesting: mediaSessionCommandsForTesting,
+        onQuitRequest: onQuitRequest,
       ),
     );
   }

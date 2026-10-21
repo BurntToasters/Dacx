@@ -13,6 +13,7 @@ class QueueItemTile extends StatelessWidget {
     required this.onActivate,
     required this.onRemove,
     this.reorderLabel,
+    this.reorderIndex,
     this.focusNode,
   });
 
@@ -22,6 +23,7 @@ class QueueItemTile extends StatelessWidget {
   final String playLabel;
   final String removeLabel;
   final String? reorderLabel;
+  final int? reorderIndex;
   final ColorScheme colorScheme;
   final VoidCallback onActivate;
   final VoidCallback onRemove;
@@ -119,13 +121,24 @@ class QueueItemTile extends StatelessWidget {
                       ExcludeSemantics(
                         child: Tooltip(
                           message: reorderLabel!,
-                          child: Icon(
-                            Icons.drag_handle,
-                            size: 18,
-                            color: colorScheme.onSurface.withValues(
-                              alpha: 0.40,
-                            ),
-                          ),
+                          child: reorderIndex == null
+                              ? Icon(
+                                  Icons.drag_handle,
+                                  size: 18,
+                                  color: colorScheme.onSurface.withValues(
+                                    alpha: 0.40,
+                                  ),
+                                )
+                              : ReorderableDragStartListener(
+                                  index: reorderIndex!,
+                                  child: Icon(
+                                    Icons.drag_handle,
+                                    size: 18,
+                                    color: colorScheme.onSurface.withValues(
+                                      alpha: 0.40,
+                                    ),
+                                  ),
+                                ),
                         ),
                       ),
                     ExcludeFocus(

@@ -20,9 +20,11 @@ AppManager can keep AppImages updated in the background (including optional GitH
 
 **Host libmpv (deb / rpm):** those packages declare a distro dependency (`libmpv2` / `mpv-libs`). **AppImage, tar, and Flatpak bundle libmpv** (and its playback deps) next to the binary so they start without a host `libmpv.so.2`.
 
-#### Other Linux packages (optional)
-* **Ubuntu/Debian (x64):** **[DEB](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb)**; install the new `.deb` from the release page when updating.
-* **Fedora (x64):** **[RPM](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm)**; same idea with the `.rpm`.
+#### Other Linux packages (deprecated)
+DEB and RPM still build, but they are deprecated. Prefer the AppImage.
+
+* **Ubuntu/Debian (x64, deprecated):** **[DEB](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-amd64.deb)**; install the new `.deb` from the release page when updating. Depends on distro `libmpv2`.
+* **Fedora (x64, deprecated):** **[RPM](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.rpm)**; same idea with the `.rpm`.
 * **Flatpak (x64, optional sideload):** **[`.flatpak`](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.flatpak)**; GitHub sideload only (not Flathub). `flatpak install --user …`; reinstall to update. Bundles libmpv inside the sandbox.
 * **Generic tarball (x64):** **[TAR.GZ](https://github.com/BurntToasters/Dacx/releases/latest/download/Dacx-Linux-x86_64.tar.gz)**; unpack and run; replace the tree to update. Bundles libmpv like the AppImage.
 
