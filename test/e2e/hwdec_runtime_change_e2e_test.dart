@@ -4,6 +4,7 @@
 // surface is not rebuilt on change is proven by code review of _applyHwDec.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:dacx/services/headless_player_service.dart';
 import 'package:dacx/services/settings_service.dart';
@@ -55,7 +56,8 @@ void main() {
   testWidgets(
     'runtime hwdec change reaches mpv without interrupting playback',
     (tester) async {
-      final screen = await pumpScreen(tester, initialFile: '/e2e/hwdec.mp3');
+      final file = p.normalize(p.absolute('e2e/hwdec.mp3'));
+      final screen = await pumpScreen(tester, initialFile: file);
       final player = screen.player;
       final playing = <bool>[];
       final playingSub = player.playingStream.listen(playing.add);
@@ -69,7 +71,7 @@ void main() {
 
       expect(_hwdecValues(player), ['auto', 'no']);
       expect(player.openCalls.length, openCount);
-      expect(player.openCalls.single.path, '/e2e/hwdec.mp3');
+      expect(player.openCalls.single.path, file);
       expect(playing, isNot(contains(false)));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -96,14 +98,15 @@ void main() {
   });
 
   testWidgets('failed hwdec write surfaces no unhandled error', (tester) async {
-    final screen = await pumpScreen(tester, initialFile: '/e2e/fail.mp3');
+    final file = p.normalize(p.absolute('e2e/fail.mp3'));
+    final screen = await pumpScreen(tester, initialFile: file);
     screen.player.failProperties(['hwdec']);
     screen.settings.hwDec = 'no';
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
 
     expect(_hwdecValues(screen.player), ['auto', 'no']);
-    expect(screen.player.openCalls.single.path, '/e2e/fail.mp3');
+    expect(screen.player.openCalls.single.path, file);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     screen.settings.dispose();

@@ -29,6 +29,12 @@ class TrayService {
   static bool get isSupported =>
       !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
+  /// `flutter test` hosts have no native UI toolkit. On Linux, creating a
+  /// GTK menu there aborts the process with SIGTRAP before Dart can catch it,
+  /// so the test host is treated as having no native tray.
+  static bool get _nativeTrayAvailable =>
+      !Platform.environment.containsKey('FLUTTER_TEST');
+
   bool get isInitialized => _initialized;
 
   /// Bundled asset path passed to native tray API (relative to flutter_assets).
@@ -52,6 +58,7 @@ class TrayService {
       _updateMenuLabels();
       return;
     }
+    if (!_nativeTrayAvailable) return;
     try {
       final icon = TrayIcon.create();
       final menu = Menu.create();

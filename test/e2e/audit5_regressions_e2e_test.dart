@@ -63,9 +63,10 @@ void main() {
   testWidgets('cold launch keeps the CLI file first with pending files', (
     tester,
   ) async {
+    final one = p.normalize(p.absolute('media/one.mp3'));
     _pending(['/media/two.mp3', '/media/three.mp3']);
-    final player = await pumpScreen(tester, initialFile: '/media/one.mp3');
-    expect(player.openCalls.map((c) => c.path), ['/media/one.mp3']);
+    final player = await pumpScreen(tester, initialFile: one);
+    expect(player.openCalls.map((c) => c.path), [one]);
     expect(await _queueNames(tester, ['one.mp3', 'two.mp3', 'three.mp3']), [
       'one.mp3',
       'two.mp3',
@@ -77,8 +78,9 @@ void main() {
   testWidgets('cold launch with only a CLI file opens it alone', (
     tester,
   ) async {
-    final player = await pumpScreen(tester, initialFile: '/media/solo.mp3');
-    expect(player.openCalls.map((c) => c.path), ['/media/solo.mp3']);
+    final solo = p.normalize(p.absolute('media/solo.mp3'));
+    final player = await pumpScreen(tester, initialFile: solo);
+    expect(player.openCalls.map((c) => c.path), [solo]);
     expect(player.openCalls.single.play, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   });

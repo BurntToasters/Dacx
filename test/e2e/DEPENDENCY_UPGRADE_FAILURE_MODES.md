@@ -38,6 +38,12 @@ Tray (tray_manager 0.8 / nativeapi 0.5):
   Proof: E2E (existing `audit6` tray group also covers this).
 - Native dylib missing in the test host makes `init` throw instead of
   being caught. Proof: E2E, because `init` must swallow the failure.
+- On Linux, `flutter test` loads the real nativeapi library but never
+  initializes GTK, so `Menu.create` aborts the test process with SIGTRAP
+  (exit -5), which Dart cannot catch. Proof: E2E on the Linux CI job;
+  `TrayService` skips native creation when `FLUTTER_TEST` is set.
+- Initial-file paths are made absolute (`C:\...` on Windows), so fixtures
+  must already be absolute on the host. Proof: E2E on Windows.
 
 Drag and drop (desktop_drop 0.9):
 
