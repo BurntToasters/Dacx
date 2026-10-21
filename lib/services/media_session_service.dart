@@ -103,7 +103,20 @@ class MediaSessionService {
       return;
     }
     if (Platform.isLinux) {
-      final baseNameTaken = await _mprisBaseNameTaken();
+      if (!_nativeMediaSessionAvailable) {
+        _platformAvailable = false;
+        return;
+      }
+      final baseNameTaken =
+          await runZonedGuarded(_mprisBaseNameTaken, (e, st) {
+            debugLog.log(
+              category: DebugLogCategory.system,
+              event: 'media_session_mpris_probe_failed',
+              message: e.toString(),
+              severity: DebugSeverity.warn,
+            );
+          }) ??
+          false;
       if (_disposed) return;
       final name = mprisPlayerName(baseNameTaken: baseNameTaken, pid: pid);
       runZonedGuarded(
@@ -128,6 +141,12 @@ class MediaSessionService {
 
   bool get _supportedPlatform =>
       Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+
+  /// `flutter test` hosts have no durable session bus. dbus 0.7 can emit an
+  /// unhandled [DBusClosedException] when a signal subscription is cancelled
+  /// while the socket closes, so MPRIS is disabled there like the tray.
+  static bool get _nativeMediaSessionAvailable =>
+      !Platform.environment.containsKey('FLUTTER_TEST');
 
   Future<void> setEnabled(bool enabled) async {
     _enabled = enabled;
@@ -248,7 +267,16 @@ class MediaSessionService {
     // against this disposal.
     _mpris = null;
     if (mpris != null) {
-      await mpris.dispose();
+      try {
+        await mpris.dispose();
+      } catch (e) {
+        debugLog.log(
+          category: DebugLogCategory.system,
+          event: 'media_session_mpris_dispose_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }
     }
     await _commandsCtrl.close();
   }
