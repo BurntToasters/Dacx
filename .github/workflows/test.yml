@@ -189,6 +189,10 @@ jobs:
         env:
           DACX_E2E_FIXTURE: test-results/e2e/${{ matrix.os }}/fixtures/release-smoke.wav
           DACX_E2E_REPORT: test-results/e2e/${{ matrix.os }}/desktop-playback.json
+          # GitHub Linux and Windows runners have no audio device; libmpv stalls
+          # on the default output, so force the null output there. macOS keeps
+          # its real device.
+          DACX_E2E_AUDIO_OUTPUT: ${{ matrix.os != 'macos-latest' && 'null' || '' }}
         run: |
           export DACX_E2E_VERSION="$(node -p 'require("./package.json").version')"
           export DACX_E2E_RUN_ID="desktop-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}"
@@ -199,8 +203,11 @@ jobs:
             else
               fvm flutter --ci test "integration_test/$TARGET.dart" -d "${{ matrix.os == 'windows-latest' && 'windows' || 'macos' }}" 2>&1 | tee "$E2E_LOG"
             fi
-            grep -Eq 'All tests passed!?' "$E2E_LOG"
-            if grep -Eq 'Some tests failed|Failed to load|[+][0-9]+ -[1-9][0-9]*:' "$E2E_LOG"; then
+            # Flutter 3.47 --ci prints "🎉 N test(s) passed." on success and
+            # "N tests passed, M failed." on failure; older SDKs print
+            # "All tests passed!" and "+N -M:" counters.
+            grep -Eq 'All tests passed!?|[1-9][0-9]* tests? passed[.]' "$E2E_LOG"
+            if grep -Eq 'Some tests failed|Failed to load|[+][0-9]+ -[1-9][0-9]*:|[1-9][0-9]* failed[.]' "$E2E_LOG"; then
               exit 1
             fi
           done

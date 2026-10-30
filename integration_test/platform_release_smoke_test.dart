@@ -23,6 +23,7 @@ import 'package:dacx/services/update_service.dart';
 ///   DACX_E2E_VERSION=1.0.0 \
 ///   DACX_E2E_RUN_ID=desktop-run-1 \
 ///   DACX_E2E_REPORT=test-results/e2e/windows/report.json \
+///   DACX_E2E_AUDIO_OUTPUT=null \
 ///   fvm flutter test integration_test/platform_release_smoke_test.dart -d windows
 ///
 /// Package proof tooling launches a packaged executable with the same fixture;
@@ -37,6 +38,9 @@ void main() {
     final version = Platform.environment['DACX_E2E_VERSION'];
     final runId = Platform.environment['DACX_E2E_RUN_ID'];
     final reportPath = Platform.environment['DACX_E2E_REPORT'];
+    // Optional libmpv audio output (for example "null"). Runners without an
+    // audio device stall audio-only playback on the default output.
+    final audioOutput = Platform.environment['DACX_E2E_AUDIO_OUTPUT']?.trim();
     if (fixture == null || fixture.trim().isEmpty) {
       fail('DACX_E2E_FIXTURE is required for release E2E');
     }
@@ -64,6 +68,11 @@ void main() {
       httpGet: (_, {headers}) async => throw StateError('offline in E2E'),
     );
     final player = PlayerService();
+    // Must run before runApp opens the fixture so mpv initialises the chosen
+    // output from the start.
+    final audioOutputSet = audioOutput == null || audioOutput.isEmpty
+        ? true
+        : await player.setProperty('ao', audioOutput);
     var duration = Duration.zero;
     var playing = false;
     var error = <String, Object?>{};
@@ -119,6 +128,7 @@ void main() {
     // proven here.
     final transport = await _exerciseTransport(tester, player);
     final passed =
+        audioOutputSet &&
         duration > Duration.zero &&
         initialPlaybackObserved &&
         error.isEmpty &&
@@ -140,6 +150,12 @@ void main() {
       },
       'checks': {
         'durationMs': duration.inMilliseconds,
+        // The libmpv audio output this run was forced to ('null' on runners
+        // without an audio device), or 'default' when mpv chose its own.
+        'audioOutput': audioOutput == null || audioOutput.isEmpty
+            ? 'default'
+            : audioOutput,
+        'audioOutputSet': audioOutputSet,
         // Keep this v1 proof field for package-proof consumers. It records
         // initial playback before the transport test reaches end-of-file.
         'playing': initialPlaybackObserved,
