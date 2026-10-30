@@ -61,6 +61,11 @@ jobs:
           path: ~/fvm/versions
           key: fvm-${{ runner.os }}-${{ steps.fvm.outputs.version }}
 
+      - name: Install Linux desktop deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libx11-dev libxi-dev libepoxy-dev libmpv-dev mpv libunwind-dev patchelf xvfb
+
       - name: Install fvm and pinned Flutter
         run: |
           dart pub global activate fvm
