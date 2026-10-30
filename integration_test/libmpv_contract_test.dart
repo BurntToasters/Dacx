@@ -28,6 +28,16 @@ void main() {
     media = p.join(dir.path, 'media.wav');
     File(fixture).copySync(media);
     service = PlayerService();
+    // Runners without an audio device leave track-list empty on the default
+    // output; DACX_E2E_AUDIO_OUTPUT=null forces the null output.
+    final audioOutput = Platform.environment['DACX_E2E_AUDIO_OUTPUT']?.trim();
+    if (audioOutput != null && audioOutput.isNotEmpty) {
+      expect(
+        await service.setProperty('ao', audioOutput),
+        isTrue,
+        reason: 'ao=$audioOutput was not applied',
+      );
+    }
   });
 
   tearDown(() async {
