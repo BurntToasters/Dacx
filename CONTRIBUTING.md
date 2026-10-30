@@ -4,7 +4,7 @@ Thanks for helping improve Dacx.
 
 ## Development setup
 
-1. Install Node.js 22+, Dart (for FVM), and platform build deps per [README.md](README.md).
+1. Install Node.js 26.13.0 LTS (or `^24.22.1`) and npm 12.2.1+, Dart (for FVM), and platform build deps per [README.md](README.md).
 2. `npm ci && npm run setup:flutter` — installs or repairs the global `fvm` CLI, pins and verifies the exact Flutter SDK from `.fvmrc`, then runs one explicit `flutter pub get` and regenerates l10n (`gen-l10n`). Re-run this if you see `Invalid kernel binary format version` from FVM.
 3. Run locally: `npm run dev` (or `dev:win` / `dev:mac` / `dev:linux`)
 

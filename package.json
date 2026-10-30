@@ -26,6 +26,10 @@
     "linux"
   ],
   "type": "module",
+  "engines": {
+    "node": "^24.22.1 || >=26.13.0",
+    "npm": ">=12.2.1"
+  },
   "scripts": {
     "dev": "fvm flutter run",
     "dev:win": "fvm flutter run -d windows",
