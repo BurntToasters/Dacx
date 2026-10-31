@@ -5,7 +5,6 @@ void main() {
   group('bundled FFmpeg policy', () {
     test('rejects the 2023 builds and accepts the refreshed ones', () {
       expect(NativeLibPolicy.acceptsFfmpeg('n6.0', os: 'windows'), isFalse);
-      expect(NativeLibPolicy.acceptsFfmpeg('6.0', os: 'macos'), isFalse);
       expect(
         NativeLibPolicy.acceptsFfmpeg('N-117622-g8d940a07d', os: 'windows'),
         isTrue,
@@ -14,9 +13,16 @@ void main() {
         NativeLibPolicy.acceptsFfmpeg('N-111000-gabcdef1', os: 'windows'),
         isFalse,
       );
+      expect(NativeLibPolicy.acceptsFfmpeg('n7.1', os: 'windows'), isTrue);
+      expect(NativeLibPolicy.acceptsFfmpeg('8.0.1', os: 'windows'), isTrue);
+      expect(NativeLibPolicy.acceptsFfmpeg('n7.0.2', os: 'windows'), isFalse);
+    });
+
+    test('macOS holds the temporary FFmpeg 6.0 floor', () {
+      expect(NativeLibPolicy.acceptsFfmpeg('6.0', os: 'macos'), isTrue);
       expect(NativeLibPolicy.acceptsFfmpeg('n7.1', os: 'macos'), isTrue);
-      expect(NativeLibPolicy.acceptsFfmpeg('8.0.1', os: 'macos'), isTrue);
-      expect(NativeLibPolicy.acceptsFfmpeg('n7.0.2', os: 'macos'), isFalse);
+      expect(NativeLibPolicy.acceptsFfmpeg('5.1.4', os: 'macos'), isFalse);
+      expect(NativeLibPolicy.acceptsFfmpeg('n4.4', os: 'macos'), isFalse);
     });
 
     test('unknown or missing versions fail on bundled platforms', () {

@@ -21,7 +21,7 @@ Dacx plays files from anywhere, so the bundled decoders are security-relevant.
 | Platform | Source | Pinned build |
 | -------- | ------ | ------------ |
 | Windows | `media_kit_libs_windows_video` from the official [media-kit](https://github.com/media-kit/media-kit) repository, pinned by commit in `pubspec.yaml` `dependency_overrides` | `mpv-dev-x86_64-20241021-git-0f78584.7z` (mpv v0.39.0-179, FFmpeg N-117622) |
-| macOS | `media_kit_libs_macos_video` from the same commit | `libmpv-darwin-build` v0.7.2 |
+| macOS | `media_kit_libs_macos_video` from the same commit | `libmpv-darwin-build` v0.7.2 (mpv 0.36.0, FFmpeg 6.0) |
 | Linux | System libmpv (`.deb` depends on the distro package; the tarball and Flatpak vendor the build host's copy) | Refreshed with the release VM's distro updates |
 
 The published pub.dev packages still bundle 2023 builds (FFmpeg n6.0), which is
@@ -33,6 +33,11 @@ why the override exists. Checks:
 - `integration_test/libmpv_contract_test.dart` reads `ffmpeg-version` from the
   running library and fails on Windows/macOS when it is older than
   `NativeLibPolicy` (FFmpeg 7.1 or git revision 117622).
+- macOS temporarily accepts FFmpeg 6.0 (`macosMinimumFfmpegRelease`). As of
+  2026-10-30 the newest official build, `libmpv-darwin-build` v0.7.3, still
+  ships mpv 0.36.0 with FFmpeg 6.0, and media-kit main pins v0.7.2. Restore the
+  7.1 floor when an official macOS build reaches it, or self-build with
+  media-kit's `libmpv-darwin-build` tooling. Revisit by 2027-04-30.
 - After changing the pin, delete `build/windows/x64/libmpv` and old
   `mpv-dev-*.7z` files; the plugin does not re-extract over an existing folder.
 
