@@ -9,7 +9,7 @@ environment:
 
 dependencies:
   anni_mpris_service: ^0.1.0
-  crypto: ^3.0.7
+  crypto: ^3.0.8
   cryptography_plus: ^3.0.0
   # anni_mpris_service 0.1.0 (MPRIS) pins dbus <0.8; keep dbus on the
   # 0.7 line until anni_mpris_service publishes a dbus 0.8-compatible version.
