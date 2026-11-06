@@ -19,6 +19,9 @@
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
 ## Changes in `v1.0.1:`
+- **Flutter:** Updated Flutter to `3.47.9`.
+- **PKG:** Dependency & Package updates.
+- **CA CERT:** Updated CA Cert.
 
 ## Changes in `v1.0.0:`
 - **NEW - Opt-in advanced playback tools:** Per-file audio/subtitle sync, A-B repeat, playback markers, and subtitle appearance controls are available behind a disabled-by-default setting, preserving Dacx's minimalist default experience.
