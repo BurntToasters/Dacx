@@ -1,4 +1,4 @@
-# x-version: 1.0.0
+# x-version: 1.0.1
 app-id: run.rosie.dacx
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
