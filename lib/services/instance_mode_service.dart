@@ -53,6 +53,9 @@ class InstanceModeService {
     _cachedFlagDir = null;
   }
 
+  @visibleForTesting
+  static Future<void> Function(bool enabled)? writeDelayHookForTesting;
+
   static String _flagDir() {
     final override = _flagDirOverride;
     if (override != null) return override;
@@ -98,13 +101,19 @@ class InstanceModeService {
 
   static Future<bool> setAllowMultipleInstances(bool enabled) async {
     try {
+      final hook = writeDelayHookForTesting;
+      if (hook != null) await hook(enabled);
       final path = flagFilePath();
       final file = File(path);
       if (enabled) {
         await Directory(p.dirname(path)).create(recursive: true);
         await file.writeAsString('1', flush: true);
       } else if (file.existsSync()) {
-        await file.delete();
+        try {
+          await file.delete();
+        } on PathNotFoundException {
+          return true;
+        }
       }
       return true;
     } catch (e) {

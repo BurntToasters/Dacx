@@ -1451,12 +1451,34 @@ class SettingsService extends ChangeNotifier {
   set allowMultipleInstances(bool v) {
     if (allowMultipleInstances == v) return;
     _prefs.setBool(_kAllowMultipleInstances, v);
-    unawaited(InstanceModeService.setAllowMultipleInstances(v));
+    unawaited(_writeInstanceFlag(v));
     notifyListeners();
   }
 
-  Future<void> syncInstanceModeFlag() async {
-    await InstanceModeService.setAllowMultipleInstances(allowMultipleInstances);
+  Future<void>? _instanceFlagChain;
+
+  Future<void> _writeInstanceFlag(bool enabled) {
+    final previous = _instanceFlagChain;
+    final Future<void> next;
+    if (previous == null) {
+      next = InstanceModeService.setAllowMultipleInstances(enabled);
+    } else {
+      next = previous.then<void>((_) async {
+        await InstanceModeService.setAllowMultipleInstances(enabled);
+      });
+    }
+    final tracked = next.catchError((Object _) {});
+    _instanceFlagChain = tracked;
+    unawaited(
+      tracked.whenComplete(() {
+        if (identical(_instanceFlagChain, tracked)) _instanceFlagChain = null;
+      }),
+    );
+    return next;
+  }
+
+  Future<void> syncInstanceModeFlag() {
+    return _writeInstanceFlag(allowMultipleInstances);
   }
 
   Map<String, ResumeEntry> _readResumePositions() {
