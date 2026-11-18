@@ -27,28 +27,22 @@ import '../services/open_file_bridge.dart';
 import '../services/path_probe.dart';
 import '../services/seek_preview_service.dart';
 import '../services/self_update_service.dart';
-import '../services/windows_shell_service.dart';
 import '../models/chapter_info.dart';
 import '../models/playable_source.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/glass_decorations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
-import '../playback/chapter_list_loader.dart';
 import '../playback/media_folder_scanner.dart';
 import '../playback/playback_controller.dart';
-import '../playback/playback_mix_policy.dart';
-import '../playback/media_session_command_dispatch.dart';
 import '../playback/player_path_utils.dart';
 import '../playback/player_audio_session.dart';
 import '../playback/player_controller.dart';
 import '../playback/sleep_timer_controller.dart';
 import '../playback/player_settings_sync.dart';
-import '../playback/chapter_navigation_policy.dart';
 import '../playback/drop_path_batch_policy.dart';
 import '../playback/enqueue_policy.dart';
 import '../playback/file_picker_path.dart';
-import '../playback/linux_install_kind.dart';
 import '../playback/m3u_playlist.dart';
 import '../playback/playback_speed_policy.dart';
 import '../playback/resume_playback_policy.dart';
@@ -57,11 +51,9 @@ import '../playback/source_load_post_open_policy.dart';
 import '../playback/source_load_pre_open_policy.dart';
 import '../playback/source_load_open_policy.dart';
 import '../playback/playlist_advance_policy.dart';
-import '../playback/track_cycle_policy.dart';
 import '../playback/source_load_validation_policy.dart';
 import '../playback/source_open_policy.dart';
 import '../playback/volume_policy.dart';
-import '../playback/track_label.dart';
 import '../playback/update_launch_policy.dart';
 import '../playback/subscription_bag.dart';
 import '../widgets/app_snackbar.dart';
@@ -74,10 +66,12 @@ import '../widgets/media_info_dialog.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/track_pickers.dart';
 import '../widgets/advanced_playback_dialog.dart';
+import 'player/media_session_coordinator.dart';
 import 'player/player_file_pickers.dart';
 import 'player/player_messenger.dart';
 import 'player/player_shortcut_dispatcher.dart';
 import 'player/player_window_controller.dart';
+import 'player/track_chapter_controller.dart';
 import 'player/widgets/drag_overlay.dart';
 import 'player/widgets/media_surface.dart';
 import 'player/widgets/player_bottom_dock.dart';
@@ -92,7 +86,6 @@ const _updateSnackbarDuration = Duration(seconds: 10);
 const _snackbarShortDuration = Duration(seconds: 2);
 const _settingsFwdTransition = Duration(milliseconds: 340);
 const _settingsRevTransition = Duration(milliseconds: 280);
-const _mixReloadDelay = Duration(milliseconds: 200);
 const _durationPollInterval = Duration(milliseconds: 50);
 
 class PlayerScreen extends StatefulWidget {
@@ -168,8 +161,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   final _player = PlayerController();
   String? get _currentFile => _player.currentFile;
   bool _isDragging = false;
-  final _mixLoadState = PlaybackMixLoadState();
-  bool _mixReloadInFlight = false;
   PlayerSettingsSyncState _settingsSyncState = const PlayerSettingsSyncState();
 
   bool _isDisposed = false;
@@ -188,10 +179,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     update: setState,
     osdMessageProbe: widget.osdMessageProbe,
   );
-  late final MediaSessionService _mediaSession;
+  late final MediaSessionCoordinator _media;
+  late final TrackChapterController _tracks = TrackChapterController(
+    settings: _settings,
+    playerService: _playerService,
+    audioSession: _audioSession,
+    player: _player,
+    playback: _playback,
+    pickers: _pickers,
+    log: _log,
+    isMounted: () => mounted,
+    isDisposed: () => _isDisposed,
+    update: setState,
+    l10n: () => AppLocalizations.of(context),
+    showOsd: _showOsdMessage,
+    showMessage: (message) => showAppSnackBar(context, message),
+    syncIdleInhibit: _media.syncIdleInhibit,
+    captureBookmark: _captureBookmarkFor,
+    reloadSourceForMixChange: (source) => _loadSource(
+      source,
+      syncPlaylist: false,
+      applyResume: false,
+      origin: SourceOrigin.queue,
+    ),
+  );
   late final PlaylistService _playlist;
   late final OpenFileBridge _openFileBridge;
-  final _idleInhibit = IdleInhibitService();
 
   late final PlayerWindowController _window = PlayerWindowController(
     isMounted: () => mounted,
@@ -211,10 +224,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Timer? _updateCheckTimer;
 
   String? _activeBookmarkToken;
-  String? _mediaDisplayTitle;
-  String? _mediaDisplayArtist;
-  int _mediaSessionArtExportGen = 0;
-  String? _lastMediaSessionArtUri;
 
   void _log(
     String event, {
@@ -306,7 +315,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       unawaited(() async {
         await _settings.pruneRecentFiles(notifyListeners: false);
         if (_isDisposed) return;
-        await _syncWindowsJumpList();
+        await _media.syncJumpList();
       }());
     });
     final hwDec = _settings.hwDec;
@@ -334,19 +343,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         );
       }
     }
-    _mediaSession = MediaSessionService(debugLog: widget.debugLog);
-    unawaited(
-      _mediaSession.init(enabled: _settings.mediaSessionEnabled).catchError((
-        Object e,
-      ) {
-        _log(
-          'media_session_init_failed',
-          category: DebugLogCategory.system,
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
-      }),
+    _media = MediaSessionCoordinator(
+      settings: _settings,
+      playerService: _playerService,
+      mediaSession: MediaSessionService(debugLog: widget.debugLog),
+      idleInhibit: IdleInhibitService(),
+      player: _player,
+      playback: _playback,
+      log: _log,
+      isMounted: () => mounted,
+      isDisposed: () => _isDisposed,
+      update: setState,
+      onStop: _stopPlaybackAndResetUi,
+      onAdvancePlaylist: _advancePlaylist,
+      onSetShuffle: _setShuffle,
+      onQuitRequest: () => widget.onQuitRequest,
     );
+    _media.init();
     _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
     _player.volume = _settings.volume;
     _settingsSyncState = PlayerSettingsSyncState(
@@ -397,10 +410,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (update == PositionUiUpdate.notify) {
           setState(() {});
         }
-        if (_settings.mediaSessionEnabled) {
-          _maybeUpdateMediaSessionPosition(pos);
-        }
-        _maybeUpdateTaskbarProgress(pos);
+        _media.onPosition(pos);
       }),
       _playerService.durationStream.listen((dur) {
         if (!mounted || _isDisposed) return;
@@ -410,14 +420,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         _advancedPlayback.setDuration(dur);
         setState(() => _player.duration = dur);
-        if (dur.inMilliseconds > 0 && _settings.mediaSessionEnabled) {
-          final source = _player.currentSource;
-          if (source != null) {
-            unawaited(
-              _refreshMediaMetadata(source, duration: dur, exportArt: false),
-            );
-          }
-        }
+        _media.onDuration(dur);
         if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
           _log(
             'duration_updated',
@@ -437,13 +440,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (!playing && !_player.fileOpenInProgress) {
           _persistResumePosition();
         }
-        _syncIdleInhibit();
-        if (!playing) {
-          unawaited(WindowsShellService.clearTaskbarProgress());
-        }
-        if (_settings.mediaSessionEnabled) {
-          _maybeUpdateMediaSessionPosition(_player.position);
-        }
+        _media.onPlayingChanged(playing);
         if (widget.debugLog.isEnabled) {
           _log(
             'playing_state_changed',
@@ -454,7 +451,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _playerService.volumeStream.listen((vol) {
         if (!mounted || _isDisposed) return;
         setState(() => _player.volume = vol);
-        unawaited(_mediaSession.updateVolume((vol / 100.0).clamp(0.0, 1.0)));
+        _media.updateVolume(vol);
         if (widget.debugLog.isEnabled) {
           _log(
             'volume_stream_updated',
@@ -466,7 +463,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (!mounted || _isDisposed) return;
         if (_player.onVideoWidth(w)) {
           setState(() {});
-          _syncIdleInhibit();
+          _media.syncIdleInhibit();
           if (widget.debugLog.isEnabled) {
             _log(
               'video_output_changed',
@@ -482,7 +479,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (!mounted || _isDisposed) return;
         _onAlbumArtTracks(tracks);
         if (_stopInProgress || _player.fileOpenInProgress) return;
-        _cacheTracksForCurrentLoad(
+        _tracks.cacheTracksForCurrentLoad(
           tracks,
           refreshChapters: true,
           gen: _playback.loadGeneration,
@@ -534,11 +531,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _subscriptions.add(sub);
     }
     unawaited(_initializePackagedE2eProbe());
-    _subscriptions.add(_mediaSession.commands.listen(_onMediaSessionCommand));
-    final testCommandStream = widget.mediaSessionCommandsForTesting?.stream;
-    if (testCommandStream != null) {
-      _subscriptions.add(testCommandStream.listen(_onMediaSessionCommand));
-    }
+    _media.attachCommands(
+      _subscriptions,
+      testCommands: widget.mediaSessionCommandsForTesting?.stream,
+    );
 
     // Periodic resume-position saver (every 5s while playing).
     _resumeSaveTimer = Timer.periodic(
@@ -663,7 +659,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
               }
               final source = _player.currentSource;
               if (source != null && _settings.mediaSessionEnabled) {
-                unawaited(_refreshMediaMetadata(source));
+                unawaited(_media.refreshMetadata(source));
               }
             })
             .catchError((Object e) {
@@ -721,9 +717,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _playback.dispose();
     _player.dispose();
     _releaseActiveBookmark();
-    unawaited(_mediaSession.dispose());
+    _media.dispose();
     _playlist.dispose();
-    unawaited(_idleInhibit.dispose());
     unawaited(_seekPreviewService.dispose());
     unawaited(_playerService.dispose());
     super.dispose();
@@ -841,18 +836,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
     if (delta.speed != null) {
       _applySpeed(delta.speed!);
-      unawaited(_mediaSession.updateRate(delta.speed!));
+      _media.updateRate(delta.speed!);
     }
 
     if (delta.loopMode != null) {
       _applyLoopMode(delta.loopMode!);
-      unawaited(
-        _mediaSession.updateLoop(switch (delta.loopMode!) {
-          LoopMode.none => 'none',
-          LoopMode.single => 'single',
-          LoopMode.loop => 'loop',
-        }),
-      );
+      _media.updateLoopMode(delta.loopMode!);
     }
 
     final settingsVolume = _settings.volume;
@@ -870,20 +859,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
 
     if (delta.audioFilters) {
-      unawaited(_applyMergedAudioFilters());
+      unawaited(_tracks.applyMergedAudioFilters());
     }
 
     if (delta.multiAudioMix) {
       unawaited(() async {
-        final applied = await _applyMultiAudioMix(announce: true);
+        final applied = await _tracks.applyMultiAudioMix(announce: true);
         if (_currentFile != null && applied) {
-          await _reloadCurrentForMixChange();
+          await _tracks.reloadCurrentForMixChange();
         }
       }());
     }
 
     if (delta.mediaSessionEnabled != null) {
-      unawaited(_mediaSession.setEnabled(delta.mediaSessionEnabled!));
+      _media.setEnabled(delta.mediaSessionEnabled!);
     }
 
     if (delta.playlistShuffle != null) {
@@ -988,9 +977,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           return null;
         case InstanceModeService.clearRecentFilesMethod:
           _settings.clearRecentFiles();
-          if (Platform.isWindows) {
-            unawaited(WindowsShellService.updateJumpList(const []));
-          }
+          _media.clearJumpList();
           return null;
         case InstanceModeService.openRecentMethod:
           final path = call.arguments;
@@ -1095,7 +1082,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void _setPlaybackSpeed(double speed, {required String source}) {
     _settings.speed = speed;
     _applySpeed(speed);
-    unawaited(_mediaSession.updateRate(speed));
+    _media.updateRate(speed);
     if (mounted) {
       _showOsdMessage(PlaybackSpeedPolicy.formatLabel(speed));
       setState(() {});
@@ -1170,7 +1157,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _settings.playlistShuffle = on;
     }
     _playlist.setShuffle(on);
-    unawaited(_mediaSession.updateShuffle(on));
+    _media.updateShuffle(on);
   }
 
   void _applyLoopMode(LoopMode mode) {
@@ -1581,7 +1568,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return;
       }
       _pickers.rememberLastOpenDirectory(playlistPath);
-      _rememberRecentAndJumpList(playlistPath);
+      _media.rememberRecentAndJumpList(playlistPath);
       _enqueueSources(sources, playNow: playNow);
       _log(
         'playlist_imported',
@@ -1633,167 +1620,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         );
       },
     );
-  }
-
-  Future<void> _refreshMediaMetadata(
-    PlayableSource source, {
-    Duration? duration,
-    bool exportArt = true,
-    int? gen,
-  }) async {
-    if (_isDisposed) return;
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final pushToSession = _settings.mediaSessionEnabled;
-    String? artist;
-    String? album;
-    String? metaTitle;
-    try {
-      artist = await _playerService.getProperty('metadata/by-key/artist');
-      if (pushToSession) {
-        album = await _playerService.getProperty('metadata/by-key/album');
-      }
-      metaTitle = await _playerService.getProperty('metadata/by-key/title');
-    } catch (_) {
-      // Metadata is best-effort; title falls back to display name.
-    }
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final title = (metaTitle != null && metaTitle.trim().isNotEmpty)
-        ? metaTitle.trim()
-        : source.displayName;
-    final artistName = (artist != null && artist.trim().isNotEmpty)
-        ? artist.trim()
-        : null;
-    if (mounted) {
-      setState(() {
-        _mediaDisplayTitle = title;
-        _mediaDisplayArtist = artistName;
-      });
-    }
-    if (!pushToSession || !_settings.mediaSessionEnabled) return;
-    String? artUri;
-    if (exportArt && _player.hasAlbumArtTrack) {
-      artUri = await _exportAlbumArtForMediaSession();
-    } else if (!exportArt) {
-      artUri = _lastMediaSessionArtUri;
-    }
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    await _mediaSession.updateMetadata(
-      title: title,
-      artist: artistName,
-      album: (album != null && album.trim().isNotEmpty) ? album.trim() : null,
-      duration: duration ?? _player.duration,
-      artUri: artUri,
-      trackIdentity: '${source.value}#${_playback.loadGeneration}',
-    );
-  }
-
-  Future<String?> _exportAlbumArtForMediaSession() async {
-    final exportGen = ++_mediaSessionArtExportGen;
-    try {
-      final bytes = await _playerService.screenshot(format: 'image/jpeg');
-      if (exportGen != _mediaSessionArtExportGen) return null;
-      if (bytes == null || bytes.isEmpty) return null;
-      final dir = _mediaSessionArtDirectory();
-      if (!dir.existsSync()) {
-        dir.createSync(recursive: true);
-      }
-      if (exportGen != _mediaSessionArtExportGen) return null;
-      // Prefix with the pid so instances never share or delete each other's art.
-      final prefix = 'artwork-$pid-';
-      final file = File(p.join(dir.path, '$prefix$exportGen.jpg'));
-      await file.writeAsBytes(bytes, flush: true);
-      if (exportGen != _mediaSessionArtExportGen) {
-        try {
-          await file.delete();
-        } catch (_) {
-          // Best-effort cleanup for an obsolete artwork export.
-        }
-        return null;
-      }
-      final uri = file.uri.toString();
-      _lastMediaSessionArtUri = uri;
-      // Own older exports go now; other instances' files only once stale, so
-      // art left by a crashed instance does not pile up.
-      final staleBefore = DateTime.now().subtract(const Duration(days: 1));
-      for (final older in dir.listSync().whereType<File>().where((candidate) {
-        if (candidate.path == file.path) return false;
-        final name = p.basename(candidate.path);
-        if (!name.startsWith('artwork-') || !name.endsWith('.jpg')) {
-          return false;
-        }
-        if (name.startsWith(prefix)) return true;
-        try {
-          return candidate.lastModifiedSync().isBefore(staleBefore);
-        } catch (_) {
-          return false;
-        }
-      })) {
-        try {
-          await older.delete();
-        } catch (_) {
-          // Artwork cleanup is best-effort.
-        }
-      }
-      return uri;
-    } catch (e) {
-      _log(
-        'media_session_art_export_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-      return null;
-    }
-  }
-
-  void _maybeUpdateMediaSessionPosition(Duration pos) {
-    if (!_playback.mediaSessionThrottle.shouldSend(DateTime.now())) {
-      return;
-    }
-    unawaited(_mediaSession.updatePosition(pos, playing: _player.isPlaying));
-  }
-
-  DateTime? _lastTaskbarProgressAt;
-
-  void _maybeUpdateTaskbarProgress(Duration pos) {
-    if (!Platform.isWindows || !_player.isPlaying) return;
-    final dur = _player.duration;
-    if (dur.inMilliseconds <= 0) return;
-    final now = DateTime.now();
-    final last = _lastTaskbarProgressAt;
-    if (last != null &&
-        now.difference(last) < const Duration(milliseconds: 500)) {
-      return;
-    }
-    _lastTaskbarProgressAt = now;
-    final progress = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
-    unawaited(WindowsShellService.setTaskbarProgress(progress));
-  }
-
-  Future<void> _syncWindowsJumpList() async {
-    if (!Platform.isWindows) return;
-    await WindowsShellService.updateJumpList(_settings.recentFiles);
-  }
-
-  void _rememberRecentAndJumpList(String path) {
-    _settings.addRecentFile(path);
-    unawaited(_syncWindowsJumpList());
-  }
-
-  Future<void> _refreshChaptersIfNeeded({int? gen}) async {
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final countRaw = await _playerService.getProperty('chapter-list/count');
-    final count = int.tryParse(countRaw ?? '') ?? 0;
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    if (!_playback.chapterGate.shouldRefresh(
-      path: _currentFile,
-      chapterCount: count,
-    )) {
-      return;
-    }
-    await _refreshChapters(expectedCount: count, gen: gen);
-    if (!mounted || _isDisposed) return;
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    _playback.chapterGate.markFetched(path: _currentFile, chapterCount: count);
   }
 
   Future<bool> _loadSourceInternal(
@@ -1875,8 +1701,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
     }
     final gen = _playback.beginLoad();
-    _mediaSessionArtExportGen++;
-    _lastMediaSessionArtUri = null;
+    _media.resetArtForNewLoad();
     if (SourceLoadPreOpenPolicy.shouldAbortBeforeOpen(
       mounted: mounted,
       isDisposed: _isDisposed,
@@ -1888,8 +1713,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _playback.chapterGate.invalidate();
     setState(() {
       _player.beginSourceLoad(normalizedSource, ext);
-      _mediaDisplayTitle = null;
-      _mediaDisplayArtist = null;
+      _media.clearDisplayMetadata();
     });
     await _advancedPlayback.setSource(normalizedSource);
     _log(
@@ -1902,7 +1726,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
     try {
       _player.fileOpenInProgress = true;
-      _mixLoadState.reset();
+      _tracks.resetMixLoadState();
       await _playerService.setProperty('lavfi-complex', '');
       _player.mixActive = false;
       final open = SourceOpenPolicy.paramsFor(
@@ -1966,7 +1790,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       return true;
     }
     if (followUp.shouldCacheTracks) {
-      _cacheTracksForCurrentLoad(_playerService.currentTracks, gen: gen);
+      _tracks.cacheTracksForCurrentLoad(_playerService.currentTracks, gen: gen);
     }
 
     if (followUp.shouldClearSeekPreview) {
@@ -1986,7 +1810,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
     try {
       if (followUp.shouldPersistRecent) {
-        _rememberRecentAndJumpList(normalizedValue);
+        _media.rememberRecentAndJumpList(normalizedValue);
       }
       if (followUp.shouldRememberOpenDirectory) {
         _pickers.rememberLastOpenDirectory(normalizedValue);
@@ -2012,46 +1836,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
     _player.resumePathInProgress = followUp.resumeTrackingPath;
     if (followUp.shouldApplyAudioFilters) {
-      await _applyMergedAudioFilters(gen: gen);
+      await _tracks.applyMergedAudioFilters(gen: gen);
     }
     if (followUp.shouldRefreshChapters) {
-      await _refreshChapters(gen: gen);
+      await _tracks.refreshChapters(gen: gen);
     }
     if (followUp.shouldApplyMultiAudioMix) {
-      await _applyMultiAudioMix(gen: gen);
+      await _tracks.applyMultiAudioMix(gen: gen);
     }
     if (followUp.shouldApplyResume && applyResume) {
       await _maybeApplyResume(normalizedValue, gen: gen);
     }
     if (followUp.shouldUpdateMediaSessionMetadata) {
-      unawaited(_refreshMediaMetadata(normalizedSource, gen: gen));
+      unawaited(_media.refreshMetadata(normalizedSource, gen: gen));
     }
     return true;
-  }
-
-  void _cacheTracksForCurrentLoad(
-    Tracks tracks, {
-    bool refreshChapters = false,
-    int? gen,
-  }) {
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final result = _player.cacheTracksForLoad(
-      tracks,
-      mixLoadState: _mixLoadState,
-      multiAudioMixEnabled: _settings.multiAudioMix,
-      refreshChapters: refreshChapters,
-    );
-    if (result.audioOnlyChanged) {
-      setState(() {});
-      _syncIdleInhibit();
-      unawaited(_applyMergedAudioFilters(gen: gen));
-    }
-    if (result.refreshChapters) {
-      unawaited(_refreshChaptersIfNeeded(gen: gen));
-    }
-    if (result.shouldRefreshMix) {
-      unawaited(_applyMultiAudioMix(gen: gen));
-    }
   }
 
   void _onDragDone(DropDoneDetails details) {
@@ -2374,7 +2173,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           return KeyEventResult.handled;
         }
         _log('shortcut_chapter_next', category: DebugLogCategory.ui);
-        unawaited(_stepChapter(1));
+        unawaited(_tracks.stepChapter(1));
         return KeyEventResult.handled;
       case PlayerShortcutAction.chapterPrev:
         if (_canStepVideoFrame) {
@@ -2383,7 +2182,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           return KeyEventResult.handled;
         }
         _log('shortcut_chapter_prev', category: DebugLogCategory.ui);
-        unawaited(_stepChapter(-1));
+        unawaited(_tracks.stepChapter(-1));
         return KeyEventResult.handled;
       case PlayerShortcutAction.screenshot:
         _log('shortcut_screenshot', category: DebugLogCategory.ui);
@@ -2391,19 +2190,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return KeyEventResult.handled;
       case PlayerShortcutAction.cycleAudioTrack:
         _log('shortcut_cycle_audio', category: DebugLogCategory.ui);
-        unawaited(_cycleAudioTrack());
+        unawaited(_tracks.cycleAudioTrack());
         return KeyEventResult.handled;
       case PlayerShortcutAction.cycleSubtitleTrack:
         _log('shortcut_cycle_sub', category: DebugLogCategory.ui);
-        unawaited(_cycleSubtitleTrack());
+        unawaited(_tracks.cycleSubtitleTrack());
         return KeyEventResult.handled;
       case PlayerShortcutAction.toggleSubtitle:
         _log('shortcut_toggle_sub', category: DebugLogCategory.ui);
-        unawaited(_toggleSubtitleVisibility());
+        unawaited(_tracks.toggleSubtitleVisibility());
         return KeyEventResult.handled;
       case PlayerShortcutAction.toggleEqualizer:
         _log('shortcut_toggle_eq', category: DebugLogCategory.ui);
-        _toggleEqualizer();
+        _tracks.toggleEqualizer();
         return KeyEventResult.handled;
       case PlayerShortcutAction.playlistNext:
         _log('shortcut_playlist_next', category: DebugLogCategory.ui);
@@ -2774,8 +2573,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       settings: _settings,
       hasMedia: _currentFile != null,
       videoController: _videoController,
-      mediaDisplayTitle: _mediaDisplayTitle,
-      mediaDisplayArtist: _mediaDisplayArtist,
+      mediaDisplayTitle: _media.displayTitle,
+      mediaDisplayArtist: _media.displayArtist,
       compactMode: _window.compactMode,
       isFullscreen: _window.isFullscreen,
       fullscreenChromeVisible: _window.fullscreenChromeVisible,
@@ -2824,125 +2623,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void _pulseOsd() => _messenger.pulseOsd();
 
   void _showOsdMessage(String msg) => _messenger.showOsdMessage(msg);
-
-  // ── Tracks: audio / subtitle cycling ──────────────────────
-
-  Future<void> _cycleAudioTrack() async {
-    final l10n = AppLocalizations.of(context);
-    final tracks = _player.currentTracks;
-    if (tracks == null || tracks.audio.length <= 1) return;
-    final list = tracks.audio
-        .where((t) => t.id != 'auto' && t.id != 'no')
-        .toList(growable: false);
-    if (!TrackCyclePolicy.canCycle(selectableCount: list.length)) return;
-    final current = _player.currentTrackSelection?.audio.id;
-    final idx = list.indexWhere((t) => t.id == current);
-    final next =
-        list[TrackCyclePolicy.nextIndex(
-          currentIndex: idx,
-          listLength: list.length,
-        )];
-    await _disableMixForManualTrackSelection();
-    final ok = await _playerService.setAudioTrack(next);
-    if (!ok) return;
-    _showOsdMessage(
-      l10n.osdAudioTrack(_trackLabel(next.title, next.language, next.id)),
-    );
-  }
-
-  Future<void> _cycleSubtitleTrack() async {
-    final l10n = AppLocalizations.of(context);
-    final tracks = _player.currentTracks;
-    if (tracks == null) return;
-    final list = [
-      SubtitleTrack.no(),
-      ...tracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no'),
-    ];
-    if (list.length <= 1) return;
-    final current = _player.currentTrackSelection?.subtitle.id;
-    final idx = list.indexWhere((t) => t.id == current);
-    final next =
-        list[TrackCyclePolicy.nextIndex(
-          currentIndex: idx,
-          listLength: list.length,
-        )];
-    final ok = await _playerService.setSubtitleTrack(next);
-    if (!ok) return;
-    _player.subtitlesVisible = next.id != 'no';
-    _showOsdMessage(
-      next.id == 'no'
-          ? l10n.osdSubtitlesOff
-          : l10n.osdSubtitlesTrack(
-              _trackLabel(next.title, next.language, next.id),
-            ),
-    );
-  }
-
-  Future<void> _toggleSubtitleVisibility() async {
-    final l10n = AppLocalizations.of(context);
-    final tracks = _player.currentTracks;
-    if (tracks == null) return;
-    if (_player.subtitlesVisible) {
-      final ok = await _playerService.setSubtitleTrack(SubtitleTrack.no());
-      if (!ok) return;
-      _player.subtitlesVisible = false;
-      _showOsdMessage(l10n.osdSubtitlesOff);
-    } else {
-      final candidate = tracks.subtitle.firstWhere(
-        (t) => t.id != 'no' && t.id != 'auto',
-        orElse: SubtitleTrack.auto,
-      );
-      final ok = await _playerService.setSubtitleTrack(candidate);
-      if (!ok) return;
-      _player.subtitlesVisible = true;
-      _showOsdMessage(
-        l10n.osdSubtitlesTrack(
-          _trackLabel(candidate.title, candidate.language, candidate.id),
-        ),
-      );
-    }
-  }
-
-  String _trackLabel(String? title, String? language, String fallbackId) =>
-      formatTrackLabel(
-        title: title,
-        language: language,
-        fallbackId: fallbackId,
-        fallbackLabel: AppLocalizations.of(context)
-            .trackFallbackLabel(fallbackId),
-      );
-
-  // ── Chapters ──────────────────────────────────────────────
-
-  Future<void> _refreshChapters({int? expectedCount, int? gen}) async {
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final l10n = AppLocalizations.of(context);
-    final list = await ChapterListLoader.load(
-      readProperty: _playerService.getProperty,
-      expectedCount: expectedCount,
-      fallbackTitle: (i) => l10n.chapterFallbackLabel(i + 1),
-    );
-    if (!mounted || (gen != null && !_playback.isLoadCurrent(gen))) return;
-    setState(() => _player.chapters = list);
-  }
-
-  Future<void> _stepChapter(int delta) async {
-    final l10n = AppLocalizations.of(context);
-    if (_player.chapters.isEmpty) {
-      await _refreshChapters();
-    }
-    if (_player.chapters.isEmpty) return;
-    final current = await _playerService.getProperty('chapter');
-    final idx = int.tryParse(current ?? '') ?? 0;
-    final next = ChapterNavigationPolicy.stepIndex(
-      currentIndex: idx,
-      delta: delta,
-      chapterCount: _player.chapters.length,
-    );
-    final ok = await _playerService.setChapter(next);
-    if (!ok) return;
-    _showOsdMessage(l10n.osdChapter(_player.chapters[next].title));
-  }
 
   // ── Screenshot ────────────────────────────────────────────
 
@@ -3000,303 +2680,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
-  Directory _mediaSessionArtDirectory() {
-    if (LinuxInstallDetector.isFlatpak) {
-      final cacheHome = Platform.environment['XDG_CACHE_HOME'];
-      final home = Platform.environment['HOME'];
-      if (cacheHome != null && cacheHome.startsWith('/')) {
-        return Directory(p.join(cacheHome, 'dacx-media-session'));
-      }
-      if (home != null && home.startsWith('/')) {
-        return Directory(
-          p.join(
-            home,
-            '.var',
-            'app',
-            'run.rosie.dacx',
-            'cache',
-            'dacx-media-session',
-          ),
-        );
-      }
-    }
-    if (Platform.isLinux) {
-      // Linux `/tmp` is shared between users; a fixed folder there can be
-      // pre-created and seeded with symlinks. Use the per-user cache instead.
-      final cacheHome = Platform.environment['XDG_CACHE_HOME'];
-      if (cacheHome != null && cacheHome.startsWith('/')) {
-        return Directory(p.join(cacheHome, 'dacx', 'media-session'));
-      }
-      final home = Platform.environment['HOME'];
-      if (home != null && home.startsWith('/')) {
-        return Directory(p.join(home, '.cache', 'dacx', 'media-session'));
-      }
-    }
-    // macOS and Windows temp folders are already per-user.
-    return Directory(p.join(Directory.systemTemp.path, 'dacx-media-session'));
-  }
-
-  // ── Equalizer ─────────────────────────────────────────────
-
-  Future<void> _applyEqualizer() async {
-    await _applyMergedAudioFilters();
-  }
-
-  /// Builds and applies the EQ af chain.
-  Future<void> _applyMergedAudioFilters({int? gen}) async {
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final result = await _audioSession.applyMergedAudioFilters();
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    if (result.failed) {
-      _log(
-        'audio_filter_apply_failed',
-        detailsBuilder: () => {'chain': result.appliedChain},
-        severity: DebugSeverity.warn,
-      );
-    }
-  }
-
-  void _toggleEqualizer() {
-    final wantEnabled = !_settings.eqEnabled;
-    _settings.eqEnabled = wantEnabled;
-    unawaited(() async {
-      final result = await _audioSession.applyMergedAudioFilters();
-      if (!mounted || _isDisposed) return;
-      final l10n = AppLocalizations.of(context);
-      if (result.failed) {
-        _settings.eqEnabled = !wantEnabled;
-        _showOsdMessage(l10n.osdEqualizer(l10n.osdStateOff));
-        showAppSnackBar(
-          context,
-          l10n.snackPlaybackOperationFailed('equalizer'),
-        );
-        return;
-      }
-      _showOsdMessage(
-        l10n.osdEqualizer(wantEnabled ? l10n.osdStateOn : l10n.osdStateOff),
-      );
-    }());
-  }
-
-  // ── Multi-audio mix ───────────────────────────────────────
-
-  /// Applies or clears the multi-audio `lavfi-complex` graph.
-  ///
-  /// Returns `true` when the requested state was applied (including a clean
-  /// disable). Returns `false` when enable was requested but failed; in that
-  /// case the Experimental mix toggle is turned back off and the user gets
-  /// OSD + snackbar feedback.
-  Future<bool> _applyMultiAudioMix({bool announce = false, int? gen}) async {
-    if (gen != null && !_playback.isLoadCurrent(gen)) return true;
-    final l10n = AppLocalizations.of(context);
-    final tracks = _player.currentTracks;
-    // No open media yet; keep the preference for the next multi-track file.
-    if (tracks == null) return true;
-    final ids = tracks.audio
-        .where((t) => t.id != 'auto' && t.id != 'no')
-        .map((t) => t.id)
-        .toList(growable: false);
-    final shouldMix = _settings.multiAudioMix && ids.length >= 2;
-    if (!shouldMix) {
-      // Always clear the property in case a previous file left a graph.
-      await _playerService.setProperty('lavfi-complex', '');
-      if (gen != null && !_playback.isLoadCurrent(gen)) return true;
-      if (_player.mixActive) {
-        _player.mixActive = false;
-        if (announce) {
-          _showOsdMessage(l10n.osdAudioMixOff);
-        }
-      }
-      return true;
-    }
-    // Validate IDs are numeric; mpv's lavfi-complex labels are [aid<N>]
-    // where <N> must be the integer track-id reported in track-list.
-    final invalid = ids.where((id) => int.tryParse(id) == null).toList();
-    if (invalid.isNotEmpty) {
-      _log(
-        'multi_audio_mix_invalid_ids',
-        message: 'non-numeric audio track ids: ${invalid.join(',')}',
-        severity: DebugSeverity.warn,
-      );
-      await _revertMultiAudioMixFailure(l10n.osdAudioMixUnsupportedIds);
-      return false;
-    }
-    final videoTrackId = PlaybackMixPolicy.passthroughVideoTrackId(
-      videoIds: tracks.video.map((t) => t.id),
-      isAlbumArtOrImage: (id) {
-        for (final track in tracks.video) {
-          if (track.id == id) {
-            return track.albumart == true || track.image == true;
-          }
-        }
-        return false;
-      },
-    );
-    final chain = PlaybackMixPolicy.buildLavfiComplex(
-      audioIds: ids,
-      videoTrackId: videoTrackId,
-    );
-    _log(
-      'multi_audio_mix_apply',
-      detailsBuilder: () => {
-        'track_count': ids.length,
-        'track_ids': ids.join(','),
-        'chain': chain,
-      },
-    );
-    final ok = await _playerService.setProperty('lavfi-complex', chain);
-    if (gen != null && !_playback.isLoadCurrent(gen)) return true;
-    if (ok) {
-      final wasActive = _player.mixActive;
-      _player.mixActive = true;
-      if (announce || !wasActive) {
-        _showOsdMessage(l10n.osdAudioMixActive(ids.length));
-      }
-      return true;
-    }
-    _log('multi_audio_mix_setproperty_failed', severity: DebugSeverity.warn);
-    await _revertMultiAudioMixFailure(l10n.osdAudioMixFailed);
-    return false;
-  }
-
-  Future<void> _revertMultiAudioMixFailure(String message) async {
-    _player.mixActive = false;
-    if (_settings.multiAudioMix) {
-      _settings.multiAudioMix = false;
-    }
-    await _playerService.setProperty('lavfi-complex', '');
-    if (!mounted || _isDisposed) return;
-    _showOsdMessage(message);
-    showAppSnackBar(context, message);
-  }
-
-  Future<void> _reloadCurrentForMixChange() async {
-    final source = _player.currentSource;
-    if (source == null) return;
-    if (_mixReloadInFlight) return;
-    _mixReloadInFlight = true;
-    try {
-      final savedPos = _player.position;
-      await _loadSource(
-        source,
-        syncPlaylist: false,
-        applyResume: false,
-        origin: SourceOrigin.queue,
-      );
-      if (savedPos > Duration.zero) {
-        await Future<void>.delayed(_mixReloadDelay);
-        if (mounted && !_isDisposed && _player.currentSource == source) {
-          unawaited(_playerService.seek(savedPos));
-        }
-      }
-    } finally {
-      _mixReloadInFlight = false;
-    }
-  }
-
-  Future<void> _disableMixForManualTrackSelection() async {
-    if (!_settings.multiAudioMix && !_player.mixActive) return;
-    final wasActive = _player.mixActive;
-    if (_settings.multiAudioMix) {
-      _settings.multiAudioMix = false;
-    }
-    await _playerService.setProperty('lavfi-complex', '');
-    _player.mixActive = false;
-    if (wasActive) {
-      await _reloadCurrentForMixChange();
-    }
-  }
-
-  // ── Media session command bridge ──────────────────────────
-
-  void _deferMediaSessionSetting(void Function() apply) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _isDisposed) return;
-      apply();
-    });
-  }
-
-  void _syncIdleInhibit() {
-    unawaited(
-      _idleInhibit.setPlaying(
-        _player.isPlaying,
-        hasVideo: !_player.isAudioFile,
-      ),
-    );
-  }
-
-  void _onMediaSessionCommand(MediaSessionCommand cmd) {
-    final dispatch = MediaSessionCommandDispatch.resolve(
-      cmd,
-      position: _player.position,
-      duration: _player.duration,
-    );
-    switch (dispatch.kind) {
-      case MediaSessionDispatchKind.play:
-        unawaited(_playerService.play());
-      case MediaSessionDispatchKind.pause:
-        unawaited(_playerService.pause());
-      case MediaSessionDispatchKind.toggle:
-        unawaited(_playerService.playPause());
-      case MediaSessionDispatchKind.stop:
-        unawaited(_stopPlaybackAndResetUi());
-      case MediaSessionDispatchKind.next:
-        unawaited(_advancePlaylist(1));
-      case MediaSessionDispatchKind.previous:
-        unawaited(_advancePlaylist(-1));
-      case MediaSessionDispatchKind.seek:
-        final target = dispatch.seekTarget;
-        if (target != null) {
-          unawaited(_playerService.seek(target));
-        }
-      case MediaSessionDispatchKind.setLoopMode:
-        final mode = dispatch.loopMode;
-        if (mode != null) {
-          _deferMediaSessionSetting(() => _settings.loopMode = mode);
-        }
-      case MediaSessionDispatchKind.setShuffle:
-        final on = dispatch.shuffle;
-        if (on != null) {
-          _deferMediaSessionSetting(() => _setShuffle(on));
-        }
-      case MediaSessionDispatchKind.setVolume:
-        final pct = dispatch.volumePercent;
-        if (pct != null) {
-          _deferMediaSessionSetting(() {
-            setState(() {
-              _player.volume = pct;
-            });
-            _settings.volume = pct;
-            unawaited(_playerService.setVolume(pct).catchError((_) {}));
-          });
-        }
-      case MediaSessionDispatchKind.setRate:
-        final rate = dispatch.rate;
-        if (rate != null) {
-          _deferMediaSessionSetting(() => _settings.speed = rate);
-        }
-      case MediaSessionDispatchKind.raise:
-        unawaited(windowManager.show().catchError((_) {}));
-        unawaited(windowManager.focus().catchError((_) {}));
-      case MediaSessionDispatchKind.quit:
-        final onQuit = widget.onQuitRequest;
-        if (onQuit != null) {
-          unawaited(onQuit());
-        } else {
-          unawaited(() async {
-            await AppExitHooks.runAll();
-            if (_isDisposed) return;
-            try {
-              await windowManager.setPreventClose(false);
-            } catch (_) {}
-            await windowManager.destroy().catchError((_) {});
-          }());
-        }
-      case MediaSessionDispatchKind.noop:
-        break;
-    }
-  }
-
   Future<void> _stopPlaybackAndResetUi() async {
     _stopInProgress = true;
     _playback.beginLoad();
@@ -3311,12 +2694,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           await _playerService.stop();
           await _advancedPlayback.setSource(null);
           unawaited(_seekPreviewService.setSource(null));
-          unawaited(_mediaSession.clear());
+          _media.clearSession();
           if (!mounted || _isDisposed) return;
           setState(() {
             _player.clearMediaSurface();
-            _mediaDisplayTitle = null;
-            _mediaDisplayArtist = null;
+            _media.clearDisplayMetadata();
           });
         },
         onError: (Object e, StackTrace st) {
@@ -3573,7 +2955,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final source = _player.currentSource;
     if (source == null) return;
     if (_player.chapters.isEmpty) {
-      await _refreshChapters();
+      await _tracks.refreshChapters();
     }
     if (!mounted) return;
     final l10n = AppLocalizations.of(context);
@@ -3613,14 +2995,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final titleValue = () {
       final fromMeta = metaTitle?.trim();
       if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
-      final cached = _mediaDisplayTitle?.trim();
+      final cached = _media.displayTitle?.trim();
       if (cached != null && cached.isNotEmpty) return cached;
       return source.displayName;
     }();
     final artistValue = () {
       final fromMeta = metaArtist?.trim();
       if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
-      final cached = _mediaDisplayArtist?.trim();
+      final cached = _media.displayArtist?.trim();
       if (cached != null && cached.isNotEmpty) return cached;
       return l10n.mediaInfoUnknown;
     }();
@@ -3668,7 +3050,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             label: l10n.mediaInfoAudioSelection,
             value: audioSelection == null
                 ? l10n.mediaInfoUnknown
-                : _trackLabel(
+                : _tracks.trackLabel(
                     audioSelection.title,
                     audioSelection.language,
                     audioSelection.id,
@@ -3678,7 +3060,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             label: l10n.mediaInfoSubtitleSelection,
             value: subtitleSelection == null || subtitleSelection.id == 'no'
                 ? l10n.mediaInfoUnknown
-                : _trackLabel(
+                : _tracks.trackLabel(
                     subtitleSelection.title,
                     subtitleSelection.language,
                     subtitleSelection.id,
@@ -3695,7 +3077,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final tracks = _player.currentTracks;
     final hasAudioOptions = tracks != null && tracks.audio.length > 1;
     final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
-    if (_player.chapters.isEmpty) await _refreshChapters();
+    if (_player.chapters.isEmpty) await _tracks.refreshChapters();
     if (!mounted) return;
     final hasChapters = _player.chapters.isNotEmpty;
 
@@ -3718,14 +3100,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         onOpenUrl: () => unawaited(_openUrl()),
         onAudioTracks: () => unawaited(_showAudioTracksDialog()),
         onSubtitleTracks: () => unawaited(_showSubtitleTracksDialog()),
-        onExternalAudio: () => unawaited(_pickExternalAudio()),
-        onExternalSubtitle: () => unawaited(_pickExternalSubtitle()),
+        onExternalAudio: () => unawaited(_tracks.pickExternalAudio()),
+        onExternalSubtitle: () => unawaited(_tracks.pickExternalSubtitle()),
         onChapters: () => unawaited(_showChaptersDialog()),
         onEqualizer: () => unawaited(
           showEqualizerDialog(
             context: context,
             settings: _settings,
-            onApply: _applyEqualizer,
+            onApply: _tracks.applyEqualizer,
           ),
         ),
         onAdvancedPlayback: () => unawaited(_showAdvancedPlaybackDialog()),
@@ -3753,121 +3135,38 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
-  Future<void> _pickExternalAudio() async {
-    final l10n = AppLocalizations.of(context);
-    try {
-      final path = await _pickers.pickExternalAudioFile();
-      if (path == null) return;
-      await _captureBookmarkFor(path);
-      final ok = await _playerService.addExternalAudio(
-        path,
-        allowUnc: SourceOrigin.fileDialog.allowsUnc,
-      );
-      if (!mounted) return;
-      _showOsdMessage(
-        ok ? l10n.osdExternalAudioLoaded : l10n.osdExternalAudioFailed,
-      );
-      if (ok) {
-        _cacheTracksForCurrentLoad(_playerService.currentTracks);
-        setState(() {});
-      } else {
-        showAppSnackBar(context, l10n.osdExternalAudioFailed);
-      }
-    } catch (e) {
-      _log(
-        'external_audio_pick_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-      if (mounted) {
-        _showOsdMessage(l10n.osdExternalAudioFailed);
-        showAppSnackBar(context, l10n.osdExternalAudioFailed);
-      }
-    }
-  }
-
-  Future<void> _pickExternalSubtitle() async {
-    final l10n = AppLocalizations.of(context);
-    try {
-      final path = await _pickers.pickExternalSubtitleFile();
-      if (path == null) return;
-      await _captureBookmarkFor(path);
-      final ok = await _playerService.addExternalSubtitle(
-        path,
-        allowUnc: SourceOrigin.fileDialog.allowsUnc,
-      );
-      if (!mounted) return;
-      _showOsdMessage(
-        ok ? l10n.osdExternalSubtitleLoaded : l10n.osdExternalSubtitleFailed,
-      );
-      if (ok) {
-        _cacheTracksForCurrentLoad(_playerService.currentTracks);
-        setState(() {});
-      } else {
-        showAppSnackBar(context, l10n.osdExternalSubtitleFailed);
-      }
-    } catch (e) {
-      _log(
-        'external_subtitle_pick_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-      if (mounted) {
-        _showOsdMessage(l10n.osdExternalSubtitleFailed);
-        showAppSnackBar(context, l10n.osdExternalSubtitleFailed);
-      }
-    }
-  }
-
   Future<void> _showAudioTracksDialog() async {
-    final tracks = _player.currentTracks;
-    if (tracks == null) return;
-    final list = tracks.audio
-        .where((t) => t.id != 'auto' && t.id != 'no')
-        .toList(growable: false);
+    final request = _tracks.audioPickerRequest();
+    if (request == null) return;
     final selected = await pickAudioTrack(
       context,
-      tracks: list,
-      currentId: _player.currentTrackSelection?.audio.id,
+      tracks: request.tracks,
+      currentId: request.currentId,
     );
     if (selected != null) {
-      await _disableMixForManualTrackSelection();
-      final ok = await _playerService.setAudioTrack(selected);
-      if (!ok && mounted) {
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context)
-              .snackPlaybackOperationFailed(selected.id),
-        );
-      }
+      await _tracks.selectAudioTrackFromPicker(selected);
     }
   }
 
   Future<void> _showSubtitleTracksDialog() async {
-    final tracks = _player.currentTracks;
-    if (tracks == null) return;
-    final list = [
-      SubtitleTrack.no(),
-      ...tracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no'),
-    ];
+    final request = _tracks.subtitlePickerRequest();
+    if (request == null) return;
     final selected = await pickSubtitleTrack(
       context,
-      tracks: list,
-      currentId: _player.currentTrackSelection?.subtitle.id,
+      tracks: request.tracks,
+      currentId: request.currentId,
     );
     if (selected != null) {
-      final ok = await _playerService.setSubtitleTrack(selected);
-      if (!ok) return;
-      _player.subtitlesVisible = selected.id != 'no';
+      await _tracks.selectSubtitleTrackFromPicker(selected);
     }
   }
 
   Future<void> _showChaptersDialog() async {
-    if (_player.chapters.isEmpty) await _refreshChapters();
+    if (_player.chapters.isEmpty) await _tracks.refreshChapters();
     if (!mounted || _player.chapters.isEmpty) return;
     final picked = await pickChapter(context, _player.chapters);
     if (picked != null) {
-      await _playerService.setChapter(picked);
+      await _tracks.jumpToChapter(picked);
     }
   }
 
