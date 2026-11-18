@@ -76,6 +76,8 @@ import '../widgets/track_pickers.dart';
 import '../widgets/advanced_playback_dialog.dart';
 import 'player/player_file_pickers.dart';
 import 'player/player_messenger.dart';
+import 'player/player_shortcut_dispatcher.dart';
+import 'player/player_window_controller.dart';
 import 'player/widgets/drag_overlay.dart';
 import 'player/widgets/media_surface.dart';
 import 'player/widgets/player_bottom_dock.dart';
@@ -139,9 +141,16 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final FocusNode _shortcutFocus = FocusNode(
-    debugLabel: 'player-shortcuts',
-    skipTraversal: true,
+  late final PlayerShortcutDispatcher _shortcuts = PlayerShortcutDispatcher(
+    settings: _settings,
+    isActive: () => mounted && !_isDisposed,
+    routeIsCurrent: _playerRouteIsCurrent,
+    hasMedia: () => _currentFile != null,
+    isEndDrawerOpen: () => _scaffoldKey.currentState?.isEndDrawerOpen ?? false,
+    onEscape: _handleEscapeBack,
+    onShowHelp: () =>
+        unawaited(showKeybindsDialog(context: context, settings: _settings)),
+    onAction: _onShortcutAction,
   );
   late final IPlayerService _playerService;
   late final AdvancedPlaybackController _advancedPlayback;
@@ -165,14 +174,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   bool _isDisposed = false;
   bool _stopInProgress = false;
-  Timer? _fullscreenChromeHideTimer;
   final _scrollVolume = ScrollVolumeAccumulator();
-  bool _fullscreenChromeVisible = true;
 
   // Tracks / chapters / OSD state
   late final PlayerFilePickers _pickers = PlayerFilePickers(
     settings: _settings,
-    restoreFocus: _restoreShortcutFocus,
+    restoreFocus: _shortcuts.restoreFocus,
   );
   late final PlayerMessenger _messenger = PlayerMessenger(
     player: _player,
@@ -186,13 +193,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final OpenFileBridge _openFileBridge;
   final _idleInhibit = IdleInhibitService();
 
-  // Compact mini-player mode (PiP-style on desktop).
-  bool _compactMode = false;
-  bool _compactToggleInFlight = false;
-  Size? _preCompactSize;
-  Offset? _preCompactPos;
-  bool _preCompactMaximized = false;
-  static const Size _compactWindowSize = Size(480, 320);
+  late final PlayerWindowController _window = PlayerWindowController(
+    isMounted: () => mounted,
+    isDisposed: () => _isDisposed,
+    alwaysOnTop: () => _settings.alwaysOnTop,
+    log: _log,
+    onFullscreenRejected: () => showAppSnackBar(
+      context,
+      AppLocalizations.of(context).snackFullscreenRejected,
+      duration: _snackbarShortDuration,
+    ),
+    onCompactModeChanged: _onCompactModeChanged,
+  );
 
   // Resume-position bookkeeping.
   Timer? _resumeSaveTimer;
@@ -358,8 +370,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       },
     );
 
+    _window.addListener(_onWindowChanged);
     windowManager.addListener(this);
-    HardwareKeyboard.instance.addHandler(_onGlobalShortcutKey);
+    _shortcuts.attach();
 
     // Apply saved playback settings.
     unawaited(
@@ -684,19 +697,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
-    if (_compactMode) {
+    if (_window.compactMode) {
       widget.onCompactModeChanged?.call(false);
     }
     AppExitHooks.remove(_saveStateBeforeExit);
-    HardwareKeyboard.instance.removeHandler(_onGlobalShortcutKey);
-    _shortcutFocus.dispose();
+    _shortcuts.dispose();
     windowManager.removeListener(this);
     if (Platform.isMacOS) {
       const MethodChannel(InstanceModeService.windowMethodChannelName)
           .setMethodCallHandler(null);
     }
     _messenger.dispose();
-    _fullscreenChromeHideTimer?.cancel();
+    _window.dispose();
     _resumeSaveTimer?.cancel();
     _updateCheckTimer?.cancel();
     _persistResumePosition();
@@ -896,16 +908,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
 
     if (delta.alwaysOnTop != null) {
-      unawaited(
-        windowManager.setAlwaysOnTop(delta.alwaysOnTop!).catchError((Object e) {
-          _log(
-            'always_on_top_apply_failed',
-            category: DebugLogCategory.system,
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-        }),
-      );
+      _window.applyAlwaysOnTop(delta.alwaysOnTop!);
     }
 
     if (delta.rebuildUi && mounted) {
@@ -2299,103 +2302,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     return route == null || route.isCurrent;
   }
 
-  bool _shortcutFocusInPath() {
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary == null) return false;
-    return primary == _shortcutFocus ||
-        primary.ancestors.contains(_shortcutFocus);
-  }
-
-  bool _isEditableFocus(FocusNode primary) {
-    final ctx = primary.context;
-    if (ctx == null) return false;
-    return ctx.findAncestorStateOfType<EditableTextState>() != null;
-  }
-
-  bool _onGlobalShortcutKey(KeyEvent event) {
-    if (!mounted || _isDisposed) return false;
-    if (!_playerRouteIsCurrent()) return false;
-    if (_shortcutFocusInPath()) return false;
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary != null && _isEditableFocus(primary)) return false;
-    return _handleKeyEvent(_shortcutFocus, event) == KeyEventResult.handled;
-  }
-
-  void _restoreShortcutFocus({bool refocusNativeWindow = true}) {
-    if (!mounted || _isDisposed) return;
-    if (_shortcutFocus.canRequestFocus) {
-      _shortcutFocus.requestFocus();
-    }
-    if (refocusNativeWindow) {
-      unawaited(windowManager.focus().catchError((_) {}));
-    }
-  }
-
   @override
   void onWindowFocus() {
-    _restoreShortcutFocus(refocusNativeWindow: false);
+    _shortcuts.restoreFocus(refocusNativeWindow: false);
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    final hk = HardwareKeyboard.instance;
-    final pressed = LogicalKeyboardKey.expandSynonyms(hk.logicalKeysPressed);
-    final controlPressed =
-        hk.isControlPressed || pressed.contains(LogicalKeyboardKey.control);
-    final metaPressed =
-        hk.isMetaPressed || pressed.contains(LogicalKeyboardKey.meta);
-    final shiftPressed =
-        hk.isShiftPressed || pressed.contains(LogicalKeyboardKey.shift);
-    final altPressed =
-        hk.isAltPressed || pressed.contains(LogicalKeyboardKey.alt);
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape &&
-        !metaPressed &&
-        !controlPressed &&
-        !shiftPressed &&
-        !altPressed) {
-      return _handleEscapeBack();
-    }
-    if (event is KeyDownEvent &&
-        (event.logicalKey == LogicalKeyboardKey.f1 ||
-            (event.logicalKey == LogicalKeyboardKey.question) ||
-            (event.logicalKey == LogicalKeyboardKey.slash && shiftPressed))) {
-      unawaited(showKeybindsDialog(context: context, settings: _settings));
-      return KeyEventResult.handled;
-    }
-    final custom = _settings.keybinds;
-    var shortcut = PlayerShortcutsService.resolve(
-      event: event,
-      hasMedia: _currentFile != null,
-      isMetaPressed: metaPressed,
-      isControlPressed: controlPressed,
-      isShiftPressed: shiftPressed,
-      isAltPressed: altPressed,
-      customBindings: custom.isEmpty ? null : custom,
-    );
-    if (shortcut == null && _settings.advancedPlaybackToolsEnabled) {
-      shortcut = PlayerShortcutsService.resolveAdvanced(
-        event: event,
-        isMetaPressed: metaPressed,
-        isControlPressed: controlPressed,
-        isShiftPressed: shiftPressed,
-        customBindings: custom.isEmpty ? null : custom,
-      );
-    }
-
-    final drawerOpen = _scaffoldKey.currentState?.isEndDrawerOpen ?? false;
-    if (drawerOpen) {
-      switch (shortcut) {
-        case PlayerShortcutAction.seekForward:
-        case PlayerShortcutAction.seekBack:
-        case PlayerShortcutAction.volumeUp:
-        case PlayerShortcutAction.volumeDown:
-          return KeyEventResult.ignored;
-        default:
-          break;
-      }
-    }
-
-    switch (shortcut) {
+  KeyEventResult _onShortcutAction(PlayerShortcutAction action) {
+    switch (action) {
       case PlayerShortcutAction.openFile:
         _log('shortcut_open_file', category: DebugLogCategory.ui);
         _openFile();
@@ -2409,7 +2322,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         unawaited(_reopenLastFile());
         return KeyEventResult.handled;
       case PlayerShortcutAction.playPause:
-        _revealFullscreenChrome();
+        _window.revealFullscreenChrome();
         unawaited(
           _playerService.playPause().catchError((Object e) {
             _log(
@@ -2424,13 +2337,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekForward:
         _log('shortcut_seek_forward', category: DebugLogCategory.ui);
-        _revealFullscreenChrome();
+        _window.revealFullscreenChrome();
         _pulseOsd();
         _seekRelative(_seekStep);
         return KeyEventResult.handled;
       case PlayerShortcutAction.seekBack:
         _log('shortcut_seek_back', category: DebugLogCategory.ui);
-        _revealFullscreenChrome();
+        _window.revealFullscreenChrome();
         _pulseOsd();
         _seekRelative(_seekStepBack);
         return KeyEventResult.handled;
@@ -2448,8 +2361,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return KeyEventResult.handled;
       case PlayerShortcutAction.toggleFullscreen:
         _log('shortcut_toggle_fullscreen', category: DebugLogCategory.ui);
-        _revealFullscreenChrome();
-        unawaited(_toggleFullscreen());
+        _window.revealFullscreenChrome();
+        unawaited(_window.toggleFullscreen());
         return KeyEventResult.handled;
       case PlayerShortcutAction.exitFullscreen:
         // Bare Escape is handled above; keep this for custom/accelerator paths.
@@ -2502,7 +2415,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return KeyEventResult.handled;
       case PlayerShortcutAction.toggleCompactMode:
         _log('shortcut_toggle_compact', category: DebugLogCategory.ui);
-        unawaited(_toggleCompactMode());
+        unawaited(_window.toggleCompactMode());
         return KeyEventResult.handled;
       case PlayerShortcutAction.newWindow:
         _log('shortcut_new_window', category: DebugLogCategory.ui);
@@ -2556,8 +2469,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         _advancedPlayback.addMarker();
         return KeyEventResult.handled;
-      case null:
-        return KeyEventResult.ignored;
     }
   }
 
@@ -2621,7 +2532,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
     );
     _settings.volume = newVol;
-    _revealFullscreenChrome();
+    _window.revealFullscreenChrome();
     if (mounted) {
       _showOsdMessage(AppLocalizations.of(context).osdVolume(newVol.round()));
     }
@@ -2648,7 +2559,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
     );
     _settings.volume = toggle.newVolume;
-    _revealFullscreenChrome();
+    _window.revealFullscreenChrome();
     if (mounted) {
       final l10n = AppLocalizations.of(context);
       _showOsdMessage(
@@ -2665,50 +2576,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
-  bool _fullscreenToggleInFlight = false;
-  bool _isFullscreen = false;
-
-  bool get _showPlayerChrome => !_isFullscreen || _fullscreenChromeVisible;
-
-  void _revealFullscreenChrome() {
-    if (!_isFullscreen) return;
-    if (!_fullscreenChromeVisible && mounted) {
-      setState(() => _fullscreenChromeVisible = true);
-    }
-    _scheduleFullscreenChromeHide();
-  }
-
-  void _scheduleFullscreenChromeHide() {
-    _fullscreenChromeHideTimer?.cancel();
-    if (!_isFullscreen) return;
-    _fullscreenChromeHideTimer = Timer(const Duration(seconds: 3), () {
-      if (!mounted || _isDisposed || !_isFullscreen) return;
-      setState(() => _fullscreenChromeVisible = false);
-    });
-  }
+  @override
+  void onWindowEnterFullScreen() => _window.onEnterFullScreen();
 
   @override
-  void onWindowEnterFullScreen() {
+  void onWindowLeaveFullScreen() => _window.onLeaveFullScreen();
+
+  void _onWindowChanged() {
     if (!mounted) return;
-    setState(() {
-      _isFullscreen = true;
-      _fullscreenChromeVisible = true;
-    });
-    _scheduleFullscreenChromeHide();
+    setState(() {});
   }
 
-  @override
-  void onWindowLeaveFullScreen() {
-    _fullscreenChromeHideTimer?.cancel();
-    if (!mounted) {
-      _isFullscreen = false;
-      _fullscreenChromeVisible = true;
-      return;
-    }
-    setState(() {
-      _isFullscreen = false;
-      _fullscreenChromeVisible = true;
-    });
+  void _onCompactModeChanged(bool compact) {
+    widget.onCompactModeChanged?.call(compact);
+    final l10n = AppLocalizations.of(context);
+    _showOsdMessage(compact ? l10n.osdMiniPlayerOn : l10n.osdMiniPlayerOff);
   }
 
   /// Escape: close queue drawer → exit fullscreen → otherwise ignore.
@@ -2719,106 +2601,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       scaffold!.closeEndDrawer();
       return KeyEventResult.handled;
     }
-    if (_isFullscreen) {
+    if (_window.isFullscreen) {
       _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
-      unawaited(_exitFullscreen());
+      unawaited(_window.exitFullscreen());
       return KeyEventResult.handled;
     }
     // Cache can drift if fullscreen was entered outside our toggle path;
     // reconcile asynchronously without swallowing Escape when windowed.
-    unawaited(_exitFullscreenIfActuallyFullscreen());
+    unawaited(_window.exitFullscreenIfActuallyFullscreen());
     return KeyEventResult.ignored;
-  }
-
-  Future<void> _exitFullscreenIfActuallyFullscreen() async {
-    try {
-      if (!await windowManager.isFullScreen()) return;
-      if (!mounted) return;
-      setState(() => _isFullscreen = true);
-      _log('shortcut_exit_fullscreen', category: DebugLogCategory.ui);
-      await _exitFullscreen();
-    } catch (e) {
-      _log(
-        'fullscreen_reconcile_failed',
-        category: DebugLogCategory.ui,
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    }
-  }
-
-  Future<void> _toggleFullscreen() async {
-    if (_fullscreenToggleInFlight) return;
-    _fullscreenToggleInFlight = true;
-    try {
-      final enabled = await windowManager.isFullScreen();
-      await windowManager.setFullScreen(!enabled);
-      // Verify state actually changed (Wayland / tiling WMs may reject).
-      final actual = await windowManager.isFullScreen();
-      if (mounted) {
-        setState(() {
-          _isFullscreen = actual;
-          if (actual) {
-            _fullscreenChromeVisible = true;
-          } else {
-            _fullscreenChromeHideTimer?.cancel();
-            _fullscreenChromeVisible = true;
-          }
-        });
-        if (actual) {
-          _scheduleFullscreenChromeHide();
-        }
-      }
-      if (actual == enabled && mounted) {
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context).snackFullscreenRejected,
-          duration: _snackbarShortDuration,
-        );
-      }
-      _log(
-        'fullscreen_toggled',
-        category: DebugLogCategory.ui,
-        detailsBuilder: () => {'requested': !enabled, 'actual': actual},
-      );
-    } catch (e) {
-      _log(
-        'fullscreen_toggle_failed',
-        category: DebugLogCategory.ui,
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    } finally {
-      _fullscreenToggleInFlight = false;
-    }
-  }
-
-  Future<void> _exitFullscreen() async {
-    try {
-      if (await windowManager.isFullScreen()) {
-        await windowManager.setFullScreen(false);
-        if (mounted) {
-          setState(() {
-            _isFullscreen = false;
-            _fullscreenChromeHideTimer?.cancel();
-            _fullscreenChromeVisible = true;
-          });
-        }
-      } else if (mounted) {
-        setState(() {
-          _isFullscreen = false;
-          _fullscreenChromeHideTimer?.cancel();
-          _fullscreenChromeVisible = true;
-        });
-      }
-    } catch (e) {
-      _log(
-        'fullscreen_exit_failed',
-        category: DebugLogCategory.ui,
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    }
   }
 
   // ── Build ─────────────────────────────────────────────────
@@ -2826,10 +2617,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   Widget build(BuildContext context) {
     return Focus(
-      focusNode: _shortcutFocus,
+      focusNode: _shortcuts.focusNode,
       autofocus: true,
       skipTraversal: true,
-      onKeyEvent: _handleKeyEvent,
+      onKeyEvent: _shortcuts.handleKeyEvent,
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: Colors.transparent,
@@ -2837,7 +2628,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         body: GlassShellBackground(
           child: Column(
             children: [
-              if (_showPlayerChrome) const CustomTitleBar(),
+              if (_window.showPlayerChrome) const CustomTitleBar(),
               Expanded(
                 child: DropTarget(
                   onDragEntered: (_) => _onDragEntered(),
@@ -2854,7 +2645,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                           ],
                         ),
                       ),
-                      _showPlayerChrome
+                      _window.showPlayerChrome
                           ? _buildBottomDock()
                           : const SizedBox.shrink(),
                     ],
@@ -2985,12 +2776,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       videoController: _videoController,
       mediaDisplayTitle: _mediaDisplayTitle,
       mediaDisplayArtist: _mediaDisplayArtist,
-      compactMode: _compactMode,
-      isFullscreen: _isFullscreen,
-      fullscreenChromeVisible: _fullscreenChromeVisible,
+      compactMode: _window.compactMode,
+      isFullscreen: _window.isFullscreen,
+      fullscreenChromeVisible: _window.fullscreenChromeVisible,
       onTap: () {
-        _restoreShortcutFocus(refocusNativeWindow: false);
-        _revealFullscreenChrome();
+        _shortcuts.restoreFocus(refocusNativeWindow: false);
+        _window.revealFullscreenChrome();
         unawaited(
           _playerService.playPause().catchError((Object e) {
             _log(
@@ -3004,19 +2795,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       },
       onDoubleTap: () {
         _log('media_surface_double_tap', category: DebugLogCategory.ui);
-        unawaited(_toggleFullscreen());
+        unawaited(_window.toggleFullscreen());
       },
       onHover: () {
         _pulseOsd();
-        _revealFullscreenChrome();
+        _window.revealFullscreenChrome();
       },
       onScrollVolume: (scrollDeltaY, timeStamp) {
         if (_currentFile == null) return;
-        _revealFullscreenChrome();
+        _window.revealFullscreenChrome();
         final step = _scrollVolume.add(scrollDeltaY, timeStamp);
         if (step != 0) _adjustVolume(step);
       },
-      onExitCompactMode: () => unawaited(_toggleCompactMode()),
+      onExitCompactMode: () => unawaited(_window.toggleCompactMode()),
       onDismissEmptyStateTip: () => setState(() {
         _settings.emptyStateTipDismissed = true;
       }),
@@ -3776,79 +3567,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await _loadSource(next, syncPlaylist: false, origin: SourceOrigin.queue);
   }
 
-  // ── Compact / mini-player mode ────────────────────────────
-
-  Future<void> _toggleCompactMode() async {
-    if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) return;
-    if (_compactToggleInFlight) return;
-    _compactToggleInFlight = true;
-    try {
-      final l10n = AppLocalizations.of(context);
-      if (_compactMode) {
-        // Restore window state.
-        try {
-          if (_preCompactMaximized) {
-            await windowManager.maximize();
-          } else {
-            if (_preCompactSize != null) {
-              await windowManager.setSize(_preCompactSize!);
-            }
-            if (_preCompactPos != null) {
-              await windowManager.setPosition(_preCompactPos!);
-            }
-          }
-          await windowManager.setAlwaysOnTop(_settings.alwaysOnTop);
-        } catch (e) {
-          _log(
-            'compact_mode_restore_failed',
-            category: DebugLogCategory.ui,
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-          return;
-        }
-        if (!mounted || _isDisposed) return;
-        setState(() => _compactMode = false);
-        widget.onCompactModeChanged?.call(false);
-        _showOsdMessage(l10n.osdMiniPlayerOff);
-      } else {
-        try {
-          final size = await windowManager.getSize();
-          final position = await windowManager.getPosition();
-          final maximized = await windowManager.isMaximized();
-          if (await windowManager.isFullScreen()) {
-            await windowManager.setFullScreen(false);
-            if (mounted) {
-              _isFullscreen = false;
-            }
-          }
-          if (maximized) {
-            await windowManager.unmaximize();
-          }
-          await windowManager.setSize(_compactWindowSize);
-          await windowManager.setAlwaysOnTop(true);
-          _preCompactSize = size;
-          _preCompactPos = position;
-          _preCompactMaximized = maximized;
-        } catch (e) {
-          _log(
-            'compact_mode_enter_failed',
-            category: DebugLogCategory.ui,
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-          return;
-        }
-        if (!mounted || _isDisposed) return;
-        setState(() => _compactMode = true);
-        widget.onCompactModeChanged?.call(true);
-        _showOsdMessage(l10n.osdMiniPlayerOn);
-      }
-    } finally {
-      _compactToggleInFlight = false;
-    }
-  }
-
   // ── Media info ────────────────────────────────────────────
 
   Future<void> _showMediaInfoDialog() async {
@@ -3987,7 +3705,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       hasSubOptions: hasSubOptions,
       hasChapters: hasChapters,
       hasCurrentFile: () => _currentFile != null,
-      compactMode: () => _compactMode,
+      compactMode: () => _window.compactMode,
       settings: _settings,
       sleepTimer: _sleepTimer,
       playlist: _playlist,
@@ -4019,7 +3737,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         onQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
         onEnqueue: () => unawaited(_pickFilesToEnqueue()),
         onSetShuffle: _setShuffle,
-        onCompact: () => unawaited(_toggleCompactMode()),
+        onCompact: () => unawaited(_window.toggleCompactMode()),
       ),
     );
   }
