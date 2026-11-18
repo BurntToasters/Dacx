@@ -1696,6 +1696,18 @@ abstract class AppLocalizations {
   /// **'{position} of {duration}'**
   String semanticsSeekBarValue(String position, String duration);
 
+  /// No description provided for @seekDurationToggleShowRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Total duration. Click to show remaining time'**
+  String get seekDurationToggleShowRemaining;
+
+  /// No description provided for @seekDurationToggleShowTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining time. Click to show total duration'**
+  String get seekDurationToggleShowTotal;
+
   /// No description provided for @semanticsAccentColor.
   ///
   /// In en, this message translates to:
@@ -2583,6 +2595,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add playback marker'**
   String get shortcutAddPlaybackMarker;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle play queue'**
+  String get shortcutToggleQueue;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get shortcutStop;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get shortcutOpenSettings;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Show media info'**
+  String get shortcutShowMediaInfo;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek forward 30 seconds'**
+  String get shortcutSeekForwardLarge;
+
+  /// Shortcut action.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek backward 30 seconds'**
+  String get shortcutSeekBackLarge;
 
   /// Screen reader label for the A-B range on the seek bar.
   ///

@@ -757,11 +757,33 @@ The native side is verified manually on Windows (play a tagged track, then an un
 
 ## Finding 35: new shortcuts
 
-Modes: pending.
+Modes:
+
+- M35.1: a new default (`Q` queue, `Shift+S` stop, `Ctrl+,` or `Cmd+,` settings, `I` media info, `Shift+Right` and `Shift+Left` large seek) does not resolve to its action, or resolves to the wrong one.
+- M35.2: `Shift+Arrow Right` or `Shift+Arrow Left` still resolves to the plain 5 s seek, or a modified chord (`Ctrl+Shift+Arrow`) stops resolving to chapter navigation.
+- M35.3: plain `Arrow Right`, `Arrow Left` or `Ctrl+Arrow` resolves to a large seek.
+- M35.4: a key repeat of `Shift+Arrow` does not repeat the large seek (default or custom), or a key repeat of `Q`, `I`, `Shift+S` or `Ctrl+,` fires again.
+- M35.5: rebinding a new action does not fire on the new accelerator, or the default accelerator still fires it after rebinding, or rebinding large seek makes `Shift+Arrow` fall back to the plain seek.
+- M35.6: stored binding names of the old actions (`seekForward`, `openFile` and the rest) stop loading, enum names changed, or the new values are not appended after `addPlaybackMarker`.
+- M35.7: the keybinds dialog does not list the new actions, shows them without an English label, or shows the wrong default accelerator.
+- M35.8: in the real screen, each shortcut does not do its job: `Q` toggles the queue drawer open and closed, `Shift+S` stops and clears the loaded media, `Ctrl+,` opens settings once, `I` opens the media info dialog, `Shift+Right` and `Shift+Left` seek by 30 s and plain arrows still seek by 5 s.
+- M35.9: stop and media info fire with no media loaded, or queue and settings fail to work without media; the same gating must hold for custom bindings.
+- M35.10: two defaults share one accelerator, a new default shadows an existing one, or a new default collides with the text-field exclusion (a focused text field still receives `Q`, `I`, `Shift+S` or `Ctrl+,` as a shortcut).
+- M35.11: on macOS the native Preferences menu item (Cmd+,) and the Flutter binding both fire and open two settings screens (checked by the settings route refusing to open while the player route is not current; the native side is verified manually on macOS).
 
 ## Finding 36: remaining-time toggle
 
-Modes: pending.
+Modes:
+
+- M36.1: clicking the duration label next to the seek bar does not flip between total (`03:45`) and remaining (`-01:12`), flips only once, or leaves the dock showing the stale text.
+- M36.2: the label is not focusable or ignores Enter and Space, so keyboard users cannot toggle it.
+- M36.3: the choice is not written to `show_remaining_time`, so a new `SettingsService` on the same prefs, or a freshly pumped dock, loses it.
+- M36.4: remaining goes negative (position past duration) or shows a bare time without the leading minus sign.
+- M36.5: unknown or zero duration changes the label away from today's `00:00`, throws, or the tap no longer flips the stored mode.
+- M36.6: the remaining label stays frozen while the position advances.
+- M36.7: the `show_remaining_time` key is missing from `frozenPreferenceKeys`, or a different key string is written.
+- M36.8: the default is not false, a fresh install shows remaining time, or merely reading the setting writes the key.
+- M36.9: the tooltip and semantics label is missing, is not a button, or does not describe the current mode and switch with it.
 
 ## Finding 37: UNC paths for explicit picks
 

@@ -928,6 +928,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get seekDurationToggleShowRemaining =>
+      'Total duration. Click to show remaining time';
+
+  @override
+  String get seekDurationToggleShowTotal =>
+      'Remaining time. Click to show total duration';
+
+  @override
   String semanticsAccentColor(String name) {
     return 'Accent color $name';
   }
@@ -1420,6 +1428,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutAddPlaybackMarker => 'Add playback marker';
+
+  @override
+  String get shortcutToggleQueue => 'Toggle play queue';
+
+  @override
+  String get shortcutStop => 'Stop';
+
+  @override
+  String get shortcutOpenSettings => 'Open settings';
+
+  @override
+  String get shortcutShowMediaInfo => 'Show media info';
+
+  @override
+  String get shortcutSeekForwardLarge => 'Seek forward 30 seconds';
+
+  @override
+  String get shortcutSeekBackLarge => 'Seek backward 30 seconds';
 
   @override
   String seekLoopRangeSemantics(String start, String end) {

@@ -213,11 +213,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Keyboard shortcuts'));
     await tester.pumpAndSettle();
-    final offShortcutList = find.byType(ListView).last;
-    for (var i = 0; i < 5; i += 1) {
-      await tester.drag(offShortcutList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
+    final offShortcutList = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(
+      find.text('Seek backward 30 seconds'),
+      200,
+      scrollable: offShortcutList,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('A-B repeat'), findsNothing);
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
@@ -229,11 +231,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Keyboard shortcuts'));
     await tester.pumpAndSettle();
-    final onShortcutList = find.byType(ListView).last;
-    for (var i = 0; i < 5; i += 1) {
-      await tester.drag(onShortcutList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
+    final onShortcutList = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(
+      find.text('A-B repeat'),
+      200,
+      scrollable: onShortcutList,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('A-B repeat'), findsOneWidget);
   });
 

@@ -125,6 +125,8 @@ class PlayerShortcutDispatcher {
       switch (shortcut) {
         case PlayerShortcutAction.seekForward:
         case PlayerShortcutAction.seekBack:
+        case PlayerShortcutAction.seekForwardLarge:
+        case PlayerShortcutAction.seekBackLarge:
         case PlayerShortcutAction.volumeUp:
         case PlayerShortcutAction.volumeDown:
           return KeyEventResult.ignored;

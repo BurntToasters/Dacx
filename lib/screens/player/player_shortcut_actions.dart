@@ -18,6 +18,8 @@ import 'track_chapter_controller.dart';
 
 const _seekStep = Duration(seconds: 5);
 const _seekStepBack = Duration(seconds: -5);
+const _seekStepLarge = Duration(seconds: 30);
+const _seekStepLargeBack = Duration(seconds: -30);
 
 class PlayerShortcutActions {
   PlayerShortcutActions({
@@ -34,6 +36,9 @@ class PlayerShortcutActions {
     required this.hasCurrentFile,
     required this.pulseOsd,
     required this.handleEscape,
+    required this.toggleQueueDrawer,
+    required this.openSettings,
+    required this.showMediaInfo,
   });
 
   final SettingsService settings;
@@ -49,6 +54,9 @@ class PlayerShortcutActions {
   final bool Function() hasCurrentFile;
   final void Function() pulseOsd;
   final KeyEventResult Function() handleEscape;
+  final void Function() toggleQueueDrawer;
+  final void Function() openSettings;
+  final void Function() showMediaInfo;
 
   KeyEventResult handle(PlayerShortcutAction action) {
     switch (action) {
@@ -89,6 +97,18 @@ class PlayerShortcutActions {
         window.revealFullscreenChrome();
         pulseOsd();
         transport.seekRelative(_seekStepBack);
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.seekForwardLarge:
+        log('shortcut_seek_forward_large', category: DebugLogCategory.ui);
+        window.revealFullscreenChrome();
+        pulseOsd();
+        transport.seekRelative(_seekStepLarge);
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.seekBackLarge:
+        log('shortcut_seek_back_large', category: DebugLogCategory.ui);
+        window.revealFullscreenChrome();
+        pulseOsd();
+        transport.seekRelative(_seekStepLargeBack);
         return KeyEventResult.handled;
       case PlayerShortcutAction.volumeUp:
         log('shortcut_volume_up', category: DebugLogCategory.ui);
@@ -175,6 +195,24 @@ class PlayerShortcutActions {
       case PlayerShortcutAction.cycleSpeed:
         log('shortcut_cycle_speed', category: DebugLogCategory.ui);
         transport.cyclePlaybackSpeed();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.toggleQueue:
+        log('shortcut_toggle_queue', category: DebugLogCategory.ui);
+        toggleQueueDrawer();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.stop:
+        if (!hasCurrentFile()) return KeyEventResult.ignored;
+        log('shortcut_stop', category: DebugLogCategory.ui);
+        unawaited(sourceLoad.stopPlaybackAndResetUi());
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.openSettings:
+        log('shortcut_open_settings', category: DebugLogCategory.ui);
+        openSettings();
+        return KeyEventResult.handled;
+      case PlayerShortcutAction.showMediaInfo:
+        if (!hasCurrentFile()) return KeyEventResult.ignored;
+        log('shortcut_media_info', category: DebugLogCategory.ui);
+        showMediaInfo();
         return KeyEventResult.handled;
       case PlayerShortcutAction.cycleAdvancedLoop:
         if (!settings.advancedPlaybackToolsEnabled || !hasCurrentFile()) {

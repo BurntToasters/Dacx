@@ -367,6 +367,8 @@
       "duration": { "type": "String", "example": "4:56" }
     }
   },
+  "seekDurationToggleShowRemaining": "Total duration. Click to show remaining time",
+  "seekDurationToggleShowTotal": "Remaining time. Click to show total duration",
   "semanticsAccentColor": "Accent color {name}",
   "@semanticsAccentColor": {
     "placeholders": { "name": { "type": "String" } }
@@ -621,6 +623,18 @@
   "@shortcutAudioDelayForward": { "description": "Shortcut action." },
   "shortcutAddPlaybackMarker": "Add playback marker",
   "@shortcutAddPlaybackMarker": { "description": "Shortcut action." },
+  "shortcutToggleQueue": "Toggle play queue",
+  "@shortcutToggleQueue": { "description": "Shortcut action." },
+  "shortcutStop": "Stop",
+  "@shortcutStop": { "description": "Shortcut action." },
+  "shortcutOpenSettings": "Open settings",
+  "@shortcutOpenSettings": { "description": "Shortcut action." },
+  "shortcutShowMediaInfo": "Show media info",
+  "@shortcutShowMediaInfo": { "description": "Shortcut action." },
+  "shortcutSeekForwardLarge": "Seek forward 30 seconds",
+  "@shortcutSeekForwardLarge": { "description": "Shortcut action." },
+  "shortcutSeekBackLarge": "Seek backward 30 seconds",
+  "@shortcutSeekBackLarge": { "description": "Shortcut action." },
   "seekLoopRangeSemantics": "A-B repeat range: {start} to {end}",
   "@seekLoopRangeSemantics": {
     "description": "Screen reader label for the A-B range on the seek bar.",

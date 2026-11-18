@@ -34,6 +34,12 @@ enum PlayerShortcutAction {
   audioDelayBack,
   audioDelayForward,
   addPlaybackMarker,
+  toggleQueue,
+  stop,
+  openSettings,
+  showMediaInfo,
+  seekForwardLarge,
+  seekBackLarge,
 }
 
 /// Default human-readable accelerators, e.g. "Ctrl+O", "Arrow Right".
@@ -69,6 +75,12 @@ const Map<PlayerShortcutAction, List<String>> defaultKeybinds = {
   PlayerShortcutAction.audioDelayBack: ['Ctrl+-'],
   PlayerShortcutAction.audioDelayForward: ['Ctrl+='],
   PlayerShortcutAction.addPlaybackMarker: ['Ctrl+B'],
+  PlayerShortcutAction.toggleQueue: ['Q'],
+  PlayerShortcutAction.stop: ['Shift+S'],
+  PlayerShortcutAction.openSettings: ['Ctrl+,'],
+  PlayerShortcutAction.showMediaInfo: ['I'],
+  PlayerShortcutAction.seekForwardLarge: ['Shift+Arrow Right'],
+  PlayerShortcutAction.seekBackLarge: ['Shift+Arrow Left'],
 };
 
 String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
@@ -107,6 +119,12 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
       PlayerShortcutAction.audioDelayBack => l10n.shortcutAudioDelayBack,
       PlayerShortcutAction.audioDelayForward => l10n.shortcutAudioDelayForward,
       PlayerShortcutAction.addPlaybackMarker => l10n.shortcutAddPlaybackMarker,
+      PlayerShortcutAction.toggleQueue => l10n.shortcutToggleQueue,
+      PlayerShortcutAction.stop => l10n.shortcutStop,
+      PlayerShortcutAction.openSettings => l10n.shortcutOpenSettings,
+      PlayerShortcutAction.showMediaInfo => l10n.shortcutShowMediaInfo,
+      PlayerShortcutAction.seekForwardLarge => l10n.shortcutSeekForwardLarge,
+      PlayerShortcutAction.seekBackLarge => l10n.shortcutSeekBackLarge,
     };
   }
   return switch (a) {
@@ -141,6 +159,12 @@ String shortcutActionLabel(PlayerShortcutAction a, {AppLocalizations? l10n}) {
     PlayerShortcutAction.audioDelayBack => 'Decrease audio delay',
     PlayerShortcutAction.audioDelayForward => 'Increase audio delay',
     PlayerShortcutAction.addPlaybackMarker => 'Add playback marker',
+    PlayerShortcutAction.toggleQueue => 'Toggle play queue',
+    PlayerShortcutAction.stop => 'Stop',
+    PlayerShortcutAction.openSettings => 'Open settings',
+    PlayerShortcutAction.showMediaInfo => 'Show media info',
+    PlayerShortcutAction.seekForwardLarge => 'Seek forward 30 seconds',
+    PlayerShortcutAction.seekBackLarge => 'Seek backward 30 seconds',
   };
 }
 
@@ -196,7 +220,7 @@ class PlayerShortcutsService {
         if (event is! KeyDownEvent && !_isRepeatableAction(action)) {
           continue;
         }
-        if (action == PlayerShortcutAction.playPause && !hasMedia) {
+        if (_requiresMedia(action) && !hasMedia) {
           continue;
         }
         return action;
@@ -355,17 +379,47 @@ class PlayerShortcutsService {
         key == LogicalKeyboardKey.keyE) {
       return PlayerShortcutAction.toggleEqualizer;
     }
+    if (event is KeyDownEvent &&
+        isShiftPressed &&
+        !primaryModifierPressed &&
+        hasMedia &&
+        key == LogicalKeyboardKey.keyS) {
+      return PlayerShortcutAction.stop;
+    }
+    if (event is KeyDownEvent &&
+        primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.comma) {
+      return PlayerShortcutAction.openSettings;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        key == LogicalKeyboardKey.keyQ) {
+      return PlayerShortcutAction.toggleQueue;
+    }
+    if (event is KeyDownEvent &&
+        !primaryModifierPressed &&
+        !isShiftPressed &&
+        hasMedia &&
+        key == LogicalKeyboardKey.keyI) {
+      return PlayerShortcutAction.showMediaInfo;
+    }
     if (key == LogicalKeyboardKey.arrowRight) {
       if (primaryModifierPressed) {
         return event is KeyDownEvent ? PlayerShortcutAction.chapterNext : null;
       }
-      return PlayerShortcutAction.seekForward;
+      return isShiftPressed
+          ? PlayerShortcutAction.seekForwardLarge
+          : PlayerShortcutAction.seekForward;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (primaryModifierPressed) {
         return event is KeyDownEvent ? PlayerShortcutAction.chapterPrev : null;
       }
-      return PlayerShortcutAction.seekBack;
+      return isShiftPressed
+          ? PlayerShortcutAction.seekBackLarge
+          : PlayerShortcutAction.seekBack;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       return PlayerShortcutAction.volumeUp;
@@ -453,8 +507,15 @@ class PlayerShortcutsService {
   static bool _isRepeatableAction(PlayerShortcutAction a) =>
       a == PlayerShortcutAction.seekForward ||
       a == PlayerShortcutAction.seekBack ||
+      a == PlayerShortcutAction.seekForwardLarge ||
+      a == PlayerShortcutAction.seekBackLarge ||
       a == PlayerShortcutAction.volumeUp ||
       a == PlayerShortcutAction.volumeDown;
+
+  static bool _requiresMedia(PlayerShortcutAction a) =>
+      a == PlayerShortcutAction.playPause ||
+      a == PlayerShortcutAction.stop ||
+      a == PlayerShortcutAction.showMediaInfo;
 
   static PlayerShortcutAction? _actionByName(String name) {
     for (final a in PlayerShortcutAction.values) {

@@ -260,6 +260,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     hasCurrentFile: () => _currentFile != null,
     pulseOsd: _pulseOsd,
     handleEscape: _handleEscapeBack,
+    toggleQueueDrawer: _toggleQueueDrawer,
+    openSettings: _openSettings,
+    showMediaInfo: () => unawaited(_mediaInfo.show(context)),
   );
   late final PlayerMoreMenuController _moreMenu = PlayerMoreMenuController(
     settings: _settings,
@@ -817,13 +820,26 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     return HardwareAccelerationService.shouldEnableHardwareAcceleration(hwDec);
   }
 
-  void _openSettings() => openPlayerSettings(
-    context: context,
-    settings: _settings,
-    debugLog: widget.debugLog,
-    updateService: _updateService,
-    log: _log,
-  );
+  void _openSettings() {
+    if (!_playerRouteIsCurrent()) return;
+    openPlayerSettings(
+      context: context,
+      settings: _settings,
+      debugLog: widget.debugLog,
+      updateService: _updateService,
+      log: _log,
+    );
+  }
+
+  void _toggleQueueDrawer() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold == null) return;
+    if (scaffold.isEndDrawerOpen) {
+      scaffold.closeEndDrawer();
+    } else {
+      scaffold.openEndDrawer();
+    }
+  }
 
   // ── File handling ─────────────────────────────────────────
 
