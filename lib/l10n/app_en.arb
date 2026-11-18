@@ -159,6 +159,11 @@
   "snackFileNotFound": "File not found. It may have moved or been deleted.",
   "snackFileLoadPermissionDenied": "Permission denied. Check file access and try again.",
   "snackFileLoadFailed": "Could not open file. Try another file.",
+  "snackLoadFailuresSummary": "{count, plural, =1{1 file could not be opened} other{{count} files could not be opened}}",
+  "@snackLoadFailuresSummary": {
+    "description": "One summary shown when several files in a batch fail to load.",
+    "placeholders": { "count": { "type": "int", "example": "12" } }
+  },
   "snackQueueTruncated": "Queue is full ({max} items). Skipped {count} file(s).",
   "@snackQueueTruncated": {
     "placeholders": {

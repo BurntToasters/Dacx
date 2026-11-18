@@ -8,11 +8,38 @@ reverted.
 
 ## Finding 1: enqueue picker excludes audio
 
-Modes: pending.
+- M1.1 The enqueue picker must request `FileType.custom` (never
+  `FileType.media`, which is images and videos only on Windows and Linux) with
+  allowed extensions covering every `PlayerPathUtils.supportedExtensions` entry
+  and the playlist extensions from `M3uPlaylist.extensions`.
+- M1.2 It must pass an existing `lastOpenDirectory` as `initialDirectory`.
+- M1.3 After a pick, `lastOpenDirectory` must become the directory of the
+  first picked file, even when the queue already has items and nothing loads.
+- M1.4 A picked audio file must reach the queue (picker result to queue).
+- M1.5 A `PlatformException` from the picker must show the "File picker
+  failed" snackbar with the platform detail, not fail silently.
+- M1.6 Any other picker error must show the "Unable to open file picker"
+  snackbar.
+- M1.7 A cancelled pick must show no snackbar and leave the queue unchanged.
 
 ## Finding 2: display metadata tied to media session
 
-Modes: pending.
+- M2.1 With the media session setting off, the audio view must still show the
+  mpv tag title and artist of the loaded track.
+- M2.2 With the media session off and no tag title, the title falls back to
+  the source display name and no artist is shown.
+- M2.3 With the media session on, the OS bridge still receives the title and
+  artist (Windows and macOS bridges; Linux uses MPRIS and is skipped); with it
+  off, nothing is sent to the OS bridge.
+- M2.4 When the source changes, the previous track's title and artist must
+  disappear at once and must not be shown while the new track's metadata query
+  is still pending.
+- M2.5 Metadata that resolves after a newer load started must never be shown
+  (load-generation guard).
+- M2.6 After stop, loading another source whose metadata is pending must not
+  show the artist of the track played before the stop.
+- M2.7 With the media session on, one load queries mpv for title and artist
+  exactly once each (no second query for the display copy).
 
 ## Finding 3: window geometry saved in wrong states
 
@@ -31,17 +58,69 @@ save-gating modes are added later by the app-shell package.
   persist across a new service on the same prefs after a flush, be listed in
   `frozenPreferenceKeys`, and leave `currentSchemaVersion` at 4.
 
+App shell part (`test/e2e/audit9_shell_e2e_test.dart`, `DacxApp` with a mocked
+`window_manager`; events are delivered through the plugin channel and the
+180 ms save debounce is pumped).
+
+- M3.5 A resize or move event while the window is maximized must not save
+  size or position (a previously stored normal size stays), and must record
+  `windowMaximized` as true.
+- M3.6 A resize or move event while fullscreen must not save size or position
+  and must leave `windowMaximized` unchanged.
+- M3.7 A resize or move event while minimized must not save size or position
+  and must leave `windowMaximized` unchanged.
+- M3.8 A resize or move event on a normal window must save the real size and
+  position and set `windowMaximized` back to false after it was true.
+- M3.9 With `rememberWindow` off, no event may save size, position or the
+  maximized flag.
+- M3.10 Startup restore: with `rememberWindow` and `windowMaximized` true the
+  saved normal position is applied first and the window is then maximized; with
+  either one false the window is never maximized and no maximize call is made.
+
 ## Finding 4: mini-player toggle state
 
-Modes: pending.
+- M4.1 A second toggle while the first is still running is ignored, so the
+  saved pre-mini size is not overwritten and leaving mini mode restores the
+  original size.
+- M4.2 If the window resize fails on entry, mini mode must not turn on (no exit
+  button, no "Mini-player on" message) and the failure must not leave the
+  toggle stuck.
+- M4.3 After a failed entry, a later toggle must work normally.
+- M4.4 If the window restore fails on exit, the player stays in mini mode.
+- M4.5 On exit, always-on-top is restored from the current
+  `settings.alwaysOnTop`, not from the value captured on entry.
 
 ## Finding 5: batch load failure flood
 
-Modes: pending.
+- M5.1 Loading many files that all fail to open from one batch must show a
+  single summary message with the count ("N files could not be opened") and
+  none of the per-file messages.
+- M5.2 When some files fail before one opens, the summary counts only the
+  failures and the file that opens is played.
+- M5.3 A batch with exactly one failure keeps the specific per-file message.
+- M5.4 A single-file open failure keeps today's specific message.
+- M5.5 The summary is a plural l10n string: one and many counts read
+  correctly.
+
+The missing-file (prune recents) path cannot be reached with the headless
+harness because existence probing is skipped for headless media, so the
+once-per-batch prune is covered by code review only.
 
 ## Finding 6: macOS install warning never shows
 
-Modes: pending.
+`DacxApp` takes an injectable install-location check so the dialog is
+testable off macOS.
+
+- M6.1 When the check says to warn, the install-location dialog (localized
+  title and message) must be visible after the first frames, with no
+  exception raised while building or showing it.
+- M6.2 The dialog must close through its Close button, and must show only once
+  even when the app rebuilds afterwards (theme change).
+- M6.3 When the check says not to warn, no dialog is shown.
+- M6.4 Showing the dialog must log exactly one `macos_install_location_warning`
+  debug event.
+- M6.5 With no injected check, the production default must not show the dialog
+  on a non-macOS host.
 
 ## Finding 7: screenshot folder bookmark pruned
 
@@ -66,11 +145,37 @@ Modes: pending.
 
 ## Finding 9: scroll volume per event
 
-Modes: pending.
+- M9.1 Accumulator: a single event of 50 px or more emits exactly one step in
+  the scroll direction (up raises, down lowers): a 53 px Linux wheel notch, a
+  100 px Windows wheel notch and a 300 px event each give exactly one step.
+- M9.2 Accumulator: small deltas accumulate and emit one step only when the
+  total reaches 50 px (five 12 px events give one step, four give none), then
+  start over.
+- M9.3 Accumulator: a direction flip discards the accumulated opposite delta.
+- M9.4 Accumulator: a gap of 200 ms or more discards the accumulated delta; a
+  gap below 200 ms keeps it.
+- M9.5 Accumulator: zero-delta events emit nothing and do not disturb state.
+- M9.6 Pumped screen: 53 px and 100 px mouse wheel notches each change volume
+  by exactly 5, while fifteen 3 px trackpad events do not change volume at all.
+- M9.7 Pumped screen: volume is still clamped to 0..100 when scrolling.
 
 ## Finding 10: Windows blur nudge on focus
 
-Modes: pending.
+Windows-specific modes run the real Windows branch on a Windows host; on other
+hosts the test asserts the focus path does nothing visual. Native calls are
+recorded through mocked `window_manager`, `flutter_acrylic` and window-method
+channels.
+
+- M10.1 A focus event with blur enabled on Windows must re-apply the window
+  effect once and must send no size change (no `setBounds`) to the window.
+- M10.2 A focus event with blur disabled must not touch the window effect,
+  opacity or size.
+- M10.3 A settings-driven visual change (blur strength) in a normal window
+  must still re-apply the effect and nudge the size by one pixel and back.
+- M10.4 The same settings-driven change while maximized or fullscreen must
+  re-apply the effect but never change the size.
+- M10.5 Focus while maximized or fullscreen with blur enabled must send no
+  size change.
 
 ## Finding 11: previous and next always enabled
 
@@ -139,6 +244,21 @@ Setter equality part only; the main.dart rebuild narrowing is separate.
 - M14.5 A changed value must still write and notify exactly once (the
   short-circuit must not swallow real changes).
 
+App shell part (`test/e2e/audit9_shell_e2e_test.dart`).
+
+- M14.6 Settings writes that no app-level input reads (volume, speed, OSD,
+  recent files) must not rebuild the `MaterialApp`.
+- M14.7 A theme mode change must rebuild the `MaterialApp` and apply the new
+  mode.
+- M14.8 An accent color change must rebuild the `MaterialApp` and change the
+  theme color scheme.
+- M14.9 Window blur enable, blur strength and window opacity changes must
+  rebuild the `MaterialApp` and update its themes.
+- M14.10 A platform brightness change while following the system theme must
+  still rebuild the `MaterialApp`.
+- M14.11 The player home must still be rebuilt on every settings write, since
+  `PlayerScreen` reads settings in `build` without its own setState.
+
 ## Finding 15: sync filesystem calls on UI isolate
 
 Settings part only; consumers (player and settings screens) validate existence
@@ -150,10 +270,23 @@ where the value is used and are handled by a later package.
 - M15.2 The `screenshotDir` getter and setter must not create any `Directory`
   object and must return a stored path that does not exist, while the setter
   still rejects NUL and `..` segments.
+- M15.3 Open file, open folder and enqueue pickers must pass the stored
+  `lastOpenDirectory` as `initialDirectory` when it exists and null when it
+  does not (existence checked asynchronously where the value is used).
+- M15.4 Taking a screenshot with a `screenshotDir` that does not exist must
+  fall back to the default location exactly like an unset directory and must
+  not create the missing directory.
+- M15.5 Taking a screenshot with an existing `screenshotDir` must still save
+  there.
+- M15.6 `player_screen.dart` must never pass `settings.lastOpenDirectory`
+  straight to a picker (source scan).
 
 ## Finding 16: click-to-pause delay
 
-Modes: pending.
+- M16.1 A single click on the media surface toggles play and pause as soon as
+  Flutter's own double-tap wait (300 ms) has elapsed, with no extra timer.
+- M16.2 A double click toggles fullscreen and never toggles play and pause.
+- M16.3 The media surface no longer owns a tap timer (source scan).
 
 ## Finding 17: content switcher never animates
 
@@ -218,6 +351,19 @@ Modes: pending.
 - M28.4 At the 480 px minimum window the advanced dialog declares 432 and
   lays out without overflow; in a 320 px window the media info dialog declares
   the 280 px floor and lays out without overflow exceptions.
+
+## Finding 30: duplicated theme builders
+
+The light and dark themes come from one builder. Expected values are built in
+the test with the previous per-brightness logic and compared field by field.
+
+- M30.1 For blur off and blur on, the light `ThemeData` must equal the
+  previously produced one (colors, scaffold and canvas colors, divider, popup
+  menu, card, snack bar, density, Material 3, brightness) and its `WindowVisuals`
+  extension must match every color.
+- M30.2 The same equivalence for the dark `ThemeData` and its extension.
+- M30.3 With blur on, the card theme must be set and the scaffold background
+  transparent; with blur off, the card theme must stay unset.
 
 ## Finding 31: dead and constant members
 

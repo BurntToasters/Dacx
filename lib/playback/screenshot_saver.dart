@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/playable_source.dart';
@@ -29,7 +29,13 @@ class ScreenshotSaver {
     required this.resolveScope,
     required this.releaseScope,
     String Function()? defaultDirectory,
-  }) : _defaultDirectory = defaultDirectory ?? defaultScreenshotDirectory;
+  }) : _defaultDirectory =
+           defaultDirectory ??
+           defaultDirectoryOverride ??
+           defaultScreenshotDirectory;
+
+  @visibleForTesting
+  static String Function()? defaultDirectoryOverride;
 
   final Future<Uint8List?> Function(String mime) capture;
   final Future<({String path, String? token})> Function(String directory)

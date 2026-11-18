@@ -832,6 +832,12 @@ abstract class AppLocalizations {
   /// **'Could not open file. Try another file.'**
   String get snackFileLoadFailed;
 
+  /// One summary shown when several files in a batch fail to load.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file could not be opened} other{{count} files could not be opened}}'**
+  String snackLoadFailuresSummary(int count);
+
   /// No description provided for @snackQueueTruncated.
   ///
   /// In en, this message translates to:

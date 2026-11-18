@@ -437,6 +437,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snackFileLoadFailed => 'Could not open file. Try another file.';
 
   @override
+  String snackLoadFailuresSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files could not be opened',
+      one: '1 file could not be opened',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String snackQueueTruncated(int max, int count) {
     return 'Queue is full ($max items). Skipped $count file(s).';
   }

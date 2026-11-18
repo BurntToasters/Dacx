@@ -87,6 +87,12 @@ import '../widgets/advanced_playback_dialog.dart';
 import '../widgets/transport_controls.dart';
 import 'settings_screen.dart';
 
+final List<String> _enqueueAllowedExtensions = List<String>.unmodifiable(
+  <String>{
+    ...PlayerPathUtils.supportedExtensions,
+    ...M3uPlaylist.extensions,
+  }.toList()..sort(),
+);
 const _filePickerWindowsOptions = WindowsOptions(lockParentWindow: true);
 const _filePickerLinuxOptions = LinuxOptions(lockParentWindow: true);
 const _resumeSaveInterval = Duration(seconds: 5);
@@ -175,7 +181,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _isDisposed = false;
   bool _stopInProgress = false;
   Timer? _fullscreenChromeHideTimer;
-  Timer? _mediaSurfaceTapTimer;
+  final _scrollVolume = ScrollVolumeAccumulator();
   bool _fullscreenChromeVisible = true;
 
   // Tracks / chapters / OSD state
@@ -187,9 +193,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // Compact mini-player mode (PiP-style on desktop).
   bool _compactMode = false;
+  bool _compactToggleInFlight = false;
   Size? _preCompactSize;
   Offset? _preCompactPos;
-  bool _preCompactAlwaysOnTop = false;
   bool _preCompactMaximized = false;
   static const Size _compactWindowSize = Size(480, 320);
 
@@ -239,6 +245,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void _handleLoadValidationFailure({
     required SourceLoadValidationFailure failure,
     required Map<String, Object?> Function() detailsBuilder,
+    _LoadFailureBatch? batch,
   }) {
     final reaction = SourceLoadValidationPolicy.reactionFor(failure);
     if (reaction.logEvent.isNotEmpty) {
@@ -249,12 +256,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
     }
     if (reaction.shouldPruneRecentFiles) {
-      unawaited(_settings.pruneRecentFiles());
+      if (batch != null) {
+        batch.pruneRecents = true;
+      } else {
+        unawaited(_settings.pruneRecentFiles());
+      }
     }
     if (!mounted || reaction.userMessage == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_loadUserMessageText(reaction.userMessage!))),
-    );
+    final message = _loadUserMessageText(reaction.userMessage!);
+    if (batch != null) {
+      batch.add(message);
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _flushLoadFailureBatch(_LoadFailureBatch batch) {
+    if (batch.pruneRecents) {
+      unawaited(_settings.pruneRecentFiles());
+    }
+    if (!mounted || batch.count == 0) return;
+    final message = batch.count == 1
+        ? batch.firstMessage!
+        : AppLocalizations.of(context).snackLoadFailuresSummary(batch.count);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   bool get _headlessMedia =>
@@ -390,11 +417,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           final source = _player.currentSource;
           if (source != null) {
             unawaited(
-              _pushMediaSessionMetadata(
-                source,
-                duration: dur,
-                exportArt: false,
-              ),
+              _refreshMediaMetadata(source, duration: dur, exportArt: false),
             );
           }
         }
@@ -647,7 +670,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
               }
               final source = _player.currentSource;
               if (source != null && _settings.mediaSessionEnabled) {
-                unawaited(_pushMediaSessionMetadata(source));
+                unawaited(_refreshMediaMetadata(source));
               }
             })
             .catchError((Object e) {
@@ -691,7 +714,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
     _osdHideTimer?.cancel();
     _fullscreenChromeHideTimer?.cancel();
-    _mediaSurfaceTapTimer?.cancel();
     _resumeSaveTimer?.cancel();
     _updateCheckTimer?.cancel();
     _persistResumePosition();
@@ -1292,10 +1314,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // ── File handling ─────────────────────────────────────────
 
+  Future<String?> _existingLastOpenDirectory() async {
+    final stored = _settings.lastOpenDirectory;
+    if (stored == null) return null;
+    try {
+      return await PathProbe.directoryExists(stored) ? stored : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _openFile() async {
     _log('file_picker_open_requested');
     try {
-      final initialDirectory = _settings.lastOpenDirectory;
+      final initialDirectory = await _existingLastOpenDirectory();
       final file = await _pickWithFocusRestore(
         () => FilePicker.pickFile(
           type: FileType.any,
@@ -1366,11 +1398,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _openFolder({bool playNow = true}) async {
     _log('folder_picker_open_requested');
     try {
+      final initialDirectory = await _existingLastOpenDirectory();
       final folder = await _pickWithFocusRestore(
         () => FilePicker.getDirectoryPath(
           windowsOptions: _filePickerWindowsOptions,
           linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: _settings.lastOpenDirectory,
+          initialDirectory: initialDirectory,
         ),
       );
       if (folder == null || folder.trim().isEmpty) {
@@ -1494,13 +1527,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _openPlaylistPicker({bool playNow = true}) async {
     _log('playlist_picker_open_requested');
     try {
+      final initialDirectory = await _existingLastOpenDirectory();
       final file = await _pickWithFocusRestore(
         () => FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: M3uPlaylist.extensions.toList(),
           windowsOptions: _filePickerWindowsOptions,
           linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: _settings.lastOpenDirectory,
+          initialDirectory: initialDirectory,
         ),
       );
       final path = FilePickerPath.fromPlatformFilePath(file?.path);
@@ -1554,6 +1588,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final l10n = AppLocalizations.of(context);
     try {
       final content = M3uPlaylist.encode(_playlist.items);
+      final initialDirectory = await _existingLastOpenDirectory();
       final saved = await _pickWithFocusRestore(
         () => FilePicker.saveFile(
           dialogTitle: l10n.buttonSavePlaylist,
@@ -1564,7 +1599,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           bytes: Uint8List.fromList(utf8.encode(content)),
           windowsOptions: _filePickerWindowsOptions,
           linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: _settings.lastOpenDirectory,
+          initialDirectory: initialDirectory,
         ),
       );
       final path = FilePickerPath.fromSaveUri(saved);
@@ -1686,47 +1721,51 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
-  Future<void> _pushMediaSessionMetadata(
+  Future<void> _refreshMediaMetadata(
     PlayableSource source, {
     Duration? duration,
     bool exportArt = true,
     int? gen,
   }) async {
-    if (!_settings.mediaSessionEnabled || _isDisposed) return;
+    if (_isDisposed) return;
     if (gen != null && !_playback.isLoadCurrent(gen)) return;
+    final pushToSession = _settings.mediaSessionEnabled;
     String? artist;
     String? album;
     String? metaTitle;
     try {
       artist = await _playerService.getProperty('metadata/by-key/artist');
-      album = await _playerService.getProperty('metadata/by-key/album');
+      if (pushToSession) {
+        album = await _playerService.getProperty('metadata/by-key/album');
+      }
       metaTitle = await _playerService.getProperty('metadata/by-key/title');
     } catch (_) {
       // Metadata is best-effort; title falls back to display name.
     }
     if (gen != null && !_playback.isLoadCurrent(gen)) return;
+    final title = (metaTitle != null && metaTitle.trim().isNotEmpty)
+        ? metaTitle.trim()
+        : source.displayName;
+    final artistName = (artist != null && artist.trim().isNotEmpty)
+        ? artist.trim()
+        : null;
+    if (mounted) {
+      setState(() {
+        _mediaDisplayTitle = title;
+        _mediaDisplayArtist = artistName;
+      });
+    }
+    if (!pushToSession || !_settings.mediaSessionEnabled) return;
     String? artUri;
     if (exportArt && _player.hasAlbumArtTrack) {
       artUri = await _exportAlbumArtForMediaSession();
     } else if (!exportArt) {
       artUri = _lastMediaSessionArtUri;
     }
-    final title = (metaTitle != null && metaTitle.trim().isNotEmpty)
-        ? metaTitle.trim()
-        : source.displayName;
-    if (mounted) {
-      setState(() {
-        _mediaDisplayTitle = title;
-        _mediaDisplayArtist = (artist != null && artist.trim().isNotEmpty)
-            ? artist.trim()
-            : null;
-      });
-    }
+    if (gen != null && !_playback.isLoadCurrent(gen)) return;
     await _mediaSession.updateMetadata(
       title: title,
-      artist: (artist != null && artist.trim().isNotEmpty)
-          ? artist.trim()
-          : null,
+      artist: artistName,
       album: (album != null && album.trim().isNotEmpty) ? album.trim() : null,
       duration: duration ?? _player.duration,
       artUri: artUri,
@@ -1849,6 +1888,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     bool syncPlaylist = true,
     bool applyResume = true,
     bool? playOverride,
+    _LoadFailureBatch? failureBatch,
   }) async {
     if (_isDisposed) return false;
     final requestedValue = source.value.trim();
@@ -1871,6 +1911,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (!validation.isOk) {
       _handleLoadValidationFailure(
         failure: validation.failure,
+        batch: failureBatch,
         detailsBuilder: () => switch (validation.failure) {
           SourceLoadValidationFailure.invalidUrl => {'url': requestedValue},
           SourceLoadValidationFailure.missingFile => {'path': normalizedValue},
@@ -1934,6 +1975,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _playback.chapterGate.invalidate();
     setState(() {
       _player.beginSourceLoad(normalizedSource, ext);
+      _mediaDisplayTitle = null;
+      _mediaDisplayArtist = null;
     });
     await _advancedPlayback.setSource(normalizedSource);
     _log(
@@ -1979,15 +2022,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (!mounted) return false;
       setState(_player.clearSourceOnLoadFailure);
       unawaited(_seekPreviewService.setSource(null));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _loadUserMessageText(
-              SourceLoadFailurePolicy.userMessage(failureKind),
-            ),
-          ),
-        ),
+      final failureMessage = _loadUserMessageText(
+        SourceLoadFailurePolicy.userMessage(failureKind),
       );
+      if (failureBatch != null) {
+        failureBatch.add(failureMessage);
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(failureMessage)));
+      }
       return false;
     } finally {
       _player.fileOpenInProgress = false;
@@ -2065,7 +2108,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       await _maybeApplyResume(normalizedValue, gen: gen);
     }
     if (followUp.shouldUpdateMediaSessionMetadata) {
-      unawaited(_pushMediaSessionMetadata(normalizedSource, gen: gen));
+      unawaited(_refreshMediaMetadata(normalizedSource, gen: gen));
     }
     return true;
   }
@@ -2948,31 +2991,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                           refocusNativeWindow: false,
                                         );
                                         _revealFullscreenChrome();
-                                        _mediaSurfaceTapTimer?.cancel();
-                                        _mediaSurfaceTapTimer = Timer(
-                                          const Duration(milliseconds: 220),
-                                          () {
-                                            unawaited(
-                                              _playerService
-                                                  .playPause()
-                                                  .catchError((Object e) {
-                                                    _log(
-                                                      'media_surface_tap_play_pause_failed',
-                                                      category:
-                                                          DebugLogCategory.ui,
-                                                      message: e.toString(),
-                                                      severity:
-                                                          DebugSeverity.warn,
-                                                    );
-                                                  }),
-                                            );
-                                          },
+                                        unawaited(
+                                          _playerService.playPause().catchError(
+                                            (Object e) {
+                                              _log(
+                                                'media_surface_tap_play_pause_failed',
+                                                category: DebugLogCategory.ui,
+                                                message: e.toString(),
+                                                severity: DebugSeverity.warn,
+                                              );
+                                            },
+                                          ),
                                         );
                                       },
                                 onDoubleTap: _currentFile == null
                                     ? null
                                     : () {
-                                        _mediaSurfaceTapTimer?.cancel();
                                         _log(
                                           'media_surface_double_tap',
                                           category: DebugLogCategory.ui,
@@ -2993,11 +3027,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                       if (event is PointerScrollEvent &&
                                           _currentFile != null) {
                                         _revealFullscreenChrome();
-                                        if (event.scrollDelta.dy < 0) {
-                                          _adjustVolume(5);
-                                        } else if (event.scrollDelta.dy > 0) {
-                                          _adjustVolume(-5);
-                                        }
+                                        final step = _scrollVolume.add(
+                                          event.scrollDelta.dy,
+                                          event.timeStamp,
+                                        );
+                                        if (step != 0) _adjustVolume(step);
                                       }
                                     },
                                     child: Stack(
@@ -3934,6 +3968,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     try {
       final source = _player.currentSource;
       if (source == null) return;
+      final configuredDirectory = _settings.screenshotDir;
+      final customDirectory =
+          configuredDirectory != null &&
+              await PathProbe.directoryExists(configuredDirectory)
+          ? configuredDirectory
+          : null;
       final saver = ScreenshotSaver(
         capture: (mime) => _playerService.screenshot(format: mime),
         resolveScope: _resolveBookmarkScope,
@@ -3942,7 +3982,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final result = await saver.save(
         source: source,
         format: _settings.screenshotFormat,
-        customDirectory: _settings.screenshotDir,
+        customDirectory: customDirectory,
       );
       switch (result.outcome) {
         case ScreenshotSaveOutcome.noFrame:
@@ -4289,7 +4329,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           unawaited(_seekPreviewService.setSource(null));
           unawaited(_mediaSession.clear());
           if (!mounted || _isDisposed) return;
-          setState(_player.clearMediaSurface);
+          setState(() {
+            _player.clearMediaSurface();
+            _mediaDisplayTitle = null;
+            _mediaDisplayArtist = null;
+          });
         },
         onError: (Object e, StackTrace st) {
           _log(
@@ -4429,15 +4473,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         unawaited(
           _playback.loadQueue.enqueue(() async {
             var openedIndex = -1;
-            for (var i = 0; i < attemptLimit; i++) {
-              if (_isDisposed) return;
-              if (await _loadSourceInternal(
-                candidates[i],
-                syncPlaylist: false,
-              )) {
-                openedIndex = i;
-                break;
+            final failureBatch = candidates.length > 1
+                ? _LoadFailureBatch()
+                : null;
+            try {
+              for (var i = 0; i < attemptLimit; i++) {
+                if (_isDisposed) return;
+                if (await _loadSourceInternal(
+                  candidates[i],
+                  syncPlaylist: false,
+                  failureBatch: failureBatch,
+                )) {
+                  openedIndex = i;
+                  break;
+                }
               }
+            } finally {
+              if (failureBatch != null) _flushLoadFailureBatch(failureBatch);
             }
             if (openedIndex < 0 || _isDisposed) return;
             final dropped = _playlist.replaceSources(
@@ -4549,60 +4601,70 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _toggleCompactMode() async {
     if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) return;
-    final l10n = AppLocalizations.of(context);
-    if (_compactMode) {
-      // Restore window state.
-      try {
-        if (_preCompactMaximized) {
-          await windowManager.maximize();
-        } else {
-          if (_preCompactSize != null) {
-            await windowManager.setSize(_preCompactSize!);
+    if (_compactToggleInFlight) return;
+    _compactToggleInFlight = true;
+    try {
+      final l10n = AppLocalizations.of(context);
+      if (_compactMode) {
+        // Restore window state.
+        try {
+          if (_preCompactMaximized) {
+            await windowManager.maximize();
+          } else {
+            if (_preCompactSize != null) {
+              await windowManager.setSize(_preCompactSize!);
+            }
+            if (_preCompactPos != null) {
+              await windowManager.setPosition(_preCompactPos!);
+            }
           }
-          if (_preCompactPos != null) {
-            await windowManager.setPosition(_preCompactPos!);
-          }
+          await windowManager.setAlwaysOnTop(_settings.alwaysOnTop);
+        } catch (e) {
+          _log(
+            'compact_mode_restore_failed',
+            category: DebugLogCategory.ui,
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+          return;
         }
-        await windowManager.setAlwaysOnTop(_preCompactAlwaysOnTop);
-      } catch (e) {
-        _log(
-          'compact_mode_restore_failed',
-          category: DebugLogCategory.ui,
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
+        if (!mounted || _isDisposed) return;
+        setState(() => _compactMode = false);
+        _showOsdMessage(l10n.osdMiniPlayerOff);
+      } else {
+        try {
+          final size = await windowManager.getSize();
+          final position = await windowManager.getPosition();
+          final maximized = await windowManager.isMaximized();
+          if (await windowManager.isFullScreen()) {
+            await windowManager.setFullScreen(false);
+            if (mounted) {
+              _isFullscreen = false;
+            }
+          }
+          if (maximized) {
+            await windowManager.unmaximize();
+          }
+          await windowManager.setSize(_compactWindowSize);
+          await windowManager.setAlwaysOnTop(true);
+          _preCompactSize = size;
+          _preCompactPos = position;
+          _preCompactMaximized = maximized;
+        } catch (e) {
+          _log(
+            'compact_mode_enter_failed',
+            category: DebugLogCategory.ui,
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+          return;
+        }
+        if (!mounted || _isDisposed) return;
+        setState(() => _compactMode = true);
+        _showOsdMessage(l10n.osdMiniPlayerOn);
       }
-      if (!mounted || _isDisposed) return;
-      setState(() => _compactMode = false);
-      _showOsdMessage(l10n.osdMiniPlayerOff);
-    } else {
-      try {
-        _preCompactSize = await windowManager.getSize();
-        _preCompactPos = await windowManager.getPosition();
-        _preCompactAlwaysOnTop = _settings.alwaysOnTop;
-        _preCompactMaximized = await windowManager.isMaximized();
-        if (await windowManager.isFullScreen()) {
-          await windowManager.setFullScreen(false);
-          if (mounted) {
-            _isFullscreen = false;
-          }
-        }
-        if (_preCompactMaximized) {
-          await windowManager.unmaximize();
-        }
-        await windowManager.setSize(_compactWindowSize);
-        await windowManager.setAlwaysOnTop(true);
-      } catch (e) {
-        _log(
-          'compact_mode_enter_failed',
-          category: DebugLogCategory.ui,
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
-      }
-      if (!mounted || _isDisposed) return;
-      setState(() => _compactMode = true);
-      _showOsdMessage(l10n.osdMiniPlayerOn);
+    } finally {
+      _compactToggleInFlight = false;
     }
   }
 
@@ -5131,13 +5193,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _pickExternalAudio() async {
     final l10n = AppLocalizations.of(context);
     try {
+      final initialDirectory = await _existingLastOpenDirectory();
       final file = await _pickWithFocusRestore(
         () => FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: PlayerPathUtils.audioExtensions.toList()..sort(),
           windowsOptions: _filePickerWindowsOptions,
           linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: _settings.lastOpenDirectory,
+          initialDirectory: initialDirectory,
         ),
       );
       final path = FilePickerPath.fromPlatformFilePath(file?.path);
@@ -5172,6 +5235,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _pickExternalSubtitle() async {
     final l10n = AppLocalizations.of(context);
     try {
+      final initialDirectory = await _existingLastOpenDirectory();
       final file = await _pickWithFocusRestore(
         () => FilePicker.pickFile(
           type: FileType.custom,
@@ -5186,7 +5250,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           ],
           windowsOptions: _filePickerWindowsOptions,
           linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: _settings.lastOpenDirectory,
+          initialDirectory: initialDirectory,
         ),
       );
       final path = FilePickerPath.fromPlatformFilePath(file?.path);
@@ -5277,11 +5341,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _pickFilesToEnqueue() async {
     try {
+      final initialDirectory = await _existingLastOpenDirectory();
       final files = await _pickWithFocusRestore(
         () => FilePicker.pickFiles(
-          type: FileType.media,
+          type: FileType.custom,
+          allowedExtensions: _enqueueAllowedExtensions,
           windowsOptions: _filePickerWindowsOptions,
           linuxOptions: _filePickerLinuxOptions,
+          initialDirectory: initialDirectory,
         ),
       );
       final paths = files
@@ -5289,16 +5356,83 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           .whereType<String>()
           .toList(growable: false);
       if (paths.isEmpty) return;
+      final sources = <PlayableSource>[];
       for (final path in paths) {
         await _captureBookmarkFor(path);
+        if (M3uPlaylist.isPlaylistPath(path)) {
+          try {
+            sources.addAll(await M3uPlaylist.parseFile(path));
+          } catch (e) {
+            _log(
+              'enqueue_playlist_parse_failed',
+              message: e.toString(),
+              detailsBuilder: () => {'path': path},
+              severity: DebugSeverity.warn,
+            );
+          }
+        } else {
+          sources.add(PlayableSource.file(path));
+        }
       }
-      _enqueue(paths);
+      _rememberLastOpenDirectory(paths.first);
+      if (sources.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      _enqueueSources(sources);
+    } on PlatformException catch (e) {
+      _log(
+        'enqueue_picker_platform_exception',
+        message: e.message ?? e.code,
+        severity: DebugSeverity.error,
+      );
+      if (mounted) {
+        final rawDetail = e.message?.trim();
+        final detail = rawDetail == null || rawDetail.isEmpty
+            ? e.code
+            : rawDetail;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackFilePickerFailed(detail),
+            ),
+          ),
+        );
+      }
     } catch (e) {
       _log(
         'enqueue_picker_failed',
         message: e.toString(),
         severity: DebugSeverity.error,
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).snackUnableToOpenFilePicker,
+            ),
+          ),
+        );
+      }
     }
+  }
+}
+
+class _LoadFailureBatch {
+  int count = 0;
+  bool pruneRecents = false;
+  String? firstMessage;
+
+  void add(String message) {
+    count++;
+    firstMessage ??= message;
   }
 }

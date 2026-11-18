@@ -1,3 +1,40 @@
+final class ScrollVolumeAccumulator {
+  ScrollVolumeAccumulator({
+    this.notchPixels = 50.0,
+    this.idleReset = const Duration(milliseconds: 200),
+    this.step = 5.0,
+  });
+
+  final double notchPixels;
+  final Duration idleReset;
+  final double step;
+
+  double _accumulated = 0;
+  Duration? _lastEvent;
+
+  double add(double scrollDeltaY, Duration timestamp) {
+    if (scrollDeltaY == 0 || scrollDeltaY.isNaN) return 0;
+    final last = _lastEvent;
+    if (last != null && timestamp - last >= idleReset) {
+      _accumulated = 0;
+    }
+    if (_accumulated != 0 && (_accumulated < 0) != (scrollDeltaY < 0)) {
+      _accumulated = 0;
+    }
+    _lastEvent = timestamp;
+    _accumulated += scrollDeltaY;
+    if (_accumulated.abs() < notchPixels) return 0;
+    final up = _accumulated < 0;
+    _accumulated = 0;
+    return up ? step : -step;
+  }
+
+  void reset() {
+    _accumulated = 0;
+    _lastEvent = null;
+  }
+}
+
 /// Result of a mute toggle decision.
 class MuteToggleResult {
   const MuteToggleResult({
