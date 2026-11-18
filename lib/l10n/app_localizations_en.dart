@@ -510,6 +510,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionDismissTip => 'Got it';
 
   @override
+  String get emptyStateRecentTitle => 'Recent';
+
+  @override
   String get dropOverlayHint => 'Drop media files to play or enqueue';
 
   @override
@@ -666,6 +669,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get menuMixAllAudioTracks => 'Mix all audio tracks (Experimental)';
+
+  @override
+  String get menuTracks => 'Tracks';
 
   @override
   String get menuSleepTimer => 'Sleep timer';

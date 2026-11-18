@@ -8,18 +8,25 @@ class PlayerCenterPanel extends StatelessWidget {
     super.key,
     required this.children,
     this.maxWidth = 560,
+    this.outerPadding = const EdgeInsets.symmetric(
+      horizontal: 24,
+      vertical: 24,
+    ),
+    this.panelPadding = const EdgeInsets.fromLTRB(32, 34, 32, 38),
   });
 
   final List<Widget> children;
   final double maxWidth;
+  final EdgeInsets outerPadding;
+  final EdgeInsets panelPadding;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: outerPadding,
       child: GlassPanel(
         maxWidth: maxWidth,
-        padding: const EdgeInsets.fromLTRB(32, 34, 32, 38),
+        padding: panelPadding,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -36,21 +43,24 @@ class PlayerCenterIconSurface extends StatelessWidget {
     required this.icon,
     required this.size,
     required this.color,
+    this.diameter = 132,
   });
 
   final IconData icon;
   final double size;
   final Color color;
+  final double diameter;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final visuals = context.windowVisuals;
     final glass = visuals.isGlass;
+    final scale = diameter / 132;
 
     return Container(
-      width: 132,
-      height: 132,
+      width: diameter,
+      height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: glass
@@ -74,8 +84,8 @@ class PlayerCenterIconSurface extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Container(
-        width: 86,
-        height: 86,
+        width: 86 * scale,
+        height: 86 * scale,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: glass
@@ -96,7 +106,7 @@ class PlayerCenterIconSurface extends StatelessWidget {
           ),
         ),
         alignment: Alignment.center,
-        child: Icon(icon, size: size, color: color),
+        child: Icon(icon, size: size * scale, color: color),
       ),
     );
   }

@@ -928,6 +928,12 @@ abstract class AppLocalizations {
   /// **'Got it'**
   String get actionDismissTip;
 
+  /// No description provided for @emptyStateRecentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get emptyStateRecentTitle;
+
   /// No description provided for @dropOverlayHint.
   ///
   /// In en, this message translates to:
@@ -1227,6 +1233,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Mix all audio tracks (Experimental)'**
   String get menuMixAllAudioTracks;
+
+  /// No description provided for @menuTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get menuTracks;
 
   /// No description provided for @menuSleepTimer.
   ///
