@@ -82,56 +82,81 @@ class PlayerMoreMenuController {
     showTimedMessage(strings.snackSleepTimerSet(minutes));
   }
 
-  Future<void> showMoreMenu(BuildContext context) async {
-    final tracks = player.currentTracks;
-    final hasAudioOptions = tracks != null && tracks.audio.length > 1;
-    final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
-    if (player.chapters.isEmpty) await trackController.refreshChapters();
-    if (!context.mounted) return;
-    final hasChapters = player.chapters.isNotEmpty;
+  bool _menuOpen = false;
 
-    final result = await showPlayerMoreMenuSheet(
-      context: context,
-      hasAudioOptions: hasAudioOptions,
-      hasSubOptions: hasSubOptions,
-      hasChapters: hasChapters,
-      hasCurrentFile: hasCurrentFile,
-      compactMode: () => window.compactMode,
-      settings: settings,
-      sleepTimer: sleepTimer,
-      playlist: playlist(),
-      onSetShuffle: transport.setShuffle,
-    );
-    if (!context.mounted) return;
-    dispatchPlayerMoreMenuResult(
-      result,
-      PlayerMoreMenuActions(
-        onOpenUrl: () => unawaited(open.openUrl()),
-        onAudioTracks: () => unawaited(showAudioTracksDialog(context)),
-        onSubtitleTracks: () => unawaited(showSubtitleTracksDialog(context)),
-        onExternalAudio: () => unawaited(trackController.pickExternalAudio()),
-        onExternalSubtitle: () =>
-            unawaited(trackController.pickExternalSubtitle()),
-        onChapters: () => unawaited(showChaptersDialog(context)),
-        onEqualizer: () => unawaited(
-          showEqualizerDialog(
-            context: context,
-            settings: settings,
-            onApply: trackController.applyEqualizer,
+  Future<void> showMoreMenu(BuildContext context, {Rect? anchor}) async {
+    if (_menuOpen) return;
+    _menuOpen = true;
+    try {
+      final tracks = player.currentTracks;
+      final hasAudioOptions = tracks != null && tracks.audio.length > 1;
+      final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
+      final hasChapters = ValueNotifier<bool>(player.chapters.isNotEmpty);
+      var closed = false;
+      if (player.chapters.isEmpty) {
+        unawaited(
+          trackController
+              .refreshChapters()
+              .then((_) {
+                if (closed) return;
+                hasChapters.value = player.chapters.isNotEmpty;
+              })
+              .catchError((Object _) {}),
+        );
+      }
+
+      final String? result;
+      try {
+        result = await showPlayerMoreMenu(
+          context: context,
+          hasAudioOptions: hasAudioOptions,
+          hasSubOptions: hasSubOptions,
+          hasChapters: hasChapters,
+          hasCurrentFile: hasCurrentFile,
+          compactMode: () => window.compactMode,
+          settings: settings,
+          sleepTimer: sleepTimer,
+          playlist: playlist(),
+          onSetShuffle: transport.setShuffle,
+          anchor: anchor,
+        );
+      } finally {
+        closed = true;
+      }
+      if (!context.mounted) return;
+      dispatchPlayerMoreMenuResult(
+        result,
+        PlayerMoreMenuActions(
+          onOpenUrl: () => unawaited(open.openUrl()),
+          onAudioTracks: () => unawaited(showAudioTracksDialog(context)),
+          onSubtitleTracks: () => unawaited(showSubtitleTracksDialog(context)),
+          onExternalAudio: () => unawaited(trackController.pickExternalAudio()),
+          onExternalSubtitle: () =>
+              unawaited(trackController.pickExternalSubtitle()),
+          onChapters: () => unawaited(showChaptersDialog(context)),
+          onEqualizer: () => unawaited(
+            showEqualizerDialog(
+              context: context,
+              settings: settings,
+              onApply: trackController.applyEqualizer,
+            ),
           ),
+          onAdvancedPlayback: () =>
+              unawaited(showAdvancedPlaybackDialog(context)),
+          onScreenshot: () => unawaited(screenshot.take()),
+          onSleepTimer: setSleepTimerMinutes,
+          onKeybinds: () => unawaited(
+            showKeybindsDialog(context: context, settings: settings),
+          ),
+          onQueue: openQueueDrawer,
+          onEnqueue: () => unawaited(open.pickFilesToEnqueue()),
+          onSetShuffle: transport.setShuffle,
+          onCompact: () => unawaited(window.toggleCompactMode()),
         ),
-        onAdvancedPlayback: () =>
-            unawaited(showAdvancedPlaybackDialog(context)),
-        onScreenshot: () => unawaited(screenshot.take()),
-        onSleepTimer: setSleepTimerMinutes,
-        onKeybinds: () =>
-            unawaited(showKeybindsDialog(context: context, settings: settings)),
-        onQueue: openQueueDrawer,
-        onEnqueue: () => unawaited(open.pickFilesToEnqueue()),
-        onSetShuffle: transport.setShuffle,
-        onCompact: () => unawaited(window.toggleCompactMode()),
-      ),
-    );
+      );
+    } finally {
+      _menuOpen = false;
+    }
   }
 
   Future<void> showAdvancedPlaybackDialog(BuildContext context) async {

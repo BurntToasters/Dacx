@@ -1,13 +1,22 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../playback/player_controller.dart';
 import '../../../playback/playback_mix_policy.dart';
 import '../../../playback/sleep_timer_controller.dart';
+import '../../../services/player_shortcuts_service.dart';
 import '../../../services/playlist_service.dart';
 import '../../../services/settings_service.dart';
 
-const _sheetTransitionDuration = Duration(milliseconds: 180);
+const double _menuWidth = 280;
+const double _fallbackRightMargin = 12;
+const double _fallbackBottomMargin = 64;
 
 class PlayerMoreMenuActions {
   const PlayerMoreMenuActions({
@@ -45,365 +54,462 @@ class PlayerMoreMenuActions {
   final VoidCallback onCompact;
 }
 
-Widget _menuItem(
-  BuildContext ctx,
-  ColorScheme cs, {
-  required IconData icon,
-  required String label,
-  required String action,
-  Widget? trailing,
-  Key? key,
-}) {
-  return InkWell(
-    key: key,
-    onTap: () => Navigator.pop(ctx, action),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: cs.onSurface),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
-          ?trailing,
-        ],
-      ),
-    ),
-  );
+Rect? globalRectOfContext(BuildContext context) {
+  final box = context.findRenderObject();
+  if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+  return box.localToGlobal(Offset.zero) & box.size;
 }
 
-Widget _menuSwitchItem(
-  BuildContext ctx, {
-  required IconData icon,
-  required String label,
-  required bool value,
-  required ValueChanged<bool> onChanged,
-  bool experimental = false,
-}) {
-  final cs = Theme.of(ctx).colorScheme;
-  final isDark = Theme.of(ctx).brightness == Brightness.dark;
-  final experimentalAmber = Color.lerp(cs.tertiary, Colors.amber, 0.72)!;
-  final experimentalBackground = Color.alphaBlend(
-    experimentalAmber.withValues(alpha: isDark ? 0.16 : 0.11),
-    cs.surface,
-  );
-  final experimentalBorder = experimentalAmber.withValues(
-    alpha: isDark ? 0.45 : 0.36,
-  );
-  final experimentalIcon = Color.lerp(
-    experimentalAmber,
-    isDark ? Colors.amber.shade200 : Colors.amber.shade700,
-    0.22,
-  )!;
-  final child = InkWell(
-    onTap: () => onChanged(!value),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: experimental ? experimentalIcon : cs.onSurface,
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
-          Transform.scale(
-            scale: 0.75,
-            child: Switch(value: value, onChanged: onChanged),
-          ),
-        ],
-      ),
-    ),
-  );
-  if (!experimental) return child;
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: experimentalBackground,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: experimentalBorder),
-      ),
-      child: child,
-    ),
-  );
+class _MoreMenuConfig {
+  const _MoreMenuConfig({
+    required this.hasAudioOptions,
+    required this.hasSubOptions,
+    required this.hasChapters,
+    required this.hasCurrentFile,
+    required this.compactMode,
+    required this.settings,
+    required this.sleepTimer,
+    required this.playlist,
+    required this.onSetShuffle,
+  });
+
+  final bool hasAudioOptions;
+  final bool hasSubOptions;
+  final ValueListenable<bool> hasChapters;
+  final bool Function() hasCurrentFile;
+  final bool Function() compactMode;
+  final SettingsService settings;
+  final SleepTimerController sleepTimer;
+  final PlaylistService playlist;
+  final ValueChanged<bool> onSetShuffle;
 }
 
-Future<String?> showPlayerMoreMenuSheet({
+Future<String?> showPlayerMoreMenu({
   required BuildContext context,
   required bool hasAudioOptions,
   required bool hasSubOptions,
-  required bool hasChapters,
+  required ValueListenable<bool> hasChapters,
   required bool Function() hasCurrentFile,
   required bool Function() compactMode,
   required SettingsService settings,
   required SleepTimerController sleepTimer,
   required PlaylistService playlist,
   required ValueChanged<bool> onSetShuffle,
+  Rect? anchor,
 }) {
-  final l10n = AppLocalizations.of(context);
+  final overlay = Overlay.of(context);
+  final completer = Completer<String?>();
+  Rect? localAnchor;
+  if (anchor != null) {
+    final overlayBox = overlay.context.findRenderObject();
+    localAnchor = overlayBox is RenderBox && overlayBox.attached
+        ? overlayBox.globalToLocal(anchor.topLeft) & anchor.size
+        : anchor;
+  }
+  late final OverlayEntry entry;
+  var finished = false;
+  void finish(String? result) {
+    if (finished) return;
+    finished = true;
+    completer.complete(result);
+    scheduleMicrotask(() {
+      if (entry.mounted) entry.remove();
+    });
+  }
 
-  return showGeneralDialog<String>(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: AppLocalizations.of(context).dismissBarrierLabel,
-    barrierColor: Colors.black.withValues(alpha: 0.20),
-    transitionDuration: _sheetTransitionDuration,
-    pageBuilder: (ctx, _, _) {
-      final cs = Theme.of(ctx).colorScheme;
-      var sleepExpanded = false;
-      Widget item({
-        required IconData icon,
-        required String label,
-        required String action,
-        Widget? trailing,
-        Key? key,
-      }) {
-        return _menuItem(
-          ctx,
-          cs,
-          icon: icon,
-          label: label,
-          action: action,
-          trailing: trailing,
-          key: key,
-        );
-      }
+  final config = _MoreMenuConfig(
+    hasAudioOptions: hasAudioOptions,
+    hasSubOptions: hasSubOptions,
+    hasChapters: hasChapters,
+    hasCurrentFile: hasCurrentFile,
+    compactMode: compactMode,
+    settings: settings,
+    sleepTimer: sleepTimer,
+    playlist: playlist,
+    onSetShuffle: onSetShuffle,
+  );
+  entry = OverlayEntry(
+    builder: (_) => _PlayerMoreMenuHost(
+      config: config,
+      anchor: localAnchor,
+      onDone: finish,
+    ),
+  );
+  overlay.insert(entry);
+  return completer.future;
+}
 
-      Widget switchItem({
-        required IconData icon,
-        required String label,
-        required bool value,
-        required ValueChanged<bool> onChanged,
-        bool experimental = false,
-      }) {
-        return _menuSwitchItem(
-          ctx,
-          icon: icon,
-          label: label,
-          value: value,
-          onChanged: onChanged,
-          experimental: experimental,
-        );
-      }
+class _PlayerMoreMenuHost extends StatefulWidget {
+  const _PlayerMoreMenuHost({
+    required this.config,
+    required this.anchor,
+    required this.onDone,
+  });
 
-      // Build the menu items as a compact, right-aligned vertical panel.
-      return Align(
-        alignment: Alignment.bottomRight,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 12, bottom: 64),
-          child: Material(
-            color: cs.surface.withValues(alpha: 0.97),
-            elevation: 12,
-            borderRadius: BorderRadius.circular(10),
-            clipBehavior: Clip.antiAlias,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: 240,
-                maxWidth: 280,
-                maxHeight: 520,
-              ),
-              child: StatefulBuilder(
-                builder: (ctx, setSheetState) {
-                  return SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        item(
-                          icon: Icons.link,
-                          label: l10n.buttonOpenUrl,
-                          action: 'open_url',
-                        ),
-                        const Divider(height: 1),
-                        if (hasAudioOptions)
-                          item(
-                            icon: Icons.audiotrack,
-                            label: l10n.dialogAudioTrackTitle,
-                            action: 'audio',
-                          ),
-                        if (hasSubOptions)
-                          item(
-                            icon: Icons.subtitles,
-                            label: l10n.dialogSubtitleTrackTitle,
-                            action: 'subtitle',
-                          ),
-                        if (hasCurrentFile())
-                          item(
-                            icon: Icons.audio_file,
-                            label: l10n.menuLoadExternalAudio,
-                            action: 'external_audio',
-                          ),
-                        if (hasCurrentFile())
-                          item(
-                            icon: Icons.subtitles_outlined,
-                            label: l10n.menuLoadExternalSubtitle,
-                            action: 'external_subtitle',
-                          ),
-                        if (hasChapters)
-                          item(
-                            icon: Icons.menu_book,
-                            label: l10n.dialogChaptersTitle,
-                            action: 'chapters',
-                          ),
-                        item(
-                          icon: Icons.graphic_eq,
-                          label: l10n.dialogEqualizerTitle,
-                          action: 'equalizer',
-                        ),
-                        if (settings.advancedPlaybackToolsEnabled)
-                          item(
-                            key: const ValueKey('advanced-playback-entry'),
-                            icon: Icons.tune,
-                            label: l10n.menuAdvancedPlayback,
-                            action: 'advanced-playback',
-                          ),
-                        if (hasCurrentFile())
-                          item(
-                            icon: Icons.photo_camera,
-                            label: l10n.menuTakeScreenshot,
-                            action: 'screenshot',
-                          ),
-                        const Divider(height: 1),
-                        ListenableBuilder(
-                          listenable: sleepTimer,
-                          builder: (context, _) {
-                            final remaining = sleepTimer.remaining;
-                            final sleepLabel = remaining == null
-                                ? l10n.menuSleepTimer
-                                : '${l10n.menuSleepTimer} (${PlayerController.formatDuration(remaining)})';
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                InkWell(
-                                  onTap: () => setSheetState(() {
-                                    sleepExpanded = !sleepExpanded;
-                                  }),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.bedtime_outlined,
-                                          size: 18,
-                                          color: cs.onSurface,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            sleepLabel,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-                                        Icon(
-                                          sleepExpanded
-                                              ? Icons.expand_less
-                                              : Icons.expand_more,
-                                          size: 18,
-                                          color: cs.onSurface,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                if (sleepExpanded) ...[
-                                  item(
-                                    icon: Icons.timer_off_outlined,
-                                    label: l10n.menuSleepTimerOff,
-                                    action: 'sleep_off',
-                                  ),
-                                  for (final minutes
-                                      in SleepTimerController.presetMinutes)
-                                    item(
-                                      icon: Icons.timer_outlined,
-                                      label: l10n.menuSleepTimerMinutes(
-                                        minutes,
-                                      ),
-                                      action: 'sleep_$minutes',
-                                    ),
-                                ],
-                              ],
-                            );
-                          },
-                        ),
-                        const Divider(height: 1),
-                        if (hasAudioOptions &&
-                            PlaybackMixPolicy.userFacingEnabled &&
-                            settings.experimentalFeaturesEnabled)
-                          switchItem(
-                            icon: Icons.multitrack_audio,
-                            label: l10n.menuMixAllAudioTracks,
-                            value: settings.multiAudioMix,
-                            experimental: true,
-                            onChanged: (v) {
-                              settings.multiAudioMix = v;
-                              setSheetState(() {});
-                            },
-                          ),
-                        item(
-                          icon: Icons.keyboard,
-                          label: l10n.dialogKeyboardShortcutsTitle,
-                          action: 'keybinds',
-                        ),
-                        const Divider(height: 1),
-                        item(
-                          icon: Icons.queue_music,
-                          label: playlist.isEmpty
-                              ? l10n.menuQueueEmpty
-                              : l10n.menuQueueCount(playlist.length),
-                          action: 'queue',
-                        ),
-                        item(
-                          icon: Icons.playlist_add,
-                          label: l10n.menuAddFilesToQueue,
-                          action: 'enqueue',
-                        ),
-                        switchItem(
-                          icon: Icons.shuffle,
-                          label: l10n.menuShuffleQueue,
-                          value: settings.playlistShuffle,
-                          onChanged: (v) {
-                            onSetShuffle(v);
-                            setSheetState(() {});
-                          },
-                        ),
-                        switchItem(
-                          icon: Icons.picture_in_picture_alt,
-                          label: l10n.menuMiniPlayer,
-                          value: compactMode(),
-                          onChanged: (_) => Navigator.pop(ctx, 'compact'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+  final _MoreMenuConfig config;
+  final Rect? anchor;
+  final ValueChanged<String?> onDone;
+
+  @override
+  State<_PlayerMoreMenuHost> createState() => _PlayerMoreMenuHostState();
+}
+
+class _PlayerMoreMenuHostState extends State<_PlayerMoreMenuHost> {
+  final MenuController _controller = MenuController();
+  final FocusNode _firstItemFocus = FocusNode(debugLabel: 'player-more-first');
+  final FocusNode _hostFocus = FocusNode(debugLabel: 'player-more-host');
+  String? _result;
+
+  _MoreMenuConfig get _config => widget.config;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _controller.open();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _hostFocus.requestFocus();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.onDone(null);
+    _firstItemFocus.dispose();
+    _hostFocus.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleHostKey(FocusNode node, KeyEvent event) {
+    if (!node.hasPrimaryFocus || event is KeyUpEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp) {
+      _firstItemFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      _controller.close();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _handleClose() {
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      binding.addPostFrameCallback((_) => widget.onDone(_result));
+      binding.scheduleFrame();
+    });
+  }
+
+  String? _shortcutHint(PlayerShortcutAction action) {
+    final bound =
+        _config.settings.keybinds[action.name] ??
+        defaultKeybinds[action] ??
+        const <String>[];
+    if (bound.isEmpty) return null;
+    return PlayerShortcutsService.formatAcceleratorForDisplay(
+      PlayerShortcutsService.normalizeAccelerator(bound.first),
+      useMacSymbols: Platform.isMacOS,
+    );
+  }
+
+  Widget _icon(IconData icon) => Icon(icon, size: 18);
+
+  Widget _item({
+    required IconData icon,
+    required String label,
+    required String action,
+    PlayerShortcutAction? shortcut,
+    Key? key,
+    FocusNode? focusNode,
+  }) {
+    final hint = shortcut == null ? null : _shortcutHint(shortcut);
+    return MenuItemButton(
+      key: key,
+      focusNode: focusNode,
+      leadingIcon: _icon(icon),
+      trailingIcon: hint == null ? null : _hintText(hint),
+      onPressed: () => _result = action,
+      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+  }
+
+  Widget _hintText(String hint) {
+    final theme = Theme.of(context);
+    return Text(
+      hint,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  Widget _switchItem({
+    required IconData icon,
+    required String label,
+    required bool value,
+    required VoidCallback onPressed,
+    PlayerShortcutAction? shortcut,
+    bool closeOnActivate = false,
+    bool experimental = false,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final iconColor = experimental
+        ? Color.lerp(cs.tertiary, Colors.amber, 0.72)
+        : null;
+    final hint = shortcut == null ? null : _shortcutHint(shortcut);
+    return MenuItemButton(
+      closeOnActivate: closeOnActivate,
+      leadingIcon: Icon(icon, size: 18, color: iconColor),
+      trailingIcon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hint != null) _hintText(hint),
+          ExcludeFocus(
+            child: IgnorePointer(
+              child: Transform.scale(
+                scale: 0.75,
+                child: Switch(
+                  value: value,
+                  onChanged: (_) {},
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
             ),
           ),
+        ],
+      ),
+      onPressed: onPressed,
+      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+  }
+
+  Widget _tracksSubmenu(AppLocalizations l10n) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _config.hasChapters,
+      builder: (context, hasChapters, _) {
+        final children = <Widget>[
+          if (_config.hasAudioOptions)
+            _item(
+              icon: Icons.audiotrack,
+              label: l10n.dialogAudioTrackTitle,
+              action: 'audio',
+            ),
+          if (_config.hasSubOptions)
+            _item(
+              icon: Icons.subtitles,
+              label: l10n.dialogSubtitleTrackTitle,
+              action: 'subtitle',
+            ),
+          if (hasChapters)
+            _item(
+              icon: Icons.menu_book,
+              label: l10n.dialogChaptersTitle,
+              action: 'chapters',
+            ),
+        ];
+        if (children.isEmpty) return const SizedBox.shrink();
+        return SubmenuButton(
+          leadingIcon: _icon(Icons.audiotrack),
+          menuChildren: children,
+          child: Text(l10n.menuTracks),
+        );
+      },
+    );
+  }
+
+  Widget _sleepSubmenu(AppLocalizations l10n) {
+    return ListenableBuilder(
+      listenable: _config.sleepTimer,
+      builder: (context, _) {
+        final remaining = _config.sleepTimer.remaining;
+        final label = remaining == null
+            ? l10n.menuSleepTimer
+            : '${l10n.menuSleepTimer} (${PlayerController.formatDuration(remaining)})';
+        return SubmenuButton(
+          leadingIcon: _icon(Icons.bedtime_outlined),
+          menuChildren: [
+            if (_config.sleepTimer.isActive)
+              _item(
+                icon: Icons.timer_off_outlined,
+                label: l10n.menuSleepTimerOff,
+                action: 'sleep_off',
+              ),
+            for (final minutes in SleepTimerController.presetMinutes)
+              _item(
+                icon: Icons.timer_outlined,
+                label: l10n.menuSleepTimerMinutes(minutes),
+                action: 'sleep_$minutes',
+              ),
+          ],
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        );
+      },
+    );
+  }
+
+  List<Widget> _menuChildren() {
+    final l10n = AppLocalizations.of(context);
+    final settings = _config.settings;
+    final hasFile = _config.hasCurrentFile();
+    return [
+      _item(
+        icon: Icons.link,
+        label: l10n.buttonOpenUrl,
+        action: 'open_url',
+        shortcut: PlayerShortcutAction.openUrl,
+        focusNode: _firstItemFocus,
+      ),
+      _tracksSubmenu(l10n),
+      if (hasFile)
+        _item(
+          icon: Icons.audio_file,
+          label: l10n.menuLoadExternalAudio,
+          action: 'external_audio',
         ),
-      );
-    },
-    transitionBuilder: (ctx, anim, _, child) {
-      final curved = CurvedAnimation(
-        parent: anim,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0.15, 0),
-          end: Offset.zero,
-        ).animate(curved),
-        child: FadeTransition(opacity: curved, child: child),
-      );
-    },
-  );
+      if (hasFile)
+        _item(
+          icon: Icons.subtitles_outlined,
+          label: l10n.menuLoadExternalSubtitle,
+          action: 'external_subtitle',
+        ),
+      _item(
+        icon: Icons.graphic_eq,
+        label: l10n.dialogEqualizerTitle,
+        action: 'equalizer',
+      ),
+      if (settings.advancedPlaybackToolsEnabled)
+        _item(
+          key: const ValueKey('advanced-playback-entry'),
+          icon: Icons.tune,
+          label: l10n.menuAdvancedPlayback,
+          action: 'advanced-playback',
+        ),
+      if (hasFile)
+        _item(
+          icon: Icons.photo_camera,
+          label: l10n.menuTakeScreenshot,
+          action: 'screenshot',
+          shortcut: PlayerShortcutAction.screenshot,
+        ),
+      const Divider(height: 1),
+      _sleepSubmenu(l10n),
+      const Divider(height: 1),
+      if (_config.hasAudioOptions &&
+          PlaybackMixPolicy.userFacingEnabled &&
+          settings.experimentalFeaturesEnabled)
+        _switchItem(
+          icon: Icons.multitrack_audio,
+          label: l10n.menuMixAllAudioTracks,
+          value: settings.multiAudioMix,
+          experimental: true,
+          onPressed: () {
+            settings.multiAudioMix = !settings.multiAudioMix;
+            setState(() {});
+          },
+        ),
+      _item(
+        icon: Icons.keyboard,
+        label: l10n.dialogKeyboardShortcutsTitle,
+        action: 'keybinds',
+      ),
+      const Divider(height: 1),
+      _item(
+        icon: Icons.queue_music,
+        label: _config.playlist.isEmpty
+            ? l10n.menuQueueEmpty
+            : l10n.menuQueueCount(_config.playlist.length),
+        action: 'queue',
+      ),
+      _item(
+        icon: Icons.playlist_add,
+        label: l10n.menuAddFilesToQueue,
+        action: 'enqueue',
+      ),
+      _switchItem(
+        icon: Icons.shuffle,
+        label: l10n.menuShuffleQueue,
+        value: settings.playlistShuffle,
+        onPressed: () {
+          _config.onSetShuffle(!settings.playlistShuffle);
+          setState(() {});
+        },
+      ),
+      _switchItem(
+        icon: Icons.picture_in_picture_alt,
+        label: l10n.menuMiniPlayer,
+        value: _config.compactMode(),
+        closeOnActivate: true,
+        shortcut: PlayerShortcutAction.toggleCompactMode,
+        onPressed: () => _result = 'compact',
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounds = constraints.biggest;
+        final anchor =
+            widget.anchor ??
+            Rect.fromLTWH(
+              bounds.width - _fallbackRightMargin,
+              bounds.height - _fallbackBottomMargin,
+              0,
+              0,
+            );
+        final left = math.max(
+          0.0,
+          math.min(anchor.right - _menuWidth, bounds.width - _menuWidth),
+        );
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: anchor.top,
+              width: _menuWidth,
+              height: anchor.height,
+              child: MenuButtonTheme(
+                data: const MenuButtonThemeData(
+                  style: ButtonStyle(visualDensity: VisualDensity.compact),
+                ),
+                child: Focus(
+                  focusNode: _hostFocus,
+                  onKeyEvent: _handleHostKey,
+                  child: MenuAnchor(
+                    controller: _controller,
+                    consumeOutsideTap: true,
+                    onClose: _handleClose,
+                    style: const MenuStyle(
+                      alignment: AlignmentDirectional.bottomStart,
+                      minimumSize: WidgetStatePropertyAll(Size(_menuWidth, 0)),
+                      maximumSize: WidgetStatePropertyAll(
+                        Size(_menuWidth, double.infinity),
+                      ),
+                    ),
+                    menuChildren: [
+                      for (final child in _menuChildren())
+                        child is Divider
+                            ? child
+                            : SizedBox(width: _menuWidth, child: child),
+                    ],
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 void dispatchPlayerMoreMenuResult(
@@ -441,18 +547,6 @@ void dispatchPlayerMoreMenuResult(
     case 'sleep_off':
       actions.onSleepTimer(null);
       break;
-    case 'sleep_15':
-      actions.onSleepTimer(15);
-      break;
-    case 'sleep_30':
-      actions.onSleepTimer(30);
-      break;
-    case 'sleep_45':
-      actions.onSleepTimer(45);
-      break;
-    case 'sleep_60':
-      actions.onSleepTimer(60);
-      break;
     case 'keybinds':
       actions.onKeybinds();
       break;
@@ -468,5 +562,13 @@ void dispatchPlayerMoreMenuResult(
     case 'compact':
       actions.onCompact();
       break;
+    default:
+      final minutes = result != null && result.startsWith('sleep_')
+          ? int.tryParse(result.substring('sleep_'.length))
+          : null;
+      if (minutes != null &&
+          SleepTimerController.presetMinutes.contains(minutes)) {
+        actions.onSleepTimer(minutes);
+      }
   }
 }
