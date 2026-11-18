@@ -65,7 +65,7 @@ class PlayerBottomDock extends StatelessWidget {
   final ValueChanged<LoopMode> onLoopModeChanged;
   final ValueChanged<String> onRecentFileSelected;
   final VoidCallback onSettingsPressed;
-  final VoidCallback onMoreActions;
+  final ValueChanged<Rect> onMoreActions;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onToggleQueue;

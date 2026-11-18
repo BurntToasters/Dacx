@@ -21,6 +21,9 @@ class MediaSurface extends StatelessWidget {
     required this.videoController,
     required this.mediaDisplayTitle,
     required this.mediaDisplayArtist,
+    required this.mediaDisplayAlbum,
+    required this.recentFiles,
+    required this.onOpenRecent,
     required this.compactMode,
     required this.isFullscreen,
     required this.fullscreenChromeVisible,
@@ -43,6 +46,9 @@ class MediaSurface extends StatelessWidget {
   final VideoController? videoController;
   final String? mediaDisplayTitle;
   final String? mediaDisplayArtist;
+  final String? mediaDisplayAlbum;
+  final List<String> recentFiles;
+  final ValueChanged<String> onOpenRecent;
   final bool compactMode;
   final bool isFullscreen;
   final bool fullscreenChromeVisible;
@@ -70,6 +76,8 @@ class MediaSurface extends StatelessWidget {
           onOpenPlaylist: onOpenPlaylist,
           onOpenUrl: onOpenUrl,
           onReopenLast: onReopenLast,
+          recentFiles: recentFiles,
+          onOpenRecent: onOpenRecent,
         ),
       );
     }
@@ -83,6 +91,7 @@ class MediaSurface extends StatelessWidget {
           source: player.currentSource,
           mediaDisplayTitle: mediaDisplayTitle,
           mediaDisplayArtist: mediaDisplayArtist,
+          album: mediaDisplayAlbum,
           videoController: videoController,
         ),
       );

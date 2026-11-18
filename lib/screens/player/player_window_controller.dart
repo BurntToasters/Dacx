@@ -27,7 +27,6 @@ class PlayerWindowController extends ChangeNotifier {
 
   static const Size compactWindowSize = Size(480, 320);
   static const Duration fullscreenChromeIdleDelay = Duration(seconds: 3);
-  static const Duration _chromeHoldRecheckDelay = Duration(milliseconds: 250);
 
   final bool Function() isMounted;
   final bool Function() isDisposed;
@@ -40,6 +39,7 @@ class PlayerWindowController extends ChangeNotifier {
   Timer? _fullscreenChromeHideTimer;
   bool _pointerOverChrome = false;
   int _pointersDownInChrome = 0;
+  bool _waitingForHoldRelease = false;
   bool _fullscreenToggleInFlight = false;
   bool _isFullscreen = false;
   bool _fullscreenChromeVisible = true;
@@ -71,6 +71,7 @@ class PlayerWindowController extends ChangeNotifier {
 
   void setPointerOverChrome(bool over) {
     _pointerOverChrome = over;
+    if (!over) onChromeHoldsChanged();
   }
 
   void pointerDownInChrome() {
@@ -79,30 +80,28 @@ class PlayerWindowController extends ChangeNotifier {
 
   void pointerUpInChrome() {
     if (_pointersDownInChrome > 0) _pointersDownInChrome--;
+    onChromeHoldsChanged();
+  }
+
+  void onChromeHoldsChanged() {
+    if (!_waitingForHoldRelease || _chromeHeld) return;
+    _scheduleFullscreenChromeHide();
   }
 
   void _resetChromeHolds() {
     _pointerOverChrome = false;
     _pointersDownInChrome = 0;
+    _waitingForHoldRelease = false;
   }
 
-  void _scheduleFullscreenChromeHide({
-    Duration delay = fullscreenChromeIdleDelay,
-    bool afterHold = false,
-  }) {
+  void _scheduleFullscreenChromeHide() {
     _fullscreenChromeHideTimer?.cancel();
+    _waitingForHoldRelease = false;
     if (!_isFullscreen) return;
-    _fullscreenChromeHideTimer = Timer(delay, () {
+    _fullscreenChromeHideTimer = Timer(fullscreenChromeIdleDelay, () {
       if (!isMounted() || isDisposed() || !_isFullscreen) return;
       if (_chromeHeld) {
-        _scheduleFullscreenChromeHide(
-          delay: _chromeHoldRecheckDelay,
-          afterHold: true,
-        );
-        return;
-      }
-      if (afterHold) {
-        _scheduleFullscreenChromeHide();
+        _waitingForHoldRelease = true;
         return;
       }
       _fullscreenChromeVisible = false;

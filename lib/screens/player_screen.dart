@@ -301,10 +301,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     ),
     onCompactModeChanged: _onCompactModeChanged,
     shouldHoldChrome: () =>
-        !_player.isPlaying ||
-        (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) ||
-        !_playerRouteIsCurrent(),
+        !_player.isPlaying || _endDrawerOpen || !_playerRouteIsCurrent(),
   );
+
+  bool _endDrawerOpen = false;
 
   // Resume-position bookkeeping.
   Timer? _resumeSaveTimer;
@@ -490,7 +490,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           unawaited(packagedProbe.recordPlaying(playing));
         }
         setState(() => _player.isPlaying = playing);
-        if (!playing) _window.revealFullscreenChrome();
+        if (playing) {
+          _window.onChromeHoldsChanged();
+        } else {
+          _window.revealFullscreenChrome();
+        }
         // Save on pause: the periodic saver only runs while playing, so a
         // pause (and any seek after it) would otherwise not be stored.
         if (!playing && !_player.fileOpenInProgress) {
@@ -845,6 +849,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     return route == null || route.isCurrent;
   }
 
+  void _onEndDrawerChanged(bool isOpen) {
+    _endDrawerOpen = isOpen;
+    _window.onChromeHoldsChanged();
+  }
+
   @override
   void onWindowFocus() {
     _shortcuts.restoreFocus(refocusNativeWindow: false);
@@ -899,6 +908,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         key: _scaffoldKey,
         backgroundColor: Colors.transparent,
         endDrawer: _buildPlayQueueDrawer(),
+        onEndDrawerChanged: _onEndDrawerChanged,
         body: GlassShellBackground(
           child: _window.isFullscreen
               ? _buildFullscreenBody()
@@ -924,6 +934,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       children: [
         _buildMediaSurface(),
         PlayerDragOverlay(visible: _isDragging),
+        Positioned(
+          left: 0,
+          top: 0,
+          width: 0,
+          height: 0,
+          child: _RouteCurrentProbe(onChanged: _window.onChromeHoldsChanged),
+        ),
       ],
     );
   }
@@ -1000,6 +1017,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       settings: _settings,
       seekPreviewService: _seekPreviewService,
       hasMedia: _currentFile != null,
+      playlist: _playlist,
       onSeekStart: () => _player.isSeeking = true,
       onSeekChange: (value) {
         setState(() {
@@ -1072,7 +1090,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       },
       onRecentFileSelected: _open.loadRecentFile,
       onSettingsPressed: _openSettings,
-      onMoreActions: () => _moreMenu.showMoreMenu(context),
+      onMoreActions: (anchor) =>
+          unawaited(_moreMenu.showMoreMenu(context, anchor: anchor)),
       onPrevious: () => unawaited(_sourceLoad.advancePlaylist(-1)),
       onNext: () => unawaited(_sourceLoad.advancePlaylist(1)),
       onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
@@ -1113,6 +1132,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       videoController: _videoController,
       mediaDisplayTitle: _media.displayTitle,
       mediaDisplayArtist: _media.displayArtist,
+      mediaDisplayAlbum: _media.displayAlbum,
+      recentFiles: _settings.recentFiles,
+      onOpenRecent: _open.loadRecentFile,
       compactMode: _window.compactMode,
       isFullscreen: _window.isFullscreen,
       fullscreenChromeVisible: _window.fullscreenChromeVisible,
@@ -1161,4 +1183,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void _pulseOsd() => _messenger.pulseOsd();
 
   void _showOsdMessage(String msg) => _messenger.showOsdMessage(msg);
+}
+
+class _RouteCurrentProbe extends StatefulWidget {
+  const _RouteCurrentProbe({required this.onChanged});
+
+  final VoidCallback onChanged;
+
+  @override
+  State<_RouteCurrentProbe> createState() => _RouteCurrentProbeState();
+}
+
+class _RouteCurrentProbeState extends State<_RouteCurrentProbe> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    ModalRoute.isCurrentOf(context);
+    widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

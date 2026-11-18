@@ -61,12 +61,14 @@ class MediaSessionCoordinator {
 
   String? _displayTitle;
   String? _displayArtist;
+  String? _displayAlbum;
   int _artExportGen = 0;
   String? _lastArtUri;
   DateTime? _lastTaskbarProgressAt;
 
   String? get displayTitle => _displayTitle;
   String? get displayArtist => _displayArtist;
+  String? get displayAlbum => _displayAlbum;
 
   void init() {
     unawaited(
@@ -96,6 +98,7 @@ class MediaSessionCoordinator {
   void clearDisplayMetadata() {
     _displayTitle = null;
     _displayArtist = null;
+    _displayAlbum = null;
   }
 
   void resetArtForNewLoad() {
@@ -184,9 +187,7 @@ class MediaSessionCoordinator {
     String? metaTitle;
     try {
       artist = await playerService.getProperty('metadata/by-key/artist');
-      if (pushToSession) {
-        album = await playerService.getProperty('metadata/by-key/album');
-      }
+      album = await playerService.getProperty('metadata/by-key/album');
       metaTitle = await playerService.getProperty('metadata/by-key/title');
     } catch (_) {
       // Metadata is best-effort; title falls back to display name.
@@ -198,10 +199,14 @@ class MediaSessionCoordinator {
     final artistName = (artist != null && artist.trim().isNotEmpty)
         ? artist.trim()
         : null;
+    final albumName = (album != null && album.trim().isNotEmpty)
+        ? album.trim()
+        : null;
     if (isMounted()) {
       update(() {
         _displayTitle = title;
         _displayArtist = artistName;
+        _displayAlbum = albumName;
       });
     }
     if (!pushToSession || !settings.mediaSessionEnabled) return;
@@ -215,7 +220,7 @@ class MediaSessionCoordinator {
     await mediaSession.updateMetadata(
       title: title,
       artist: artistName,
-      album: (album != null && album.trim().isNotEmpty) ? album.trim() : null,
+      album: albumName,
       duration: duration ?? player.duration,
       artUri: artUri,
       trackIdentity: '${source.value}#${playback.loadGeneration}',

@@ -128,7 +128,7 @@ Widget _transport(double speed) => TransportControls(
   onPrevious: () {},
   onNext: () {},
   onToggleQueue: () {},
-  onMoreActions: () {},
+  onMoreActions: (_) {},
   onToggleMute: () {},
   onCycleSpeed: () {},
 );

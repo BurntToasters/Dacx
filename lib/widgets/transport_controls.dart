@@ -4,6 +4,8 @@ import 'package:path/path.dart' as p;
 import '../l10n/app_localizations.dart';
 import '../models/playable_source.dart';
 import '../playback/playback_speed_policy.dart';
+import '../screens/player/widgets/player_more_menu.dart'
+    show globalRectOfContext;
 import '../services/settings_service.dart';
 
 class TransportControls extends StatelessWidget {
@@ -30,7 +32,7 @@ class TransportControls extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onToggleQueue;
-  final VoidCallback? onMoreActions;
+  final ValueChanged<Rect>? onMoreActions;
   final VoidCallback? onToggleMute;
   final VoidCallback? onCycleSpeed;
 
@@ -394,14 +396,19 @@ class TransportControls extends StatelessWidget {
         onPressed: onToggleQueue,
       ),
       if (onMoreActions != null)
-        IconButton(
-          icon: const Icon(Icons.more_vert),
-          tooltip: l10n.tooltipMore,
-          iconSize: 20,
-          visualDensity: density,
-          // Always enabled: Open URL / keybinds / enqueue must work
-          // on the empty state (Win/Linux have no File → Open URL).
-          onPressed: onMoreActions,
+        Builder(
+          builder: (buttonContext) => IconButton(
+            icon: const Icon(Icons.more_vert),
+            tooltip: l10n.tooltipMore,
+            iconSize: 20,
+            visualDensity: density,
+            // Always enabled: Open URL / keybinds / enqueue must work
+            // on the empty state (Win/Linux have no File → Open URL).
+            onPressed: () {
+              final anchor = globalRectOfContext(buttonContext);
+              if (anchor != null) onMoreActions!(anchor);
+            },
+          ),
         ),
       // Settings gear
       IconButton(

@@ -182,6 +182,23 @@ the dock are overlays (`FullscreenChromeOverlay`) that fade and slide and use
 - M8.10 The mouse cursor over the media area is hidden while the controls are
   hidden and shown while they are visible; windowed mode never hides it.
 
+Event-driven holds (`test/e2e/audit9_wiring_e2e_test.dart`). The hold on the
+controls (paused, queue drawer open, route above the player) is driven by
+events instead of a 250 ms recheck. Timers created in the test zone are logged.
+
+- M8.11 Paused in fullscreen for 10 s: the controls stay visible, and after the
+  first 3 s hide timer no periodic timer and no timer shorter than 3 s is
+  created (no 250 ms recheck).
+- M8.12 Pause then resume: resuming creates the 3 s hide timer at that moment
+  (controls still visible 2.5 s later, hidden after 3.5 s), and pausing again
+  shows the controls at once and holds them.
+- M8.13 Queue drawer: open for 10 s keeps the controls with no recheck timer;
+  closing it (Escape) starts the 3 s hide timer at the close, and the controls
+  hide 3 s after it.
+- M8.14 A dialog above the player holds the controls for 10 s with no recheck
+  timer; closing the dialog starts the 3 s hide timer and the controls hide 3 s
+  later.
+
 ## Finding 9: scroll volume per event
 
 - M9.1 Accumulator: a single event of 50 px or more emits exactly one step in
@@ -246,6 +263,13 @@ would move. Wrap only happens in loop-all mode.
 - M11.8 Volume icon: 0 shows `volume_off`, 1 to 49 `volume_down`, 50 and above
   `volume_up`, in both layouts; the mute tooltip and the semantics label still
   follow `volume == 0`.
+
+Wiring part (`test/e2e/audit9_wiring_e2e_test.dart`, real `PlayerScreen`).
+
+- M11.9 The screen passes its playlist to the dock: with a single-item queue and
+  loop off, both Previous and Next are disabled (callbacks never run); loop all
+  enables both; a two-item queue at its first item enables only Next; the
+  buttons follow the queue when it changes. Wide and compact layouts agree.
 
 ## Finding 12: advanced playback per-tick notify
 
@@ -403,6 +427,16 @@ Covered in `test/e2e/audit9_audio_empty_e2e_test.dart`.
 - M20.7 `media-audio` and `media-audio-with-art` stay on the wrappers in
   `media_surface.dart` (source scan).
 
+Wiring part (`test/e2e/audit9_wiring_e2e_test.dart`, real `PlayerScreen`).
+
+- M20.8 A loaded audio file whose tags carry an album shows that album as the
+  caption (`audio-caption`) with the media session setting off and on; a file
+  without an album tag keeps the "Audio playback" caption.
+- M20.9 The album never outlives its track: switching to another source clears
+  it at once (not shown while the next metadata is pending), metadata that
+  resolves after a newer load started is never shown, and after Stop the next
+  load does not show the earlier album.
+
 ## Finding 21: more menu
 
 Covered in `test/e2e/audit9_menu_e2e_test.dart`.
@@ -450,6 +484,10 @@ Covered in `test/e2e/audit9_menu_e2e_test.dart`.
   mini-player switch must close it and return `compact`.
 - M21.13 On a real `PlayerScreen`, choosing Keyboard shortcuts from the menu
   must still open that dialog.
+- M21.14 On a real `PlayerScreen`, the menu opened from the More button is
+  anchored to that button (menu right edge on the button's right edge, menu
+  above the button, not the bottom-right fallback), in the wide and in the
+  compact transport layout, and closes again with Escape.
 
 ## Finding 22: empty state
 
@@ -473,6 +511,15 @@ Covered in `test/e2e/audit9_audio_empty_e2e_test.dart`.
 - M22.8 The tip is shown until dismissed, the dismiss button fires its
   callback, and a dismissed tip is gone.
 - M22.9 At 480x320 the primary action is on screen without scrolling.
+
+Wiring part (`test/e2e/audit9_wiring_e2e_test.dart`, real `PlayerScreen`).
+
+- M22.10 With no recent files the real empty state shows no Reopen last button
+  and no recent rows; with recent files it shows the button and a row per
+  entry (up to 5), from the live settings.
+- M22.11 Tapping a recent row opens that file through the recents origin: a UNC
+  recent (allowed only for explicit origins such as recents) reaches the player
+  and no invalid-path message appears; Reopen last opens the first recent.
 
 ## Finding 23: snackbar queueing
 

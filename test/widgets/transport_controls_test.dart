@@ -48,7 +48,7 @@ Widget _fullyWiredControls({
     onPrevious: () {},
     onNext: () {},
     onToggleQueue: () {},
-    onMoreActions: () {},
+    onMoreActions: (_) {},
     onToggleMute: () {},
     onCycleSpeed: onCycleSpeed ?? () {},
   );
@@ -295,7 +295,7 @@ void main() {
             onLoopModeChanged: (_) {},
             onRecentFileSelected: (_) {},
             onSettingsPressed: () {},
-            onMoreActions: () => morePressed = true,
+            onMoreActions: (_) => morePressed = true,
           ),
         ),
       );
