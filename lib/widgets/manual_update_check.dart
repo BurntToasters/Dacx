@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
+import 'app_snackbar.dart';
 import 'update_progress_dialog.dart';
 
 /// Shared manual “Check for Updates” flow used by Settings and the macOS
@@ -30,25 +31,23 @@ Future<void> runManualUpdateCheck({
           : updateService.lastCheckNetworkError
           ? l10n.snackUpdateNetworkError
           : l10n.snackUpdateCheckFailed;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      showAppSnackBar(context, message);
       return;
     }
     if (update != null) {
       onLog?.call('manual_update_available');
       final rootContext = Navigator.of(context, rootNavigator: true).context;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.snackUpdateAvailable(update.version)),
-          action: SnackBarAction(
-            label: updateActionLabel(l10n),
-            onPressed: () => triggerUpdateAction(
-              context: rootContext,
-              info: update,
-              updateService: updateService,
-              channelName: settings.updateChannel.name,
-              debugLog: debugLog,
-            ),
+      showAppSnackBar(
+        context,
+        l10n.snackUpdateAvailable(update.version),
+        action: SnackBarAction(
+          label: updateActionLabel(l10n),
+          onPressed: () => triggerUpdateAction(
+            context: rootContext,
+            info: update,
+            updateService: updateService,
+            channelName: settings.updateChannel.name,
+            debugLog: debugLog,
           ),
         ),
       );
@@ -56,12 +55,9 @@ Future<void> runManualUpdateCheck({
     }
     onLog?.call('manual_update_not_available');
     final isBeta = updateService.lastEffectiveChannel == UpdateChannel.beta;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isBeta ? l10n.snackUpdateLatestBeta : l10n.snackUpdateLatest,
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      isBeta ? l10n.snackUpdateLatestBeta : l10n.snackUpdateLatest,
     );
   } catch (e) {
     onLog?.call(
@@ -70,10 +66,9 @@ Future<void> runManualUpdateCheck({
       severity: DebugSeverity.error,
     );
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(AppLocalizations.of(context).snackUpdateCheckFailed),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context).snackUpdateCheckFailed,
     );
   }
 }

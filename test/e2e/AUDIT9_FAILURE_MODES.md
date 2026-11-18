@@ -77,6 +77,19 @@ App shell part (`test/e2e/audit9_shell_e2e_test.dart`, `DacxApp` with a mocked
   saved normal position is applied first and the window is then maximized; with
   either one false the window is never maximized and no maximize call is made.
 
+Mini-player part (`test/e2e/audit9_feedback_e2e_test.dart`).
+
+- M3.11 `PlayerScreen.onCompactModeChanged` reports true once entering the
+  mini-player has committed and false once leaving it has committed; a failed
+  entry or a failed restore must report nothing.
+- M3.12 Disposing the screen while in the mini-player must report false; a
+  screen disposed outside the mini-player must report nothing.
+- M3.13 In `DacxApp`, a resize or move event while in the mini-player (480x320)
+  must not save size or position and must not change `windowMaximized` (the
+  stored normal size stays).
+- M3.14 After leaving the mini-player, a resize event saves the restored real
+  size and position again (no permanent save suppression).
+
 ## Finding 4: mini-player toggle state
 
 - M4.1 A second toggle while the first is still running is ignored, so the
@@ -314,7 +327,22 @@ Modes: pending.
 
 ## Finding 23: snackbar queueing
 
-Modes: pending.
+Covered in `test/e2e/audit9_feedback_e2e_test.dart`.
+
+- M23.1 On a real `PlayerScreen`, a second message raised right after a first
+  one must replace it: once the exit animation has run only the second text is
+  on screen and the first never comes back.
+- M23.2 A burst of three messages must show only the last one and leave nothing
+  queued: after its duration has passed no snackbar remains and no earlier text
+  ever reappears.
+- M23.3 Action and duration are preserved: a message with an action shows the
+  label and the action callback runs when tapped; a custom duration is the
+  duration of the shown `SnackBar`; with no duration the default stays 4 s.
+- M23.4 The `ScaffoldMessengerState` entry point (used where a messenger is
+  captured before an `await`) replaces the current snackbar identically and
+  keeps a passed duration.
+- M23.5 Source scan: no `showSnackBar(` call remains anywhere in `lib/` outside
+  `lib/widgets/app_snackbar.dart`.
 
 ## Finding 24: speed label shows nearest preset
 
@@ -447,3 +475,20 @@ exercised by `test/e2e/audit9_report_e2e_test.dart`.
   id (status stays `failed`).
 - R.6 The report directory must be created when absent, and the output path
   must be `audit9-<area>-report.json` inside it.
+
+## Finding 38: instance-mode flag write race
+
+`SettingsService.allowMultipleInstances`, `syncInstanceModeFlag` and `resetAll`
+write the on-disk flag file through `InstanceModeService` without ordering, so
+a slow earlier write can land after a later one. Exercised by
+`test/e2e/audit9_instance_flag_e2e_test.dart`.
+
+Modes:
+
+- M38.1: a slow `true` write followed by `false` and a sync leaves the flag file on disk although the pref is false.
+- M38.2: a slow `false` write followed by `true` and a sync leaves no flag file although the pref is true.
+- M38.3: many rapid toggles with uneven write latency end with a file that disagrees with the last requested value.
+- M38.4: deleting a flag file that is already missing returns failure or logs a `PathNotFoundException`.
+- M38.5: two concurrent deletes of the same flag file make one of them fail or log a `PathNotFoundException`.
+- M38.6: `resetAll` while a slow `true` write is in flight leaves the flag file on disk.
+- M38.7: `syncInstanceModeFlag` completes while an earlier write is still pending, so the file changes after it returns.

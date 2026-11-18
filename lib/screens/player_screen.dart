@@ -70,6 +70,7 @@ import '../playback/volume_policy.dart';
 import '../playback/track_label.dart';
 import '../playback/update_launch_policy.dart';
 import '../playback/subscription_bag.dart';
+import '../widgets/app_snackbar.dart';
 import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/dialog_sizing.dart';
@@ -127,6 +128,7 @@ class PlayerScreen extends StatefulWidget {
   final Completer<void>? screenshotOperationForTesting;
   final StreamController<MediaSessionCommand>? mediaSessionCommandsForTesting;
   final Future<void> Function()? onQuitRequest;
+  final ValueChanged<bool>? onCompactModeChanged;
 
   const PlayerScreen({
     super.key,
@@ -146,6 +148,7 @@ class PlayerScreen extends StatefulWidget {
     @visibleForTesting this.screenshotOperationForTesting,
     @visibleForTesting this.mediaSessionCommandsForTesting,
     this.onQuitRequest,
+    this.onCompactModeChanged,
   });
 
   @override
@@ -268,8 +271,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       batch.add(message);
       return;
     }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message);
   }
 
   void _flushLoadFailureBatch(_LoadFailureBatch batch) {
@@ -280,8 +282,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final message = batch.count == 1
         ? batch.firstMessage!
         : AppLocalizations.of(context).snackLoadFailuresSummary(batch.count);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message);
   }
 
   bool get _headlessMedia =>
@@ -502,13 +503,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         final messenger = ScaffoldMessenger.maybeOf(context);
         if (messenger != null) {
           final l10n = AppLocalizations.of(context);
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                l10n.snackPlaybackOperationFailed(event.error.toString()),
-              ),
-              duration: const Duration(seconds: 4),
-            ),
+          messenger.showAppSnackBar(
+            l10n.snackPlaybackOperationFailed(event.error.toString()),
+            duration: const Duration(seconds: 4),
           );
         }
       }),
@@ -704,6 +701,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+    if (_compactMode) {
+      widget.onCompactModeChanged?.call(false);
+    }
     AppExitHooks.remove(_saveStateBeforeExit);
     HardwareKeyboard.instance.removeHandler(_onGlobalShortcutKey);
     _shortcutFocus.dispose();
@@ -739,11 +739,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     unawaited(() async {
       await _stopPlaybackAndResetUi();
       if (!mounted || _isDisposed) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).snackSleepTimerFired),
-          duration: _snackbarShortDuration,
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context).snackSleepTimerFired,
+        duration: _snackbarShortDuration,
       );
     }());
   }
@@ -754,21 +753,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final wasActive = _sleepTimer.isActive;
       _sleepTimer.cancel();
       if (!wasActive || !mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.snackSleepTimerCancelled),
-          duration: _snackbarShortDuration,
-        ),
+      showAppSnackBar(
+        context,
+        l10n.snackSleepTimerCancelled,
+        duration: _snackbarShortDuration,
       );
       return;
     }
     _sleepTimer.startMinutes(minutes);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.snackSleepTimerSet(minutes)),
-        duration: _snackbarShortDuration,
-      ),
+    showAppSnackBar(
+      context,
+      l10n.snackSleepTimerSet(minutes),
+      duration: _snackbarShortDuration,
     );
   }
 
@@ -1221,12 +1218,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         category: DebugLogCategory.update,
         detailsBuilder: () => {'version': targetVersion},
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context).snackUpdatedToVersion(targetVersion),
-          ),
-        ),
+      messenger.showAppSnackBar(
+        AppLocalizations.of(context).snackUpdatedToVersion(targetVersion),
       );
     } else {
       _log(
@@ -1238,13 +1231,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           'actual': actualVersion,
         },
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)
-                .snackUpdateMayHaveFailed(targetVersion),
-          ),
-        ),
+      messenger.showAppSnackBar(
+        AppLocalizations.of(context).snackUpdateMayHaveFailed(targetVersion),
       );
     }
   }
@@ -1292,21 +1280,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       category: DebugLogCategory.update,
       detailsBuilder: () => {'version': update.version},
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppLocalizations.of(context).snackUpdateAvailable(update.version),
-        ),
-        duration: _updateSnackbarDuration,
-        action: SnackBarAction(
-          label: updateActionLabel(AppLocalizations.of(context)),
-          onPressed: () => triggerUpdateAction(
-            context: context,
-            info: update,
-            updateService: _updateService,
-            channelName: _settings.updateChannel.name,
-            debugLog: widget.debugLog,
-          ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context).snackUpdateAvailable(update.version),
+      duration: _updateSnackbarDuration,
+      action: SnackBarAction(
+        label: updateActionLabel(AppLocalizations.of(context)),
+        onPressed: () => triggerUpdateAction(
+          context: context,
+          info: update,
+          updateService: _updateService,
+          channelName: _settings.updateChannel.name,
+          debugLog: widget.debugLog,
         ),
       ),
     );
@@ -1345,12 +1330,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (path == null) {
         _log('file_picker_invalid_path', severity: DebugSeverity.warn);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(context).snackCouldNotReadSelectedFile,
-              ),
-            ),
+          showAppSnackBar(
+            context,
+            AppLocalizations.of(context).snackCouldNotReadSelectedFile,
           );
         }
         return;
@@ -1369,12 +1351,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         final detail = rawDetail == null || rawDetail.isEmpty
             ? e.code
             : rawDetail;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackFilePickerFailed(detail),
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackFilePickerFailed(detail),
         );
       }
     } catch (e) {
@@ -1384,12 +1363,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUnableToOpenFilePicker,
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackUnableToOpenFilePicker,
         );
       }
     }
@@ -1421,9 +1397,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (!mounted) return;
       if (scan.paths.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.snackNoSupportedMediaInFolder)),
-          );
+          showAppSnackBar(context, l10n.snackNoSupportedMediaInFolder);
         }
         return;
       }
@@ -1441,8 +1415,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             ),
           );
         }
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(parts.join(' '))));
+        showAppSnackBar(context, parts.join(' '));
       }
     } on PlatformException catch (e) {
       final detail = (e.message == null || e.message!.trim().isEmpty)
@@ -1454,12 +1427,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackFolderScanFailed(detail),
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackFolderScanFailed(detail),
         );
       }
     } catch (e) {
@@ -1469,12 +1439,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackFolderScanFailed(e.toString()),
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackFolderScanFailed(e.toString()),
         );
       }
     }
@@ -1488,8 +1455,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (trimmed.isEmpty) return;
     if (!PlayableSource.isSupportedUrl(trimmed)) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.snackInvalidStreamUrl)));
+        showAppSnackBar(context, l10n.snackInvalidStreamUrl);
       }
       return;
     }
@@ -1556,12 +1522,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         final detail = rawDetail == null || rawDetail.isEmpty
             ? e.code
             : rawDetail;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackFilePickerFailed(detail),
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackFilePickerFailed(detail),
         );
       }
     } catch (e) {
@@ -1571,12 +1534,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUnableToOpenFilePicker,
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackUnableToOpenFilePicker,
         );
       }
     }
@@ -1606,8 +1566,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (path == null) return;
       _rememberLastOpenDirectory(path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportSaved)));
+      showAppSnackBar(context, l10n.snackPlaylistExportSaved);
       _log(
         'playlist_exported',
         detailsBuilder: () => {
@@ -1622,9 +1581,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportFailed)));
+        showAppSnackBar(context, l10n.snackPlaylistExportFailed);
       }
     } catch (e) {
       _log(
@@ -1633,9 +1590,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.snackPlaylistExportFailed)));
+        showAppSnackBar(context, l10n.snackPlaylistExportFailed);
       }
     }
   }
@@ -1655,12 +1610,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final sources = await M3uPlaylist.parseFile(playlistPath);
       if (sources.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
-              ),
-            ),
+          showAppSnackBar(
+            context,
+            AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
           );
         }
         return;
@@ -1683,12 +1635,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.warn,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackPlaylistImportFailed,
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackPlaylistImportFailed,
         );
       }
     }
@@ -1952,12 +1901,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.warn,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUnsupportedFileType,
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackUnsupportedFileType,
         );
       }
     }
@@ -2028,8 +1974,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (failureBatch != null) {
         failureBatch.add(failureMessage);
       } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failureMessage)));
+        showAppSnackBar(context, failureMessage);
       }
       return false;
     } finally {
@@ -2156,9 +2101,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
       if (mounted) {
         final l10n = AppLocalizations.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.snackCouldNotReadDroppedFile)),
-        );
+        showAppSnackBar(context, l10n.snackCouldNotReadDroppedFile);
       }
       return;
     }
@@ -2172,14 +2115,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     if (batch.skippedCount > 0 && mounted) {
       final l10n = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            batch.skippedCount == 1
-                ? l10n.snackSkippedUnreadableFile
-                : l10n.snackSkippedUnreadableFiles(batch.skippedCount),
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        batch.skippedCount == 1
+            ? l10n.snackSkippedUnreadableFile
+            : l10n.snackSkippedUnreadableFiles(batch.skippedCount),
       );
     }
     unawaited(_applyDroppedPathsExpanded(batch.paths));
@@ -2233,20 +2173,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       media.add(PlayableSource.file(path));
     }
     if (inaccessible > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).snackDropPathInaccessible),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context).snackDropPathInaccessible,
       );
     }
     if (media.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
         );
       }
       return;
@@ -2870,11 +2806,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
       }
       if (actual == enabled && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context).snackFullscreenRejected),
-            duration: _snackbarShortDuration,
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackFullscreenRejected,
+          duration: _snackbarShortDuration,
         );
       }
       _log(
@@ -3995,9 +3930,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             severity: DebugSeverity.warn,
           );
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.snackScreenshotDirInaccessible)),
-            );
+            showAppSnackBar(context, l10n.snackScreenshotDirInaccessible);
           }
           _showOsdMessage(l10n.osdScreenshotSaveFailed);
         case ScreenshotSaveOutcome.saved:
@@ -4085,10 +4018,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (result.failed) {
         _settings.eqEnabled = !wantEnabled;
         _showOsdMessage(l10n.osdEqualizer(l10n.osdStateOff));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.snackPlaybackOperationFailed('equalizer')),
-          ),
+        showAppSnackBar(
+          context,
+          l10n.snackPlaybackOperationFailed('equalizer'),
         );
         return;
       }
@@ -4187,8 +4119,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await _playerService.setProperty('lavfi-complex', '');
     if (!mounted || _isDisposed) return;
     _showOsdMessage(message);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message);
   }
 
   Future<void> _reloadCurrentForMixChange() async {
@@ -4497,15 +4428,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
               startIndex: openedIndex,
             );
             if (dropped > 0 && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    AppLocalizations.of(context).snackQueueTruncated(
-                      PlaylistService.maxQueueItems,
-                      dropped,
-                    ),
-                  ),
-                ),
+              showAppSnackBar(
+                context,
+                AppLocalizations.of(
+                  context,
+                ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
               );
             }
           }),
@@ -4519,14 +4446,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                     .osdAddedMultipleToQueue(sources.length),
         );
         if (dropped > 0 && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(
-                  context,
-                ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
-              ),
-            ),
+          showAppSnackBar(
+            context,
+            AppLocalizations.of(context)
+                .snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
           );
         }
     }
@@ -4576,12 +4499,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         unawaited(_loadSource(next, syncPlaylist: false));
       }
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppLocalizations.of(context).snackQueueRemovedMissing(removed),
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context).snackQueueRemovedMissing(removed),
     );
   }
 
@@ -4630,6 +4550,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         if (!mounted || _isDisposed) return;
         setState(() => _compactMode = false);
+        widget.onCompactModeChanged?.call(false);
         _showOsdMessage(l10n.osdMiniPlayerOff);
       } else {
         try {
@@ -4661,6 +4582,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         if (!mounted || _isDisposed) return;
         setState(() => _compactMode = true);
+        widget.onCompactModeChanged?.call(true);
         _showOsdMessage(l10n.osdMiniPlayerOn);
       }
     } finally {
@@ -5215,8 +5137,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _cacheTracksForCurrentLoad(_playerService.currentTracks);
         setState(() {});
       } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
+        showAppSnackBar(context, l10n.osdExternalAudioFailed);
       }
     } catch (e) {
       _log(
@@ -5226,8 +5147,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
       if (mounted) {
         _showOsdMessage(l10n.osdExternalAudioFailed);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.osdExternalAudioFailed)));
+        showAppSnackBar(context, l10n.osdExternalAudioFailed);
       }
     }
   }
@@ -5265,9 +5185,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _cacheTracksForCurrentLoad(_playerService.currentTracks);
         setState(() {});
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalSubtitleFailed)));
+        showAppSnackBar(context, l10n.osdExternalSubtitleFailed);
       }
     } catch (e) {
       _log(
@@ -5277,9 +5195,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
       if (mounted) {
         _showOsdMessage(l10n.osdExternalSubtitleFailed);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.osdExternalSubtitleFailed)));
+        showAppSnackBar(context, l10n.osdExternalSubtitleFailed);
       }
     }
   }
@@ -5299,13 +5215,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       await _disableMixForManualTrackSelection();
       final ok = await _playerService.setAudioTrack(selected);
       if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context)
-                  .snackPlaybackOperationFailed(selected.id),
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)
+              .snackPlaybackOperationFailed(selected.id),
         );
       }
     }
@@ -5377,12 +5290,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _rememberLastOpenDirectory(paths.first);
       if (sources.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
-              ),
-            ),
+          showAppSnackBar(
+            context,
+            AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
           );
         }
         return;
@@ -5399,12 +5309,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         final detail = rawDetail == null || rawDetail.isEmpty
             ? e.code
             : rawDetail;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackFilePickerFailed(detail),
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackFilePickerFailed(detail),
         );
       }
     } catch (e) {
@@ -5414,12 +5321,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         severity: DebugSeverity.error,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).snackUnableToOpenFilePicker,
-            ),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).snackUnableToOpenFilePicker,
         );
       }
     }

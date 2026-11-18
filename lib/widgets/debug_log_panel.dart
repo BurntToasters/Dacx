@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/debug_log_service.dart';
+import 'app_snackbar.dart';
 
 class DebugLogPanel extends StatelessWidget {
   const DebugLogPanel({super.key, required this.debugLog});
@@ -110,16 +111,14 @@ class DebugLogPanel extends StatelessWidget {
     );
     if (!context.mounted) return;
     final l10n = AppLocalizations.of(context);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCopied)));
+    showAppSnackBar(context, l10n.snackDebugLogCopied);
   }
 
   void _clearDebugLog(BuildContext context) {
     debugLog.clear();
     if (!context.mounted) return;
     final l10n = AppLocalizations.of(context);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(l10n.snackDebugLogCleared)));
+    showAppSnackBar(context, l10n.snackDebugLogCleared);
   }
 
   static String renderDebugEntry(DebugLogEntry entry) {

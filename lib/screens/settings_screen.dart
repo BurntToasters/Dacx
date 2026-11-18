@@ -15,6 +15,7 @@ import '../services/bookmark_service.dart';
 import '../theme/glass_decorations.dart';
 import '../theme/window_visuals.dart';
 import '../services/update_service.dart';
+import '../widgets/app_snackbar.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/debug_log_panel.dart';
 import '../widgets/manual_update_check.dart';
@@ -1136,8 +1137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await _s.resetAll();
           if (mounted) {
             setState(() {});
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(l10n.snackSettingsReset)));
+            showAppSnackBar(context, l10n.snackSettingsReset);
           }
         } else {
           _log('reset_settings_cancelled');
@@ -1294,14 +1294,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         detailsBuilder: () => {'enabled': true},
       );
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _s.debugModeEnabled
-              ? l10n.snackDebugModeEnabled
-              : l10n.snackDebugModeDisabled,
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      _s.debugModeEnabled
+          ? l10n.snackDebugModeEnabled
+          : l10n.snackDebugModeDisabled,
     );
   }
 }

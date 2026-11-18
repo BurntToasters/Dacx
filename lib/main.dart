@@ -398,6 +398,12 @@ class DacxApp extends StatefulWidget {
   final Widget Function(BuildContext context, SettingsService settings)?
   homeBuilder;
   final VoidCallback? onMaterialAppBuild;
+  final Widget Function(
+    BuildContext context,
+    SettingsService settings,
+    ValueChanged<bool> onCompactModeChanged,
+  )?
+  playerHomeBuilder;
 
   const DacxApp({
     super.key,
@@ -409,6 +415,7 @@ class DacxApp extends StatefulWidget {
         MacosInstallLocationService.shouldWarnForCurrentApp,
     @visibleForTesting this.homeBuilder,
     @visibleForTesting this.onMaterialAppBuild,
+    @visibleForTesting this.playerHomeBuilder,
   });
 
   @override
@@ -421,6 +428,7 @@ class _DacxAppState extends State<DacxApp>
   bool _pendingWindowVisuals = false;
   bool _pendingWindowNudge = false;
   Timer? _geometrySaveDebounce;
+  bool _inMiniPlayer = false;
   _ThemeBundle? _cachedThemes;
   _ThemeInputs? _cachedThemeInputs;
   late final TrayService _tray;
@@ -898,6 +906,10 @@ class _DacxAppState extends State<DacxApp>
   @override
   void onWindowMoved() => _scheduleGeometrySave();
 
+  void _onCompactModeChanged(bool compact) {
+    _inMiniPlayer = compact;
+  }
+
   void _scheduleGeometrySave() {
     _geometrySaveDebounce?.cancel();
     _geometrySaveDebounce = Timer(const Duration(milliseconds: 180), () {
@@ -907,7 +919,7 @@ class _DacxAppState extends State<DacxApp>
 
   Future<void> _saveGeometry() async {
     final settings = widget.settings;
-    if (!settings.rememberWindow) return;
+    if (!settings.rememberWindow || _inMiniPlayer) return;
     final bool fullscreen;
     final bool minimized;
     final bool maximized;
@@ -985,12 +997,18 @@ class _DacxAppState extends State<DacxApp>
         listenable: widget.settings,
         builder: (context, _) =>
             widget.homeBuilder?.call(context, widget.settings) ??
+            widget.playerHomeBuilder?.call(
+              context,
+              widget.settings,
+              _onCompactModeChanged,
+            ) ??
             PlayerScreen(
               settings: widget.settings,
               debugLog: widget.debugLog,
               updateService: widget.updateService,
               initialFile: widget.initialFile,
               onQuitRequest: _quitFromTray,
+              onCompactModeChanged: _onCompactModeChanged,
             ),
       ),
     );
