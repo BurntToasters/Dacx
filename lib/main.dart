@@ -11,6 +11,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
+import 'app/window_startup.dart';
 import 'l10n/app_localizations.dart';
 import 'models/playable_source.dart';
 import 'playback/native_runtime_probe.dart';
@@ -216,6 +217,10 @@ void main(List<String> args) async {
     if (!Platform.isWindows) return;
     try {
       await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (await windowManager.isMaximized() ||
+          await windowManager.isFullScreen()) {
+        return;
+      }
       final size = await windowManager.getSize();
       await windowManager.setSize(Size(size.width + 1, size.height + 1));
       await windowManager.setSize(size);
@@ -241,9 +246,7 @@ void main(List<String> args) async {
   unawaited(
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       try {
-        if (savedPos != null) {
-          await windowManager.setPosition(savedPos);
-        }
+        await restoreWindowGeometry(settings, position: savedPos);
         await windowManager.setAlwaysOnTop(settings.alwaysOnTop);
         await applyHiddenTitleBarBestEffort();
       } catch (e) {
@@ -391,6 +394,10 @@ class DacxApp extends StatefulWidget {
   final DebugLogService debugLog;
   final UpdateService updateService;
   final String? initialFile;
+  final bool Function() shouldWarnForInstallLocation;
+  final Widget Function(BuildContext context, SettingsService settings)?
+  homeBuilder;
+  final VoidCallback? onMaterialAppBuild;
 
   const DacxApp({
     super.key,
@@ -398,6 +405,10 @@ class DacxApp extends StatefulWidget {
     required this.debugLog,
     required this.updateService,
     this.initialFile,
+    this.shouldWarnForInstallLocation =
+        MacosInstallLocationService.shouldWarnForCurrentApp,
+    @visibleForTesting this.homeBuilder,
+    @visibleForTesting this.onMaterialAppBuild,
   });
 
   @override
@@ -408,12 +419,15 @@ class _DacxAppState extends State<DacxApp>
     with WindowListener, WidgetsBindingObserver {
   bool _applyingWindowVisuals = false;
   bool _pendingWindowVisuals = false;
+  bool _pendingWindowNudge = false;
   Timer? _geometrySaveDebounce;
   _ThemeBundle? _cachedThemes;
   _ThemeInputs? _cachedThemeInputs;
   late final TrayService _tray;
   bool _trayLabelsSynced = false;
   late WindowVisualInputs _visualInputs;
+  late _ShellInputs _shell;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late bool _minimizeToTray;
 
   bool _isEffectiveBlurEnabled(SettingsService settings) {
@@ -519,6 +533,7 @@ class _DacxAppState extends State<DacxApp>
     WidgetsBinding.instance.addObserver(this);
     windowManager.addListener(this);
     _visualInputs = WindowVisualInputs.fromSettings(widget.settings);
+    _shell = _readShellInputs(widget.settings);
     _minimizeToTray = widget.settings.minimizeToTray;
     widget.settings.addListener(_onSettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -560,6 +575,41 @@ class _DacxAppState extends State<DacxApp>
       _minimizeToTray = minimizeToTray;
       unawaited(_syncMinimizeToTray());
     }
+    final shell = _readShellInputs(widget.settings);
+    if (shell != _shell) {
+      setState(() => _shell = shell);
+    }
+  }
+
+  _ShellInputs _readShellInputs(SettingsService s) {
+    final blurEnabled = _isEffectiveBlurEnabled(s);
+    final uiOpacityValue = _windowOpacityAllowed(s) ? s.windowOpacity : 1.0;
+    const opacityMin = SettingsService.windowOpacityMin;
+    final opacitySliderT = ((uiOpacityValue - opacityMin) / (1.0 - opacityMin))
+        .clamp(0.0, 1.0);
+    // Opacity slider → Flutter shell tint strength (native window opacity
+    // stays at 1.0 so acrylic/vibrancy can composite). Floor at ~0.22 so
+    // chrome stays readable over the blur.
+    final blurUiOpacity =
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
+            blurEnabled
+        ? lerpDouble(0.22, 0.82, Curves.easeOut.transform(opacitySliderT))!
+        : 1.0;
+    final popupAlpha = blurEnabled
+        ? ((Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+              ? (blurUiOpacity + 0.12).clamp(0.0, 1.0)
+              : 0.96)
+        : 1.0;
+    return _ShellInputs(
+      themeMode: s.themeMode,
+      theme: _ThemeInputs(
+        seed: s.accentColor.color,
+        blurEnabled: blurEnabled,
+        blurStrength: s.windowBlurStrength,
+        blurUiOpacity: blurUiOpacity,
+        popupAlpha: popupAlpha,
+      ),
+    );
   }
 
   Future<void> _syncMinimizeToTray({AppLocalizations? l10n}) async {
@@ -666,7 +716,9 @@ class _DacxAppState extends State<DacxApp>
   @override
   void onWindowFocus() {
     unawaited(_syncKeyboardState());
-    unawaited(_applyWindowVisualSettings());
+    if (Platform.isWindows && _isEffectiveBlurEnabled(widget.settings)) {
+      unawaited(_applyWindowVisualSettings(fromFocus: true));
+    }
   }
 
   @override
@@ -685,8 +737,18 @@ class _DacxAppState extends State<DacxApp>
         Brightness.dark;
   }
 
-  Future<void> _applyWindowVisualSettings() async {
+  Future<bool> _isMaximizedOrFullScreen() async {
+    try {
+      return await windowManager.isMaximized() ||
+          await windowManager.isFullScreen();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _applyWindowVisualSettings({bool fromFocus = false}) async {
     if (!mounted) return;
+    if (!fromFocus) _pendingWindowNudge = true;
     if (_applyingWindowVisuals) {
       _pendingWindowVisuals = true;
       return;
@@ -694,6 +756,8 @@ class _DacxAppState extends State<DacxApp>
     _applyingWindowVisuals = true;
     do {
       _pendingWindowVisuals = false;
+      final nudge = _pendingWindowNudge;
+      _pendingWindowNudge = false;
       final s = widget.settings;
       final blurEnabled = _isEffectiveBlurEnabled(s);
       final bypassNativeOpacity = _shouldBypassNativeOpacity(blurEnabled);
@@ -762,9 +826,11 @@ class _DacxAppState extends State<DacxApp>
             }
             // Size nudge forces DWM to recomposite after style/effect change.
             try {
-              final size = await windowManager.getSize();
-              await windowManager.setSize(Size(size.width + 1, size.height));
-              await windowManager.setSize(size);
+              if (nudge && !await _isMaximizedOrFullScreen()) {
+                final size = await windowManager.getSize();
+                await windowManager.setSize(Size(size.width + 1, size.height));
+                await windowManager.setSize(size);
+              }
             } catch (_) {}
           } else if (Platform.isMacOS) {
             await _applyMacOSBlur(strength: strength);
@@ -821,6 +887,12 @@ class _DacxAppState extends State<DacxApp>
   void onWindowResized() => _scheduleGeometrySave();
 
   @override
+  void onWindowMaximize() => _scheduleGeometrySave();
+
+  @override
+  void onWindowUnmaximize() => _scheduleGeometrySave();
+
+  @override
   void onWindowMove() => _scheduleGeometrySave();
 
   @override
@@ -834,200 +906,168 @@ class _DacxAppState extends State<DacxApp>
   }
 
   Future<void> _saveGeometry() async {
-    if (!widget.settings.rememberWindow) return;
+    final settings = widget.settings;
+    if (!settings.rememberWindow) return;
+    final bool fullscreen;
+    final bool minimized;
+    final bool maximized;
+    try {
+      fullscreen = await windowManager.isFullScreen();
+      minimized = await windowManager.isMinimized();
+      maximized = await windowManager.isMaximized();
+    } catch (_) {
+      return;
+    }
+    if (fullscreen || minimized) return;
+    if (maximized) {
+      settings.windowMaximized = true;
+      return;
+    }
     final size = await windowManager.getSize();
     final pos = await windowManager.getPosition();
-    widget.settings.saveWindowSize(size);
-    widget.settings.saveWindowPosition(pos);
+    settings.saveWindowSize(size);
+    settings.saveWindowPosition(pos);
+    settings.windowMaximized = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.settings,
-      builder: (context, _) {
-        final s = widget.settings;
-        final blurEnabled = _isEffectiveBlurEnabled(s);
-        final uiOpacityValue = _windowOpacityAllowed(s) ? s.windowOpacity : 1.0;
-        const opacityMin = SettingsService.windowOpacityMin;
-        final opacitySliderT =
-            ((uiOpacityValue - opacityMin) / (1.0 - opacityMin)).clamp(
-              0.0,
-              1.0,
-            );
-        // Opacity slider → Flutter shell tint strength (native window opacity
-        // stays at 1.0 so acrylic/vibrancy can composite). Floor at ~0.22 so
-        // chrome stays readable over the blur.
-        final blurUiOpacity =
-            (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
-                blurEnabled
-            ? lerpDouble(0.22, 0.82, Curves.easeOut.transform(opacitySliderT))!
-            : 1.0;
-        final popupAlpha = blurEnabled
-            ? ((Platform.isWindows || Platform.isMacOS || Platform.isLinux)
-                  ? (blurUiOpacity + 0.12).clamp(0.0, 1.0)
-                  : 0.96)
-            : 1.0;
-        final inputs = _ThemeInputs(
-          seed: s.accentColor.color,
-          blurEnabled: blurEnabled,
-          blurStrength: s.windowBlurStrength,
-          blurUiOpacity: blurUiOpacity,
-          popupAlpha: popupAlpha,
-        );
-        final themes = _cachedThemeInputs == inputs && _cachedThemes != null
-            ? _cachedThemes!
-            : (_cachedThemes = _buildThemes(inputs));
-        _cachedThemeInputs = inputs;
+    widget.onMaterialAppBuild?.call();
+    final shell = _shell;
+    final inputs = shell.theme;
+    final blurEnabled = inputs.blurEnabled;
+    final themes = _cachedThemeInputs == inputs && _cachedThemes != null
+        ? _cachedThemes!
+        : (_cachedThemes = _buildThemes(inputs));
+    _cachedThemeInputs = inputs;
 
-        return MaterialApp(
-          onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
-          debugShowCheckedModeBanner: false,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          scrollBehavior: const _NoBounceScrollBehavior(),
-          themeMode: s.themeMode,
-          theme: themes.light,
-          darkTheme: themes.dark,
-          // Critical for macOS/Windows/Linux blur: Flutter's Metal/OpenGL
-          // surface starts opaque. Without BlendMode.clear, semi-transparent
-          // widgets composite onto that opaque buffer (looks solid dark) and
-          // never reveal the NSVisualEffectView / acrylic behind.
-          // Pattern from macos_window_utils official example.
-          builder: (context, child) {
-            if (!_trayLabelsSynced && TrayService.isSupported) {
-              _trayLabelsSynced = true;
-              final l10n = AppLocalizations.of(context);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                unawaited(_syncMinimizeToTray(l10n: l10n));
-              });
-            }
-            Widget content = _MacInstallLocationWarning(
-              debugLog: widget.debugLog,
-              child: child ?? const SizedBox.shrink(),
-            );
-            if (blurEnabled) {
-              content = DecoratedBox(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF000000),
-                  backgroundBlendMode: BlendMode.clear,
-                ),
-                child: content,
-              );
-            }
-            return content;
-          },
-          home: PlayerScreen(
-            settings: s,
-            debugLog: widget.debugLog,
-            updateService: widget.updateService,
-            initialFile: widget.initialFile,
-            onQuitRequest: _quitFromTray,
-          ),
+    return MaterialApp(
+      navigatorKey: _navigatorKey,
+      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
+      debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      scrollBehavior: const _NoBounceScrollBehavior(),
+      themeMode: shell.themeMode,
+      theme: themes.light,
+      darkTheme: themes.dark,
+      // Critical for macOS/Windows/Linux blur: Flutter's Metal/OpenGL
+      // surface starts opaque. Without BlendMode.clear, semi-transparent
+      // widgets composite onto that opaque buffer (looks solid dark) and
+      // never reveal the NSVisualEffectView / acrylic behind.
+      // Pattern from macos_window_utils official example.
+      builder: (context, child) {
+        if (!_trayLabelsSynced && TrayService.isSupported) {
+          _trayLabelsSynced = true;
+          final l10n = AppLocalizations.of(context);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            unawaited(_syncMinimizeToTray(l10n: l10n));
+          });
+        }
+        Widget content = _MacInstallLocationWarning(
+          debugLog: widget.debugLog,
+          navigatorKey: _navigatorKey,
+          shouldWarn: widget.shouldWarnForInstallLocation,
+          child: child ?? const SizedBox.shrink(),
         );
+        if (blurEnabled) {
+          content = DecoratedBox(
+            decoration: const BoxDecoration(
+              color: Color(0xFF000000),
+              backgroundBlendMode: BlendMode.clear,
+            ),
+            child: content,
+          );
+        }
+        return content;
       },
+      home: ListenableBuilder(
+        listenable: widget.settings,
+        builder: (context, _) =>
+            widget.homeBuilder?.call(context, widget.settings) ??
+            PlayerScreen(
+              settings: widget.settings,
+              debugLog: widget.debugLog,
+              updateService: widget.updateService,
+              initialFile: widget.initialFile,
+              onQuitRequest: _quitFromTray,
+            ),
+      ),
     );
   }
 
   _ThemeBundle _buildThemes(_ThemeInputs inputs) {
-    final lightScheme = ColorScheme.fromSeed(
-      seedColor: inputs.seed,
-      brightness: Brightness.light,
-    );
-    final darkScheme = ColorScheme.fromSeed(
-      seedColor: inputs.seed,
-      brightness: Brightness.dark,
-    );
-    final lightVisuals = WindowVisuals.fromScheme(
-      lightScheme,
-      blurEnabled: inputs.blurEnabled,
-      blurStrength: inputs.blurStrength,
-      uiOpacity: inputs.blurUiOpacity,
-    );
-    final darkVisuals = WindowVisuals.fromScheme(
-      darkScheme,
-      blurEnabled: inputs.blurEnabled,
-      blurStrength: inputs.blurStrength,
-      uiOpacity: inputs.blurUiOpacity,
-    );
+    ThemeData themeFor(Brightness brightness) {
+      final scheme = ColorScheme.fromSeed(
+        seedColor: inputs.seed,
+        brightness: brightness,
+      );
+      final visuals = WindowVisuals.fromScheme(
+        scheme,
+        blurEnabled: inputs.blurEnabled,
+        blurStrength: inputs.blurStrength,
+        uiOpacity: inputs.blurUiOpacity,
+      );
+      return _themeFor(scheme, visuals, inputs);
+    }
+
     return _ThemeBundle(
-      light: ThemeData(
-        colorScheme: lightScheme,
-        useMaterial3: true,
-        scaffoldBackgroundColor: inputs.blurEnabled
-            ? Colors.transparent
-            : lightVisuals.windowBottomColor,
-        canvasColor: lightVisuals.contentColor,
-        dividerColor: lightVisuals.dividerColor,
-        popupMenuTheme: PopupMenuThemeData(
-          color: lightVisuals.panelTopColor.withValues(
-            alpha: inputs.popupAlpha,
-          ),
-          surfaceTintColor: Colors.transparent,
-          elevation: inputs.blurEnabled
-              ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
-              : 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: lightVisuals.panelBorderColor),
-          ),
+      light: themeFor(Brightness.light),
+      dark: themeFor(Brightness.dark),
+    );
+  }
+
+  ThemeData _themeFor(
+    ColorScheme scheme,
+    WindowVisuals visuals,
+    _ThemeInputs inputs,
+  ) {
+    return ThemeData(
+      colorScheme: scheme,
+      useMaterial3: true,
+      brightness: scheme.brightness,
+      scaffoldBackgroundColor: inputs.blurEnabled
+          ? Colors.transparent
+          : visuals.windowBottomColor,
+      canvasColor: visuals.contentColor,
+      dividerColor: visuals.dividerColor,
+      popupMenuTheme: PopupMenuThemeData(
+        color: visuals.panelTopColor.withValues(alpha: inputs.popupAlpha),
+        surfaceTintColor: Colors.transparent,
+        elevation: inputs.blurEnabled
+            ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
+            : 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: visuals.panelBorderColor),
         ),
-        cardTheme: inputs.blurEnabled
-            ? CardThemeData(
-                color: lightVisuals.panelTopColor.withValues(alpha: 0.92),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: lightVisuals.panelBorderColor),
-                ),
-              )
-            : null,
-        snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
-        extensions: [lightVisuals],
       ),
-      dark: ThemeData(
-        colorScheme: darkScheme,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: inputs.blurEnabled
-            ? Colors.transparent
-            : darkVisuals.windowBottomColor,
-        canvasColor: darkVisuals.contentColor,
-        dividerColor: darkVisuals.dividerColor,
-        popupMenuTheme: PopupMenuThemeData(
-          color: darkVisuals.panelTopColor.withValues(alpha: inputs.popupAlpha),
-          surfaceTintColor: Colors.transparent,
-          elevation: inputs.blurEnabled
-              ? (4.0 * (1.0 - inputs.blurStrength)).clamp(1.0, 4.0)
-              : 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: darkVisuals.panelBorderColor),
-          ),
-        ),
-        cardTheme: inputs.blurEnabled
-            ? CardThemeData(
-                color: darkVisuals.panelTopColor.withValues(alpha: 0.92),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: darkVisuals.panelBorderColor),
-                ),
-              )
-            : null,
-        snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
-        extensions: [darkVisuals],
-      ),
+      cardTheme: inputs.blurEnabled
+          ? CardThemeData(
+              color: visuals.panelTopColor.withValues(alpha: 0.92),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: visuals.panelBorderColor),
+              ),
+            )
+          : null,
+      snackBarTheme: const SnackBarThemeData(showCloseIcon: true),
+      extensions: [visuals],
     );
   }
 }
 
 class _MacInstallLocationWarning extends StatefulWidget {
   final DebugLogService debugLog;
+  final GlobalKey<NavigatorState> navigatorKey;
+  final bool Function() shouldWarn;
   final Widget child;
 
   const _MacInstallLocationWarning({
     required this.debugLog,
+    required this.navigatorKey,
+    required this.shouldWarn,
     required this.child,
   });
 
@@ -1053,7 +1093,9 @@ class _MacInstallLocationWarningState
 
   Future<void> _showIfNeeded() async {
     if (!mounted || _shown) return;
-    if (!MacosInstallLocationService.shouldWarnForCurrentApp()) return;
+    if (!widget.shouldWarn()) return;
+    final navigatorContext = widget.navigatorKey.currentContext;
+    if (navigatorContext == null || !navigatorContext.mounted) return;
     _shown = true;
     widget.debugLog.log(
       category: DebugLogCategory.update,
@@ -1061,9 +1103,9 @@ class _MacInstallLocationWarningState
       message: 'Dacx is running outside /Applications.',
       severity: DebugSeverity.warn,
     );
-    final l10n = AppLocalizations.of(context);
+    final l10n = AppLocalizations.of(navigatorContext);
     await showDialog<void>(
-      context: context,
+      context: navigatorContext,
       builder: (context) => AlertDialog(
         title: Text(l10n.dialogMacInstallLocationTitle),
         content: Text(l10n.dialogMacInstallLocationMessage),
@@ -1113,6 +1155,22 @@ class _ThemeInputs {
     blurUiOpacity,
     popupAlpha,
   );
+}
+
+class _ShellInputs {
+  final ThemeMode themeMode;
+  final _ThemeInputs theme;
+
+  const _ShellInputs({required this.themeMode, required this.theme});
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ShellInputs &&
+      other.themeMode == themeMode &&
+      other.theme == theme;
+
+  @override
+  int get hashCode => Object.hash(themeMode, theme);
 }
 
 class _ThemeBundle {
