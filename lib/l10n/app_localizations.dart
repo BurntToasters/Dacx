@@ -1762,6 +1762,36 @@ abstract class AppLocalizations {
   /// **'View'**
   String get updateActionView;
 
+  /// No description provided for @updateActionLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updateActionLater;
+
+  /// No description provided for @updateWhatsNewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s new'**
+  String get updateWhatsNewTitle;
+
+  /// No description provided for @updateWhatsNewMore.
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more'**
+  String updateWhatsNewMore(int count);
+
+  /// No description provided for @updateReleaseNotesAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Release notes'**
+  String get updateReleaseNotesAction;
+
+  /// No description provided for @updateDialogCancelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling…'**
+  String get updateDialogCancelling;
+
   /// No description provided for @snackUpdatedToVersion.
   ///
   /// In en, this message translates to:
@@ -1893,6 +1923,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update started.'**
   String get updateOutcomeStarted;
+
+  /// No description provided for @updateOutcomeCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Update cancelled.'**
+  String get updateOutcomeCancelled;
 
   /// No description provided for @windowMinimize.
   ///

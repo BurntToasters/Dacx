@@ -277,6 +277,7 @@ class UpdateService {
           url: viewUrl,
           notes: release.body,
           assets: release.assets,
+          releaseUrl: release.htmlUrl,
         );
       }
 
@@ -522,11 +523,13 @@ class UpdateInfo {
   final String url;
   final String notes;
   final List<UpdateAsset> assets;
+  final String releaseUrl;
 
   const UpdateInfo({
     required this.version,
     required this.url,
     required this.notes,
     this.assets = const [],
+    this.releaseUrl = '',
   });
 }

@@ -7,8 +7,11 @@ import '../l10n/app_localizations.dart';
 import '../playback/linux_install_kind.dart';
 import '../services/app_exit_hooks.dart';
 import '../services/debug_log_service.dart';
+import '../services/release_notes_formatter.dart';
 import '../services/self_update_service.dart';
 import '../services/update_service.dart';
+import 'app_snackbar.dart';
+import 'update_available_dialog.dart';
 
 /// Package-aware Linux update copy (and generic fallback).
 String linuxUpdateGuidance(AppLocalizations l10n, {LinuxInstallKind? kind}) {
@@ -42,6 +45,14 @@ Future<void> triggerUpdateAction({
   required String channelName,
   DebugLogService? debugLog,
 }) async {
+  if (!formatReleaseNotes(info.notes, version: info.version).isEmpty) {
+    final proceed = await showUpdateAvailableDialog(
+      context: context,
+      info: info,
+      updateService: updateService,
+    );
+    if (!proceed || !context.mounted) return;
+  }
   if (!SelfUpdateService.isSupported()) {
     await updateService.openReleasePage(info.url);
     return;
@@ -69,6 +80,12 @@ Future<void> triggerUpdateAction({
     exit(0);
   }
   UpdatePendingMarker.readAndClear();
+  if (result?.outcome == SelfUpdateOutcome.cancelled && context.mounted) {
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context).updateOutcomeCancelled,
+    );
+  }
 }
 
 /// Returns the right snackbar action label for the current platform.
@@ -83,11 +100,13 @@ class UpdateProgressDialog extends StatefulWidget {
     required this.info,
     required this.service,
     required this.onManualDownload,
+    this.cancelSupported,
   });
 
   final UpdateInfo info;
   final SelfUpdateService service;
   final VoidCallback onManualDownload;
+  final bool? cancelSupported;
 
   @override
   State<UpdateProgressDialog> createState() => _UpdateProgressDialogState();
@@ -97,6 +116,8 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
   SelfUpdateProgress? _progress;
   SelfUpdateResult? _result;
   bool _started = false;
+  bool _cancelling = false;
+  bool _cancelLocked = false;
 
   @override
   void initState() {
@@ -115,11 +136,23 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
       },
     );
     if (!mounted) return;
-    if (result.outcome == SelfUpdateOutcome.spawned) {
+    if (result.outcome == SelfUpdateOutcome.spawned ||
+        result.outcome == SelfUpdateOutcome.cancelled) {
       Navigator.of(context).pop(result);
       return;
     }
     setState(() => _result = result);
+  }
+
+  void _cancel() {
+    setState(() => _cancelling = true);
+    final accepted = widget.service.cancelUpdate();
+    if (!accepted && mounted) {
+      setState(() {
+        _cancelling = false;
+        _cancelLocked = true;
+      });
+    }
   }
 
   String _formatMb(int bytes) =>
@@ -145,6 +178,7 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
         l10n.updateOutcomeGatekeeperRejected,
       SelfUpdateOutcome.spawnFailed => l10n.updateOutcomeSpawnFailed,
       SelfUpdateOutcome.spawned => l10n.updateOutcomeStarted,
+      SelfUpdateOutcome.cancelled => l10n.updateOutcomeCancelled,
     };
   }
 
@@ -162,6 +196,10 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
     final downloaded = progress?.downloadedBytes ?? 0;
     final total = progress?.totalBytes;
     final showVerifying = fraction == 1.0;
+    final showCancel =
+        (widget.cancelSupported ?? SelfUpdateService.supportsCancel) &&
+        !showVerifying &&
+        !_cancelLocked;
     final statusText = Platform.isMacOS && progress == null
         ? l10n.updateDialogDownloadingVerifying
         : showVerifying
@@ -191,6 +229,16 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
             ),
           ],
         ),
+        actions: [
+          if (showCancel)
+            TextButton(
+              key: const Key('update-cancel-button'),
+              onPressed: _cancelling ? null : _cancel,
+              child: Text(
+                _cancelling ? l10n.updateDialogCancelling : l10n.actionCancel,
+              ),
+            ),
+        ],
       ),
     );
   }

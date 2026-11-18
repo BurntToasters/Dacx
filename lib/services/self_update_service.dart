@@ -65,6 +65,33 @@ enum SelfUpdateOutcome {
   gatekeeperRejected,
   spawnFailed,
   spawned,
+  cancelled,
+}
+
+class SelfUpdateCancelledException implements Exception {
+  const SelfUpdateCancelledException();
+
+  @override
+  String toString() => 'Update cancelled';
+}
+
+class SelfUpdateCancelToken {
+  final Completer<void> _cancelled = Completer<void>();
+  bool _locked = false;
+
+  bool get isCancelled => _cancelled.isCompleted;
+  bool get isLocked => _locked;
+  Future<void> get whenCancelled => _cancelled.future;
+
+  bool cancel() {
+    if (_locked) return false;
+    if (!_cancelled.isCompleted) _cancelled.complete();
+    return true;
+  }
+
+  void lock() {
+    _locked = true;
+  }
 }
 
 class SelfUpdateResult {
@@ -114,6 +141,15 @@ class SelfUpdateService {
   static const int _maxDownloadRedirects = 5;
 
   bool _installInFlight = false;
+  SelfUpdateCancelToken? _activeCancel;
+
+  static bool get supportsCancel => Platform.isWindows;
+
+  bool cancelUpdate() {
+    final token = _activeCancel;
+    if (token == null) return false;
+    return token.cancel();
+  }
 
   final DebugLogService? _debugLog;
   final HttpStreamFn _httpStream;
@@ -446,19 +482,44 @@ class SelfUpdateService {
     if (override != null) {
       return override(url, outFile, onProgress: onProgress);
     }
-    return _downloadToImpl(url, outFile, onProgress: onProgress);
+    return _downloadToImpl(
+      url,
+      outFile,
+      onProgress: onProgress,
+      cancelToken: _activeCancel,
+    );
   }
 
   Future<void> _downloadToImpl(
     String url,
     File outFile, {
     void Function(SelfUpdateProgress)? onProgress,
+    SelfUpdateCancelToken? cancelToken,
   }) async {
+    if (cancelToken != null && cancelToken.isCancelled) {
+      throw const SelfUpdateCancelledException();
+    }
     await outFile.parent.create(recursive: true);
-    final resp = await _sendAllowedGet(
-      url,
-      timeout: const Duration(minutes: 5),
-    );
+    final request = _sendAllowedGet(url, timeout: const Duration(minutes: 5));
+    final http.StreamedResponse resp;
+    if (cancelToken == null) {
+      resp = await request;
+    } else {
+      final raced = await Future.any<http.StreamedResponse?>([
+        request,
+        cancelToken.whenCancelled.then<http.StreamedResponse?>((_) => null),
+      ]);
+      if (raced == null) {
+        unawaited(
+          request.then<void>(
+            (response) => response.stream.listen(null).cancel(),
+            onError: (Object _) {},
+          ),
+        );
+        throw const SelfUpdateCancelledException();
+      }
+      resp = raced;
+    }
     if (resp.statusCode != 200) {
       throw StateError('HTTP ${resp.statusCode} from $url');
     }
@@ -467,11 +528,33 @@ class SelfUpdateService {
     final sink = outFile.openWrite();
     var completed = false;
     try {
-      await resp.stream.listen((chunk) {
-        sink.add(chunk);
-        downloaded += chunk.length;
-        onProgress?.call(SelfUpdateProgress(downloaded, total));
-      }).asFuture<void>();
+      final done = Completer<void>();
+      final subscription = resp.stream.listen(
+        (chunk) {
+          sink.add(chunk);
+          downloaded += chunk.length;
+          onProgress?.call(SelfUpdateProgress(downloaded, total));
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!done.isCompleted) done.completeError(error, stack);
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: true,
+      );
+      if (cancelToken != null) {
+        unawaited(
+          cancelToken.whenCancelled.then<void>((_) async {
+            if (done.isCompleted) return;
+            await subscription.cancel();
+            if (!done.isCompleted) {
+              done.completeError(const SelfUpdateCancelledException());
+            }
+          }),
+        );
+      }
+      await done.future;
       completed = true;
     } finally {
       await sink.flush();
@@ -580,7 +663,9 @@ class SelfUpdateService {
     }
     if (result.outcome != SelfUpdateOutcome.spawned) {
       _installInFlight = false;
-      if (result.outcome != SelfUpdateOutcome.unsupportedPlatform) {
+      if (result.outcome == SelfUpdateOutcome.cancelled) {
+        _log('self_update_cancelled');
+      } else if (result.outcome != SelfUpdateOutcome.unsupportedPlatform) {
         final failed = result;
         _log(
           'self_update_outcome',
@@ -622,6 +707,25 @@ class SelfUpdateService {
     UpdateInfo info, {
     void Function(SelfUpdateProgress)? onProgress,
   }) async {
+    final cancelToken = SelfUpdateCancelToken();
+    _activeCancel = cancelToken;
+    try {
+      return await _applyWindowsGuarded(
+        info,
+        cancelToken,
+        onProgress: onProgress,
+      );
+    } finally {
+      cancelToken.lock();
+      if (identical(_activeCancel, cancelToken)) _activeCancel = null;
+    }
+  }
+
+  Future<SelfUpdateResult> _applyWindowsGuarded(
+    UpdateInfo info,
+    SelfUpdateCancelToken cancelToken, {
+    void Function(SelfUpdateProgress)? onProgress,
+  }) async {
     await _cleanUpdateCache();
     final asset = pickAssetByPattern(
       info.assets,
@@ -652,12 +756,24 @@ class SelfUpdateService {
     try {
       await cacheDir.create(recursive: true);
       await _downloadTo(asset.downloadUrl, msiPath, onProgress: onProgress);
+      if (cancelToken.isCancelled) {
+        try {
+          await msiPath.delete();
+        } catch (_) {}
+        return const SelfUpdateResult(SelfUpdateOutcome.cancelled);
+      }
+      cancelToken.lock();
       checksumsBody = await _fetchText(checksums.downloadUrl);
       manifestBytes = await _fetchBytes(manifest.downloadUrl);
       final manifestSignatureBody = await _fetchText(
         manifestSignature.downloadUrl,
       );
       manifestSignatureBytes = base64Decode(manifestSignatureBody.trim());
+    } on SelfUpdateCancelledException {
+      try {
+        await msiPath.delete();
+      } catch (_) {}
+      return const SelfUpdateResult(SelfUpdateOutcome.cancelled);
     } catch (e) {
       return SelfUpdateResult(
         SelfUpdateOutcome.downloadFailed,

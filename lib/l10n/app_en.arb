@@ -391,6 +391,14 @@
   "updateDialogDownloadManually": "Download the update manually",
   "updateActionInstall": "Install",
   "updateActionView": "View",
+  "updateActionLater": "Later",
+  "updateWhatsNewTitle": "What's new",
+  "updateWhatsNewMore": "+{count} more",
+  "@updateWhatsNewMore": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "updateReleaseNotesAction": "Release notes",
+  "updateDialogCancelling": "Cancelling…",
 
   "snackUpdatedToVersion": "Updated to v{version}",
   "@snackUpdatedToVersion": {
@@ -428,6 +436,7 @@
   "updateOutcomeGatekeeperRejected": "Self-update is not available on this build (missing signing configuration).",
   "updateOutcomeSpawnFailed": "Could not launch the installer.",
   "updateOutcomeStarted": "Update started.",
+  "updateOutcomeCancelled": "Update cancelled.",
 
   "windowMinimize": "Minimize window",
   "windowMaximize": "Maximize window",

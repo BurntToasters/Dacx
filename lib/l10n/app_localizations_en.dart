@@ -968,6 +968,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateActionView => 'View';
 
   @override
+  String get updateActionLater => 'Later';
+
+  @override
+  String get updateWhatsNewTitle => 'What\'s new';
+
+  @override
+  String updateWhatsNewMore(int count) {
+    return '+$count more';
+  }
+
+  @override
+  String get updateReleaseNotesAction => 'Release notes';
+
+  @override
+  String get updateDialogCancelling => 'Cancelling…';
+
+  @override
   String snackUpdatedToVersion(String version) {
     return 'Updated to v$version';
   }
@@ -1051,6 +1068,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateOutcomeStarted => 'Update started.';
+
+  @override
+  String get updateOutcomeCancelled => 'Update cancelled.';
 
   @override
   String get windowMinimize => 'Minimize window';
