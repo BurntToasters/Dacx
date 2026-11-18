@@ -21,7 +21,7 @@ abstract class IPlayerService {
 
   Tracks get currentTracks;
 
-  Future<void> open(String filePath, {bool play = true});
+  Future<void> open(String filePath, {bool play = true, bool allowUnc = false});
   Future<void> play();
   Future<void> pause();
   Future<void> playPause();
@@ -40,8 +40,8 @@ abstract class IPlayerService {
   Future<bool> setAudioFilter(String? chain);
   Future<bool> setChapter(int index);
   Future<bool> stepChapter(int delta);
-  Future<bool> addExternalAudio(String path);
-  Future<bool> addExternalSubtitle(String path);
+  Future<bool> addExternalAudio(String path, {bool allowUnc = false});
+  Future<bool> addExternalSubtitle(String path, {bool allowUnc = false});
   Future<void> dispose();
 }
 
@@ -116,8 +116,16 @@ class PlayerService implements IPlayerService {
   }
 
   @override
-  Future<void> open(String filePath, {bool play = true}) async {
+  Future<void> open(
+    String filePath, {
+    bool play = true,
+    bool allowUnc = false,
+  }) async {
     if (_disposed) return;
+    if (PlayerPathUtils.isUncPath(filePath) &&
+        PlayerPathUtils.isUnsafeOpenPath(filePath, allowUnc: allowUnc)) {
+      throw ArgumentError.value(filePath, 'filePath', 'Unsafe network path');
+    }
     try {
       await player.open(Media(filePath), play: play);
     } catch (e, st) {
@@ -249,13 +257,21 @@ class PlayerService implements IPlayerService {
   }
 
   @override
-  Future<bool> addExternalAudio(String path) => _addTrack('audio-add', path);
+  Future<bool> addExternalAudio(String path, {bool allowUnc = false}) =>
+      _addTrack('audio-add', path, allowUnc: allowUnc);
 
   @override
-  Future<bool> addExternalSubtitle(String path) => _addTrack('sub-add', path);
+  Future<bool> addExternalSubtitle(String path, {bool allowUnc = false}) =>
+      _addTrack('sub-add', path, allowUnc: allowUnc);
 
-  Future<bool> _addTrack(String command, String path) async {
-    if (PlayerPathUtils.isUnsafeOpenPath(path)) return false;
+  Future<bool> _addTrack(
+    String command,
+    String path, {
+    required bool allowUnc,
+  }) async {
+    if (PlayerPathUtils.isUnsafeOpenPath(path, allowUnc: allowUnc)) {
+      return false;
+    }
     return await _guardValue<bool>(command, () async {
           final platform = player.platform;
           if (platform is! NativePlayer) return false;

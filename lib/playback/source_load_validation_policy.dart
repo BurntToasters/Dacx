@@ -1,6 +1,23 @@
 import '../models/playable_source.dart';
 import 'player_path_utils.dart';
 
+enum SourceOrigin {
+  fileDialog(allowsUnc: true),
+  folderDialog(allowsUnc: true),
+  dragDrop(allowsUnc: true),
+  recents(allowsUnc: true),
+  queue(allowsUnc: true),
+  commandLine(allowsUnc: false),
+  forwarded(allowsUnc: false),
+  playlistEntry(allowsUnc: false),
+  mediaSession(allowsUnc: false),
+  other(allowsUnc: false);
+
+  const SourceOrigin({required this.allowsUnc});
+
+  final bool allowsUnc;
+}
+
 /// Pre-open validation outcome for [PlayerScreen._loadSourceInternal].
 enum SourceLoadValidationFailure {
   none,
@@ -80,6 +97,7 @@ abstract final class SourceLoadValidationPolicy {
   static SourceLoadValidationResult validateRequest({
     required PlayableSource source,
     required String trimmedValue,
+    SourceOrigin origin = SourceOrigin.other,
   }) {
     if (trimmedValue.isEmpty) {
       return const SourceLoadValidationResult(
@@ -91,7 +109,11 @@ abstract final class SourceLoadValidationPolicy {
         SourceLoadValidationFailure.invalidUrl,
       );
     }
-    if (source.isFile && PlayerPathUtils.isUnsafeOpenPath(trimmedValue)) {
+    if (source.isFile &&
+        PlayerPathUtils.isUnsafeOpenPath(
+          trimmedValue,
+          allowUnc: origin.allowsUnc,
+        )) {
       return const SourceLoadValidationResult(
         SourceLoadValidationFailure.unsafePath,
       );
@@ -117,8 +139,13 @@ abstract final class SourceLoadValidationPolicy {
     required String trimmedValue,
     required PlayableSource normalizedSource,
     required bool fileExists,
+    SourceOrigin origin = SourceOrigin.other,
   }) {
-    final request = validateRequest(source: source, trimmedValue: trimmedValue);
+    final request = validateRequest(
+      source: source,
+      trimmedValue: trimmedValue,
+      origin: origin,
+    );
     if (!request.isOk) return request;
     return validateNormalizedFile(
       isFile: normalizedSource.isFile,

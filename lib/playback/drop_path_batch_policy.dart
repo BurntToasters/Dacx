@@ -15,6 +15,7 @@ abstract final class DropPathBatchPolicy {
   static DropPathBatch fromRawPaths({
     required Iterable<String> rawPaths,
     required bool windows,
+    bool allowUnc = false,
   }) {
     final raw = rawPaths.toList(growable: false);
     final paths = <String>[];
@@ -23,7 +24,8 @@ abstract final class DropPathBatchPolicy {
         rawPath,
         windows: windows,
       ).trim();
-      if (path.isEmpty || PlayerPathUtils.isUnsafeOpenPath(path)) {
+      if (path.isEmpty ||
+          PlayerPathUtils.isUnsafeOpenPath(path, allowUnc: allowUnc)) {
         continue;
       }
       paths.add(path);

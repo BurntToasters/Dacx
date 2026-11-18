@@ -72,13 +72,21 @@ abstract final class PlayerPathUtils {
     return false;
   }
 
+  static bool _isDeviceNamespacePath(String path) {
+    final normalized = path.replaceAll('/', r'\').toLowerCase();
+    if (normalized.startsWith(r'\\?\unc\')) return false;
+    return normalized.startsWith(r'\\?\') || normalized.startsWith(r'\\.\');
+  }
+
   /// Rejects paths that must never be handed to the media engine from IPC /
   /// Open With (UNC → NTLM / remote decoder surface, mpv protocol URIs).
-  static bool isUnsafeOpenPath(String path) {
+  static bool isUnsafeOpenPath(String path, {bool allowUnc = false}) {
     final trimmed = path.trim();
     if (trimmed.isEmpty) return true;
     if (trimmed.contains('\x00')) return true;
-    if (isUncPath(trimmed)) return true;
+    if (isUncPath(trimmed)) {
+      return !allowUnc || _isDeviceNamespacePath(trimmed);
+    }
     final schemeMatch = _uriScheme.firstMatch(trimmed);
     if (schemeMatch != null) {
       final scheme = schemeMatch.group(1)!.toLowerCase();

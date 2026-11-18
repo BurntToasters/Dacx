@@ -456,7 +456,33 @@ Modes: pending.
 
 ## Finding 37: UNC paths for explicit picks
 
-Modes: pending.
+UNC paths (`\\server\share\...`) were refused everywhere. They are now accepted
+only when the user explicitly picked them (file dialog, folder dialog,
+drag-and-drop, recents, play queue). Paths from untrusted origins (command
+line, second-instance / Open With forwarding, playlist-file entries, media
+session) stay refused. Exercised by `test/e2e/audit9_unc_e2e_test.dart`.
+
+Modes:
+
+- M37.1: `PlayerPathUtils.isUnsafeOpenPath` accepts a UNC path (backslash, forward-slash or `\\?\UNC\`) when `allowUnc` is not passed.
+- M37.2: `isUnsafeOpenPath(..., allowUnc: true)` still refuses a UNC path (backslash, forward-slash or `\\?\UNC\`).
+- M37.3: `allowUnc: true` weakens another rule: it accepts an empty path, a NUL byte (also inside a UNC path), a protocol URI (`lavfi:`, `ytdl:`, `edl:`), http credentials, or a device path (`\\.\pipe\x`, `\\?\C:\x`, `\\?\GLOBALROOT\x`).
+- M37.4: `SourceOrigin` allows UNC for an origin that should not (command line, forwarded, playlist entry, media session, other) or refuses it for a user-picked origin (file dialog, folder dialog, drag-and-drop, recents, queue).
+- M37.5: `SourceLoadValidationPolicy.validateRequest` accepts UNC without an origin or for a blocked origin, or refuses it for an allowed origin, or keeps reporting a different failure than `unsafePath` for a refused UNC.
+- M37.6: A UNC path picked with the open-file dialog is refused instead of reaching the player.
+- M37.7: A UNC path picked with the add-files-to-queue dialog is refused or not queued.
+- M37.8: A UNC external audio or subtitle file picked in the dialog is refused, or a UNC external track is accepted without the explicit flag.
+- M37.9: A UNC folder picked with the folder dialog is refused as an invalid path instead of being scanned (an unreachable test share must surface the scan-failed message, not the invalid-path one), or files found under a UNC folder are refused when queued (`SourceOrigin.folderDialog` must allow UNC).
+- M37.10: A UNC path dropped on the window is skipped, or a dropped batch mixing UNC and local paths loses one of them; `DropPathBatchPolicy` keeps UNC without `allowUnc: true` or drops it with it.
+- M37.11: A recents entry that is a UNC path does not reopen from the recent-files menu.
+- M37.12: A UNC entry already in the play queue is refused when advancing to it with Next.
+- M37.13: The command-line initial file that is a UNC path reaches the player, or is refused without the existing "Invalid file path" message.
+- M37.14: A UNC path forwarded by a second instance or Open With (pending files) reaches the player, or a UNC path in a CLI-plus-pending batch is opened instead of being skipped with the existing skipped-file message while the local path still opens.
+- M37.15: A UNC entry inside a playlist file picked by dialog is queued, or a relative entry in a playlist file on a UNC share resolves to a UNC path that is queued.
+- M37.16: A playlist file that is itself a UNC path picked by dialog is refused as an invalid path instead of being read.
+- M37.17: A non-UNC unsafe path picked by dialog (`lavfi://sine`) is accepted because the origin allows UNC.
+- M37.18: `IPlayerService.open` hands a UNC path to the engine without the explicit flag, or refuses a UNC path when the flag is set (headless service).
+- M37.19: `WindowsShellService.filterJumpListPaths` stops dropping UNC paths (jump list must stay clear of network paths).
 
 ## Report helper
 

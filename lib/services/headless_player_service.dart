@@ -109,8 +109,16 @@ class HeadlessPlayerService implements IPlayerService {
   Tracks get currentTracks => _tracksState;
 
   @override
-  Future<void> open(String filePath, {bool play = true}) async {
+  Future<void> open(
+    String filePath, {
+    bool play = true,
+    bool allowUnc = false,
+  }) async {
     if (_disposed) return;
+    if (PlayerPathUtils.isUncPath(filePath) &&
+        PlayerPathUtils.isUnsafeOpenPath(filePath, allowUnc: allowUnc)) {
+      throw ArgumentError.value(filePath, 'filePath', 'Unsafe network path');
+    }
     if (_openError != null) throw _openError!;
     if (_failOpenPaths.contains(filePath)) {
       throw Exception('open failed: $filePath');
@@ -284,10 +292,12 @@ class HeadlessPlayerService implements IPlayerService {
   }
 
   @override
-  Future<bool> addExternalAudio(String path) => _addTrack('audio-add', path);
+  Future<bool> addExternalAudio(String path, {bool allowUnc = false}) =>
+      _addTrack('audio-add', path, allowUnc: allowUnc);
 
   @override
-  Future<bool> addExternalSubtitle(String path) => _addTrack('sub-add', path);
+  Future<bool> addExternalSubtitle(String path, {bool allowUnc = false}) =>
+      _addTrack('sub-add', path, allowUnc: allowUnc);
 
   final Set<String> _failCommandNames = {};
   final List<List<String>> _commandCalls = [];
@@ -298,8 +308,15 @@ class HeadlessPlayerService implements IPlayerService {
   @visibleForTesting
   List<List<String>> get commandCalls => List.unmodifiable(_commandCalls);
 
-  Future<bool> _addTrack(String command, String path) async {
-    if (_disposed || PlayerPathUtils.isUnsafeOpenPath(path)) return false;
+  Future<bool> _addTrack(
+    String command,
+    String path, {
+    required bool allowUnc,
+  }) async {
+    if (_disposed ||
+        PlayerPathUtils.isUnsafeOpenPath(path, allowUnc: allowUnc)) {
+      return false;
+    }
     _commandCalls.add([command, path, 'select']);
     return !_failCommandNames.contains(command);
   }

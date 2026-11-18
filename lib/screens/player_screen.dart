@@ -625,7 +625,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (seededDropPaths != null && seededDropPaths.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _isDisposed) return;
-        _applyDroppedPaths(seededDropPaths);
+        _applyDroppedPaths(seededDropPaths, origin: SourceOrigin.dragDrop);
       });
     }
 
@@ -1024,16 +1024,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _openRequestedFile(
     String filePath, {
     bool forcePlay = false,
+    SourceOrigin origin = SourceOrigin.forwarded,
   }) async {
     await _openRequestedFileRequest(
       OpenFileRequest(path: filePath),
       forcePlay: forcePlay,
+      origin: origin,
     );
   }
 
   Future<void> _openRequestedFileRequest(
     OpenFileRequest request, {
     bool forcePlay = false,
+    SourceOrigin origin = SourceOrigin.forwarded,
   }) async {
     final bookmark = request.bookmark;
     if (bookmark != null && BookmarkService.isSupported) {
@@ -1062,7 +1065,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         forcePlay: forcePlay,
         isPlaying: _player.isPlaying,
       )) {
-        await _loadFile(trimmed, forcePlay: true);
+        await _loadFile(trimmed, forcePlay: true, origin: origin);
         return;
       }
       return;
@@ -1071,7 +1074,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       'open_requested',
       detailsBuilder: () => {'path': trimmed, 'force_play': forcePlay},
     );
-    await _loadFile(trimmed, forcePlay: forcePlay);
+    await _loadFile(trimmed, forcePlay: forcePlay, origin: origin);
   }
 
   Future<void> _openRequestedFileBatch(List<OpenFileRequest> requests) async {
@@ -1081,7 +1084,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (bookmark != null) _settings.setFileBookmark(request.path, bookmark);
       }
     }
-    _applyDroppedPaths(requests.map((request) => request.path));
+    _applyDroppedPaths(
+      requests.map((request) => request.path),
+      origin: SourceOrigin.forwarded,
+    );
   }
 
   void _applySpeed(double speed) {
@@ -1339,7 +1345,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
 
       await _captureBookmarkFor(path);
-      await _openPathOrPlaylist(path);
+      await _openPathOrPlaylist(path, origin: SourceOrigin.fileDialog);
     } on PlatformException catch (e) {
       _log(
         'file_picker_platform_exception',
@@ -1401,7 +1407,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         return;
       }
-      _enqueue(scan.paths, playNow: playNow);
+      _enqueue(scan.paths, playNow: playNow, origin: SourceOrigin.folderDialog);
       if (mounted && (scan.skipped > 0 || scan.truncated > 0)) {
         final parts = <String>[];
         if (scan.skipped > 0) {
@@ -1462,13 +1468,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     await _loadSource(PlayableSource.url(trimmed));
   }
 
-  Future<void> _loadFile(String filePath, {bool forcePlay = false}) {
-    return _openPathOrPlaylist(filePath, forcePlay: forcePlay);
+  Future<void> _loadFile(
+    String filePath, {
+    bool forcePlay = false,
+    SourceOrigin origin = SourceOrigin.other,
+  }) {
+    return _openPathOrPlaylist(filePath, forcePlay: forcePlay, origin: origin);
   }
 
   Future<void> _openPathOrPlaylist(
     String filePath, {
     bool forcePlay = false,
+    SourceOrigin origin = SourceOrigin.other,
   }) async {
     final trimmed = filePath.trim();
     if (trimmed.isEmpty) return;
@@ -1476,7 +1487,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       await _loadSource(PlayableSource.url(trimmed), forcePlay: forcePlay);
       return;
     }
-    if (PlayerPathUtils.isUnsafeOpenPath(trimmed)) {
+    if (PlayerPathUtils.isUnsafeOpenPath(trimmed, allowUnc: origin.allowsUnc)) {
       _handleLoadValidationFailure(
         failure: SourceLoadValidationFailure.unsafePath,
         detailsBuilder: () => {'path': trimmed},
@@ -1484,10 +1495,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       return;
     }
     if (M3uPlaylist.isPlaylistPath(trimmed)) {
-      await _importPlaylistFile(trimmed, playNow: true);
+      await _importPlaylistFile(trimmed, playNow: true, origin: origin);
       return;
     }
-    await _loadSource(PlayableSource.file(trimmed), forcePlay: forcePlay);
+    await _loadSource(
+      PlayableSource.file(trimmed),
+      forcePlay: forcePlay,
+      origin: origin,
+    );
   }
 
   Future<void> _openPlaylistPicker({bool playNow = true}) async {
@@ -1510,7 +1525,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (parent.isNotEmpty && parent != path) {
         await _captureBookmarkFor(parent);
       }
-      await _importPlaylistFile(path, playNow: playNow);
+      await _importPlaylistFile(
+        path,
+        playNow: playNow,
+        origin: SourceOrigin.fileDialog,
+      );
     } on PlatformException catch (e) {
       _log(
         'playlist_picker_platform_exception',
@@ -1598,8 +1617,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _importPlaylistFile(
     String playlistPath, {
     required bool playNow,
+    SourceOrigin origin = SourceOrigin.other,
   }) async {
-    if (PlayerPathUtils.isUnsafeOpenPath(playlistPath)) {
+    if (PlayerPathUtils.isUnsafeOpenPath(
+      playlistPath,
+      allowUnc: origin.allowsUnc,
+    )) {
       _handleLoadValidationFailure(
         failure: SourceLoadValidationFailure.unsafePath,
         detailsBuilder: () => {'path': playlistPath},
@@ -1649,6 +1672,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     bool syncPlaylist = true,
     bool applyResume = true,
     bool? playOverride,
+    SourceOrigin origin = SourceOrigin.other,
   }) {
     return _playback.loadQueue.enqueue(
       () async {
@@ -1658,6 +1682,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           syncPlaylist: syncPlaylist,
           applyResume: applyResume,
           playOverride: playOverride,
+          origin: origin,
         );
       },
       onError: (Object e, StackTrace st) {
@@ -1838,6 +1863,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     bool applyResume = true,
     bool? playOverride,
     _LoadFailureBatch? failureBatch,
+    SourceOrigin origin = SourceOrigin.other,
   }) async {
     if (_isDisposed) return false;
     final requestedValue = source.value.trim();
@@ -1856,6 +1882,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       trimmedValue: requestedValue,
       normalizedSource: normalizedSource,
       fileExists: fileExists,
+      origin: origin,
     );
     if (!validation.isOk) {
       _handleLoadValidationFailure(
@@ -1944,7 +1971,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         autoPlaySetting: _settings.autoPlay,
         playOverride: playOverride,
       );
-      await _playerService.open(open.path, play: open.play);
+      await _playerService.open(
+        open.path,
+        play: open.play,
+        allowUnc: origin.allowsUnc,
+      );
       // Re-apply after open because libmpv may reset per-file properties.
       await _advancedPlayback.applyForCurrentSource();
     } catch (e) {
@@ -2085,13 +2116,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   void _onDragDone(DropDoneDetails details) {
     if (details.files.isEmpty) return;
-    _applyDroppedPaths(details.files.map((file) => file.path));
+    _applyDroppedPaths(
+      details.files.map((file) => file.path),
+      origin: SourceOrigin.dragDrop,
+    );
   }
 
-  void _applyDroppedPaths(Iterable<String> rawPaths) {
+  void _applyDroppedPaths(
+    Iterable<String> rawPaths, {
+    required SourceOrigin origin,
+  }) {
     final batch = DropPathBatchPolicy.fromRawPaths(
       rawPaths: rawPaths,
       windows: Platform.isWindows,
+      allowUnc: origin.allowsUnc,
     );
     if (batch.isEmpty) {
       _log(
@@ -2122,10 +2160,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             : l10n.snackSkippedUnreadableFiles(batch.skippedCount),
       );
     }
-    unawaited(_applyDroppedPathsExpanded(batch.paths));
+    unawaited(_applyDroppedPathsExpanded(batch.paths, origin: origin));
   }
 
-  Future<void> _applyDroppedPathsExpanded(List<String> paths) async {
+  Future<void> _applyDroppedPathsExpanded(
+    List<String> paths, {
+    required SourceOrigin origin,
+  }) async {
     final media = <PlayableSource>[];
     var inaccessible = 0;
     for (final path in paths) {
@@ -2193,12 +2234,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       case DropFileAction.loadSingle:
         final only = media.first;
         if (only.isFile) {
-          unawaited(_loadFile(only.value));
+          unawaited(_loadFile(only.value, origin: origin));
         } else {
-          unawaited(_loadSource(only));
+          unawaited(_loadSource(only, origin: origin));
         }
       case DropFileAction.enqueuePlayNow:
-        _enqueueSources(media, playNow: true);
+        _enqueueSources(media, playNow: true, origin: origin);
     }
   }
 
@@ -2220,9 +2261,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final source = PlayableSource.fromStored(path);
     if (source == null) return;
     if (source.isUrl) {
-      unawaited(_loadSource(source));
+      unawaited(_loadSource(source, origin: SourceOrigin.recents));
     } else {
-      unawaited(_openRequestedFile(source.value));
+      unawaited(_openRequestedFile(source.value, origin: SourceOrigin.recents));
     }
   }
 
@@ -2244,9 +2285,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final source = PlayableSource.fromStored(lastPath);
     if (source == null) return;
     if (source.isUrl) {
-      await _loadSource(source);
+      await _loadSource(source, origin: SourceOrigin.recents);
     } else {
-      await _openRequestedFile(source.value);
+      await _openRequestedFile(source.value, origin: SourceOrigin.recents);
     }
   }
 
@@ -3361,6 +3402,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                         _loadSource(
                                           source,
                                           syncPlaylist: false,
+                                          origin: SourceOrigin.queue,
                                         ),
                                       );
                                     },
@@ -4129,7 +4171,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _mixReloadInFlight = true;
     try {
       final savedPos = _player.position;
-      await _loadSource(source, syncPlaylist: false, applyResume: false);
+      await _loadSource(
+        source,
+        syncPlaylist: false,
+        applyResume: false,
+        origin: SourceOrigin.queue,
+      );
       if (savedPos > Duration.zero) {
         await Future<void>.delayed(_mixReloadDelay);
         if (mounted && !_isDisposed && _player.currentSource == source) {
@@ -4368,7 +4415,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _showOsdMessage(
           delta > 0 ? l10n.osdNextInQueue : l10n.osdPreviousInQueue,
         );
-        await _loadSourceInternal(next, syncPlaylist: false);
+        await _loadSourceInternal(
+          next,
+          syncPlaylist: false,
+          origin: SourceOrigin.queue,
+        );
       },
       onError: (Object e, StackTrace st) {
         _log(
@@ -4380,14 +4431,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
-  void _enqueue(List<String> paths, {bool playNow = false}) {
+  void _enqueue(
+    List<String> paths, {
+    bool playNow = false,
+    SourceOrigin origin = SourceOrigin.other,
+  }) {
     _enqueueSources(
       paths.map(PlayableSource.file).toList(growable: false),
       playNow: playNow,
+      origin: origin,
     );
   }
 
-  void _enqueueSources(List<PlayableSource> sources, {bool playNow = false}) {
+  void _enqueueSources(
+    List<PlayableSource> sources, {
+    bool playNow = false,
+    SourceOrigin origin = SourceOrigin.other,
+  }) {
     if (sources.isEmpty) return;
     switch (EnqueuePolicy.mode(
       playNow: playNow,
@@ -4414,6 +4474,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                   candidates[i],
                   syncPlaylist: false,
                   failureBatch: failureBatch,
+                  origin: origin,
                 )) {
                   openedIndex = i;
                   break;
@@ -4496,7 +4557,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     } else if (currentRemoved) {
       final next = _playlist.current;
       if (next != null) {
-        unawaited(_loadSource(next, syncPlaylist: false));
+        unawaited(
+          _loadSource(next, syncPlaylist: false, origin: SourceOrigin.queue),
+        );
       }
     }
     showAppSnackBar(
@@ -4514,7 +4577,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       await _stopPlaybackAndResetUi();
       return;
     }
-    await _loadSource(next, syncPlaylist: false);
+    await _loadSource(next, syncPlaylist: false, origin: SourceOrigin.queue);
   }
 
   // ── Compact / mini-player mode ────────────────────────────
@@ -5128,7 +5191,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final path = FilePickerPath.fromPlatformFilePath(file?.path);
       if (path == null) return;
       await _captureBookmarkFor(path);
-      final ok = await _playerService.addExternalAudio(path);
+      final ok = await _playerService.addExternalAudio(
+        path,
+        allowUnc: SourceOrigin.fileDialog.allowsUnc,
+      );
       if (!mounted) return;
       _showOsdMessage(
         ok ? l10n.osdExternalAudioLoaded : l10n.osdExternalAudioFailed,
@@ -5176,7 +5242,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final path = FilePickerPath.fromPlatformFilePath(file?.path);
       if (path == null) return;
       await _captureBookmarkFor(path);
-      final ok = await _playerService.addExternalSubtitle(path);
+      final ok = await _playerService.addExternalSubtitle(
+        path,
+        allowUnc: SourceOrigin.fileDialog.allowsUnc,
+      );
       if (!mounted) return;
       _showOsdMessage(
         ok ? l10n.osdExternalSubtitleLoaded : l10n.osdExternalSubtitleFailed,
@@ -5297,7 +5366,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         return;
       }
-      _enqueueSources(sources);
+      _enqueueSources(sources, origin: SourceOrigin.fileDialog);
     } on PlatformException catch (e) {
       _log(
         'enqueue_picker_platform_exception',
