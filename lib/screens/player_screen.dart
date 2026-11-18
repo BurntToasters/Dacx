@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -40,19 +39,12 @@ import '../playback/player_audio_session.dart';
 import '../playback/player_controller.dart';
 import '../playback/sleep_timer_controller.dart';
 import '../playback/player_settings_sync.dart';
-import '../playback/drop_path_batch_policy.dart';
-import '../playback/enqueue_policy.dart';
 import '../playback/file_picker_path.dart';
 import '../playback/m3u_playlist.dart';
 import '../playback/playback_speed_policy.dart';
-import '../playback/resume_playback_policy.dart';
 import '../playback/screenshot_saver.dart';
-import '../playback/source_load_post_open_policy.dart';
-import '../playback/source_load_pre_open_policy.dart';
-import '../playback/source_load_open_policy.dart';
 import '../playback/playlist_advance_policy.dart';
 import '../playback/source_load_validation_policy.dart';
-import '../playback/source_open_policy.dart';
 import '../playback/volume_policy.dart';
 import '../playback/update_launch_policy.dart';
 import '../playback/subscription_bag.dart';
@@ -71,6 +63,7 @@ import 'player/player_file_pickers.dart';
 import 'player/player_messenger.dart';
 import 'player/player_shortcut_dispatcher.dart';
 import 'player/player_window_controller.dart';
+import 'player/source_load_coordinator.dart';
 import 'player/track_chapter_controller.dart';
 import 'player/widgets/drag_overlay.dart';
 import 'player/widgets/media_surface.dart';
@@ -86,7 +79,6 @@ const _updateSnackbarDuration = Duration(seconds: 10);
 const _snackbarShortDuration = Duration(seconds: 2);
 const _settingsFwdTransition = Duration(milliseconds: 340);
 const _settingsRevTransition = Duration(milliseconds: 280);
-const _durationPollInterval = Duration(milliseconds: 50);
 
 class PlayerScreen extends StatefulWidget {
   final SettingsService settings;
@@ -164,7 +156,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   PlayerSettingsSyncState _settingsSyncState = const PlayerSettingsSyncState();
 
   bool _isDisposed = false;
-  bool _stopInProgress = false;
   final _scrollVolume = ScrollVolumeAccumulator();
 
   // Tracks / chapters / OSD state
@@ -195,8 +186,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     showOsd: _showOsdMessage,
     showMessage: (message) => showAppSnackBar(context, message),
     syncIdleInhibit: _media.syncIdleInhibit,
-    captureBookmark: _captureBookmarkFor,
-    reloadSourceForMixChange: (source) => _loadSource(
+    captureBookmark: (path) => _sourceLoad.captureBookmarkFor(path),
+    reloadSourceForMixChange: (source) => _sourceLoad.loadSource(
       source,
       syncPlaylist: false,
       applyResume: false,
@@ -223,7 +214,26 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Timer? _resumeSaveTimer;
   Timer? _updateCheckTimer;
 
-  String? _activeBookmarkToken;
+  late final SourceLoadCoordinator _sourceLoad = SourceLoadCoordinator(
+    settings: _settings,
+    playerService: _playerService,
+    playback: _playback,
+    player: _player,
+    playlist: _playlist,
+    media: _media,
+    tracks: _tracks,
+    pickers: _pickers,
+    advancedPlayback: _advancedPlayback,
+    seekPreview: _seekPreviewService,
+    log: _log,
+    isMounted: () => mounted,
+    isDisposed: () => _isDisposed,
+    isHeadlessMedia: () => _headlessMedia,
+    update: setState,
+    l10n: () => AppLocalizations.of(context),
+    showOsd: _showOsdMessage,
+    showMessage: (message) => showAppSnackBar(context, message),
+  );
 
   void _log(
     String event, {
@@ -244,49 +254,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           detailsBuilder ?? (details.isEmpty ? null : () => details),
       severity: severity,
     );
-  }
-
-  String _loadUserMessageText(SourceLoadUserMessageKind kind) =>
-      PlayerMessenger.loadUserMessageText(AppLocalizations.of(context), kind);
-
-  void _handleLoadValidationFailure({
-    required SourceLoadValidationFailure failure,
-    required Map<String, Object?> Function() detailsBuilder,
-    _LoadFailureBatch? batch,
-  }) {
-    final reaction = SourceLoadValidationPolicy.reactionFor(failure);
-    if (reaction.logEvent.isNotEmpty) {
-      _log(
-        reaction.logEvent,
-        detailsBuilder: detailsBuilder,
-        severity: DebugSeverity.warn,
-      );
-    }
-    if (reaction.shouldPruneRecentFiles) {
-      if (batch != null) {
-        batch.pruneRecents = true;
-      } else {
-        unawaited(_settings.pruneRecentFiles());
-      }
-    }
-    if (!mounted || reaction.userMessage == null) return;
-    final message = _loadUserMessageText(reaction.userMessage!);
-    if (batch != null) {
-      batch.add(message);
-      return;
-    }
-    showAppSnackBar(context, message);
-  }
-
-  void _flushLoadFailureBatch(_LoadFailureBatch batch) {
-    if (batch.pruneRecents) {
-      unawaited(_settings.pruneRecentFiles());
-    }
-    if (!mounted || batch.count == 0) return;
-    final message = batch.count == 1
-        ? batch.firstMessage!
-        : AppLocalizations.of(context).snackLoadFailuresSummary(batch.count);
-    showAppSnackBar(context, message);
   }
 
   bool get _headlessMedia =>
@@ -354,8 +321,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       isMounted: () => mounted,
       isDisposed: () => _isDisposed,
       update: setState,
-      onStop: _stopPlaybackAndResetUi,
-      onAdvancePlaylist: _advancePlaylist,
+      onStop: () => _sourceLoad.stopPlaybackAndResetUi(),
+      onAdvancePlaylist: (delta) => _sourceLoad.advancePlaylist(delta),
       onSetShuffle: _setShuffle,
       onQuitRequest: () => widget.onQuitRequest,
     );
@@ -438,7 +405,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         // Save on pause: the periodic saver only runs while playing, so a
         // pause (and any seek after it) would otherwise not be stored.
         if (!playing && !_player.fileOpenInProgress) {
-          _persistResumePosition();
+          _sourceLoad.persistResumePosition();
         }
         _media.onPlayingChanged(playing);
         if (widget.debugLog.isEnabled) {
@@ -478,7 +445,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
         _onAlbumArtTracks(tracks);
-        if (_stopInProgress || _player.fileOpenInProgress) return;
+        if (_sourceLoad.stopInProgress || _player.fileOpenInProgress) return;
         _tracks.cacheTracksForCurrentLoad(
           tracks,
           refreshChapters: true,
@@ -504,7 +471,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.completedStream.listen((completed) {
         if (!mounted || _isDisposed || !completed) return;
-        if (_stopInProgress || _playback.loadQueue.isBusy) return;
+        if (_sourceLoad.stopInProgress || _playback.loadQueue.isBusy) return;
         if (_player.currentSource == null) return;
         setState(() => _player.position = Duration.zero);
         if (widget.debugLog.isEnabled) {
@@ -519,7 +486,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (PlaylistAdvancePolicy.shouldAdvanceOnCompleted(
           _settings.loopMode,
         )) {
-          unawaited(_advancePlaylist(1));
+          unawaited(_sourceLoad.advancePlaylist(1));
         }
       }),
       _playerService.trackStream.listen((track) {
@@ -539,7 +506,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     // Periodic resume-position saver (every 5s while playing).
     _resumeSaveTimer = Timer.periodic(
       _resumeSaveInterval,
-      (_) => _persistResumePosition(requirePlaying: true),
+      (_) => _sourceLoad.persistResumePosition(requirePlaying: true),
     );
 
     _checkForUpdates();
@@ -548,8 +515,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     });
 
     _openFileBridge = OpenFileBridge(
-      onOpenRequest: _openRequestedFileRequest,
-      onOpenBatch: _openRequestedFileBatch,
+      onOpenRequest: _sourceLoad.openRequestedFileRequest,
+      onOpenBatch: _sourceLoad.openRequestedFileBatch,
       isActive: () => !_isDisposed && mounted,
       onLog:
           (event, {message, details = const {}, warn = false, error = false}) {
@@ -617,7 +584,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (seededDropPaths != null && seededDropPaths.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _isDisposed) return;
-        _applyDroppedPaths(seededDropPaths, origin: SourceOrigin.dragDrop);
+        _sourceLoad.applyDroppedPaths(
+          seededDropPaths,
+          origin: SourceOrigin.dragDrop,
+        );
       });
     }
 
@@ -625,7 +595,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (pendingLoad != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _isDisposed) return;
-        unawaited(_loadSource(pendingLoad));
+        unawaited(_sourceLoad.loadSource(pendingLoad));
       });
     }
   }
@@ -686,7 +656,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   /// Exit hook: window close, tray Quit, and Cmd+Q skip [dispose].
   Future<void> _saveStateBeforeExit() async {
     if (_isDisposed) return;
-    _persistResumePosition();
+    _sourceLoad.persistResumePosition();
     await _settings.flushResumePositions();
   }
 
@@ -707,7 +677,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _window.dispose();
     _resumeSaveTimer?.cancel();
     _updateCheckTimer?.cancel();
-    _persistResumePosition();
+    _sourceLoad.persistResumePosition();
     _log('player_dispose');
     _settings.removeListener(_onSettingsChanged);
     _openFileBridge.dispose();
@@ -716,7 +686,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _advancedPlayback.dispose();
     _playback.dispose();
     _player.dispose();
-    _releaseActiveBookmark();
+    _sourceLoad.releaseActiveBookmark();
     _media.dispose();
     _playlist.dispose();
     unawaited(_seekPreviewService.dispose());
@@ -727,7 +697,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void _onSleepTimerFired() {
     if (!mounted || _isDisposed) return;
     unawaited(() async {
-      await _stopPlaybackAndResetUi();
+      await _sourceLoad.stopPlaybackAndResetUi();
       if (!mounted || _isDisposed) return;
       showAppSnackBar(
         context,
@@ -757,60 +727,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       l10n.snackSleepTimerSet(minutes),
       duration: _snackbarShortDuration,
     );
-  }
-
-  void _releaseActiveBookmark() {
-    final token = _activeBookmarkToken;
-    if (token == null || token.isEmpty) return;
-    _activeBookmarkToken = null;
-    unawaited(BookmarkService.stop(token));
-  }
-
-  Future<String> _resolveSandboxedPath(String requestedPath) async {
-    final scoped = await _resolveBookmarkScope(requestedPath);
-    if (scoped.token != null) {
-      _releaseActiveBookmark();
-      _activeBookmarkToken = scoped.token!.isNotEmpty ? scoped.token : null;
-    }
-    return scoped.path;
-  }
-
-  Future<({String path, String? token})> _resolveBookmarkScope(
-    String requestedPath,
-  ) async {
-    if (!BookmarkService.isSupported) return (path: requestedPath, token: null);
-    final coveringKey = _settings.coveringBookmarkKey(requestedPath);
-    final bookmarkKey = coveringKey ?? requestedPath;
-    final bookmark = _settings.fileBookmark(bookmarkKey);
-    if (bookmark == null || bookmark.isEmpty) {
-      return (path: requestedPath, token: null);
-    }
-    final resolved = await BookmarkService.resolveAndStart(bookmark);
-    if (resolved == null) {
-      // A covering folder bookmark may still be valid for siblings.
-      if (coveringKey == null || coveringKey == requestedPath) {
-        _settings.removeFileBookmark(requestedPath);
-      }
-      return (path: requestedPath, token: null);
-    }
-    final bookmarkToPersist = resolved.refreshed ?? bookmark;
-    if (resolved.path != bookmarkKey) {
-      _settings.setFileBookmark(resolved.path, bookmarkToPersist);
-    } else if (resolved.stale && resolved.refreshed != null) {
-      _settings.setFileBookmark(bookmarkKey, resolved.refreshed!);
-    }
-    if (coveringKey != null && coveringKey != requestedPath) {
-      return (path: requestedPath, token: resolved.token);
-    }
-    return (path: resolved.path, token: resolved.token);
-  }
-
-  Future<void> _captureBookmarkFor(String path) async {
-    if (!BookmarkService.isSupported) return;
-    final bookmark = await BookmarkService.createBookmark(path);
-    if (bookmark != null && bookmark.isNotEmpty) {
-      _settings.setFileBookmark(path, bookmark);
-    }
   }
 
   void _onSettingsChanged() {
@@ -900,7 +816,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _window.applyAlwaysOnTop(delta.alwaysOnTop!);
     }
 
-    if (delta.rebuildUi && mounted) {
+    if (mounted) {
       setState(() {});
     }
   }
@@ -992,75 +908,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           return null;
       }
     });
-  }
-
-  Future<void> _openRequestedFile(
-    String filePath, {
-    bool forcePlay = false,
-    SourceOrigin origin = SourceOrigin.forwarded,
-  }) async {
-    await _openRequestedFileRequest(
-      OpenFileRequest(path: filePath),
-      forcePlay: forcePlay,
-      origin: origin,
-    );
-  }
-
-  Future<void> _openRequestedFileRequest(
-    OpenFileRequest request, {
-    bool forcePlay = false,
-    SourceOrigin origin = SourceOrigin.forwarded,
-  }) async {
-    final bookmark = request.bookmark;
-    if (bookmark != null && BookmarkService.isSupported) {
-      _settings.setFileBookmark(request.path, bookmark);
-    }
-    final filePath = request.path;
-    final trimmed = filePath.trim();
-    if (trimmed.isEmpty) return;
-    if (_currentFile == trimmed) {
-      _log(
-        'open_requested_same_file',
-        detailsBuilder: () => {
-          'path': trimmed,
-          'force_play': forcePlay,
-          'is_playing': _player.isPlaying,
-        },
-      );
-      if (SourceOpenPolicy.shouldResumeSameFile(
-        forcePlay: forcePlay,
-        isPlaying: _player.isPlaying,
-      )) {
-        unawaited(_playerService.playPause().catchError((_) {}));
-        return;
-      }
-      if (SourceOpenPolicy.shouldRestartSameFile(
-        forcePlay: forcePlay,
-        isPlaying: _player.isPlaying,
-      )) {
-        await _loadFile(trimmed, forcePlay: true, origin: origin);
-        return;
-      }
-      return;
-    }
-    _log(
-      'open_requested',
-      detailsBuilder: () => {'path': trimmed, 'force_play': forcePlay},
-    );
-    await _loadFile(trimmed, forcePlay: forcePlay, origin: origin);
-  }
-
-  Future<void> _openRequestedFileBatch(List<OpenFileRequest> requests) async {
-    if (BookmarkService.isSupported) {
-      for (final request in requests) {
-        final bookmark = request.bookmark;
-        if (bookmark != null) _settings.setFileBookmark(request.path, bookmark);
-      }
-    }
-    _applyDroppedPaths(
-      requests.map((request) => request.path),
-      origin: SourceOrigin.forwarded,
-    );
   }
 
   void _applySpeed(double speed) {
@@ -1299,8 +1146,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return;
       }
 
-      await _captureBookmarkFor(path);
-      await _openPathOrPlaylist(path, origin: SourceOrigin.fileDialog);
+      await _sourceLoad.captureBookmarkFor(path);
+      await _sourceLoad.openPathOrPlaylist(
+        path,
+        origin: SourceOrigin.fileDialog,
+      );
     } on PlatformException catch (e) {
       _log(
         'file_picker_platform_exception',
@@ -1343,7 +1193,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context);
       _settings.lastOpenDirectory = folder.trim();
-      await _captureBookmarkFor(folder.trim());
+      await _sourceLoad.captureBookmarkFor(folder.trim());
       final scan = await MediaFolderScanner.scan(
         folder,
         maxItems: PlaylistService.maxQueueItems,
@@ -1355,7 +1205,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         return;
       }
-      _enqueue(scan.paths, playNow: playNow, origin: SourceOrigin.folderDialog);
+      _sourceLoad.enqueue(
+        scan.paths,
+        playNow: playNow,
+        origin: SourceOrigin.folderDialog,
+      );
       if (mounted && (scan.skipped > 0 || scan.truncated > 0)) {
         final parts = <String>[];
         if (scan.skipped > 0) {
@@ -1413,44 +1267,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
       return;
     }
-    await _loadSource(PlayableSource.url(trimmed));
-  }
-
-  Future<void> _loadFile(
-    String filePath, {
-    bool forcePlay = false,
-    SourceOrigin origin = SourceOrigin.other,
-  }) {
-    return _openPathOrPlaylist(filePath, forcePlay: forcePlay, origin: origin);
-  }
-
-  Future<void> _openPathOrPlaylist(
-    String filePath, {
-    bool forcePlay = false,
-    SourceOrigin origin = SourceOrigin.other,
-  }) async {
-    final trimmed = filePath.trim();
-    if (trimmed.isEmpty) return;
-    if (PlayableSource.isSupportedUrl(trimmed)) {
-      await _loadSource(PlayableSource.url(trimmed), forcePlay: forcePlay);
-      return;
-    }
-    if (PlayerPathUtils.isUnsafeOpenPath(trimmed, allowUnc: origin.allowsUnc)) {
-      _handleLoadValidationFailure(
-        failure: SourceLoadValidationFailure.unsafePath,
-        detailsBuilder: () => {'path': trimmed},
-      );
-      return;
-    }
-    if (M3uPlaylist.isPlaylistPath(trimmed)) {
-      await _importPlaylistFile(trimmed, playNow: true, origin: origin);
-      return;
-    }
-    await _loadSource(
-      PlayableSource.file(trimmed),
-      forcePlay: forcePlay,
-      origin: origin,
-    );
+    await _sourceLoad.loadSource(PlayableSource.url(trimmed));
   }
 
   Future<void> _openPlaylistPicker({bool playNow = true}) async {
@@ -1458,12 +1275,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     try {
       final path = await _pickers.pickPlaylistFile();
       if (path == null) return;
-      await _captureBookmarkFor(path);
+      await _sourceLoad.captureBookmarkFor(path);
       final parent = p.dirname(path);
       if (parent.isNotEmpty && parent != path) {
-        await _captureBookmarkFor(parent);
+        await _sourceLoad.captureBookmarkFor(parent);
       }
-      await _importPlaylistFile(
+      await _sourceLoad.importPlaylistFile(
         path,
         playNow: playNow,
         origin: SourceOrigin.fileDialog,
@@ -1541,445 +1358,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
-  Future<void> _importPlaylistFile(
-    String playlistPath, {
-    required bool playNow,
-    SourceOrigin origin = SourceOrigin.other,
-  }) async {
-    if (PlayerPathUtils.isUnsafeOpenPath(
-      playlistPath,
-      allowUnc: origin.allowsUnc,
-    )) {
-      _handleLoadValidationFailure(
-        failure: SourceLoadValidationFailure.unsafePath,
-        detailsBuilder: () => {'path': playlistPath},
-      );
-      return;
-    }
-    try {
-      final sources = await M3uPlaylist.parseFile(playlistPath);
-      if (sources.isEmpty) {
-        if (mounted) {
-          showAppSnackBar(
-            context,
-            AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
-          );
-        }
-        return;
-      }
-      _pickers.rememberLastOpenDirectory(playlistPath);
-      _media.rememberRecentAndJumpList(playlistPath);
-      _enqueueSources(sources, playNow: playNow);
-      _log(
-        'playlist_imported',
-        detailsBuilder: () => {
-          'path': playlistPath,
-          'count': sources.length,
-          'play_now': playNow,
-        },
-      );
-    } catch (e) {
-      _log(
-        'playlist_import_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context).snackPlaylistImportFailed,
-        );
-      }
-    }
-  }
-
-  Future<void> _loadSource(
-    PlayableSource source, {
-    bool forcePlay = false,
-    bool syncPlaylist = true,
-    bool applyResume = true,
-    bool? playOverride,
-    SourceOrigin origin = SourceOrigin.other,
-  }) {
-    return _playback.loadQueue.enqueue(
-      () async {
-        await _loadSourceInternal(
-          source,
-          forcePlay: forcePlay,
-          syncPlaylist: syncPlaylist,
-          applyResume: applyResume,
-          playOverride: playOverride,
-          origin: origin,
-        );
-      },
-      onError: (Object e, StackTrace st) {
-        _log(
-          'load_queue_failed',
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
-      },
-    );
-  }
-
-  Future<bool> _loadSourceInternal(
-    PlayableSource source, {
-    bool forcePlay = false,
-    bool syncPlaylist = true,
-    bool applyResume = true,
-    bool? playOverride,
-    _LoadFailureBatch? failureBatch,
-    SourceOrigin origin = SourceOrigin.other,
-  }) async {
-    if (_isDisposed) return false;
-    final requestedValue = source.value.trim();
-    final normalizedSource = source.isUrl
-        ? PlayableSource.url(requestedValue)
-        : PlayableSource.file(await _resolveSandboxedPath(requestedValue));
-    final normalizedValue = normalizedSource.value;
-
-    final fileExists =
-        _headlessMedia ||
-        !normalizedSource.isFile ||
-        await PathProbe.fileExists(normalizedValue);
-    if (_isDisposed) return false;
-    final validation = SourceLoadValidationPolicy.validateNormalizedOpen(
-      source: source,
-      trimmedValue: requestedValue,
-      normalizedSource: normalizedSource,
-      fileExists: fileExists,
-      origin: origin,
-    );
-    if (!validation.isOk) {
-      _handleLoadValidationFailure(
-        failure: validation.failure,
-        batch: failureBatch,
-        detailsBuilder: () => switch (validation.failure) {
-          SourceLoadValidationFailure.invalidUrl => {'url': requestedValue},
-          SourceLoadValidationFailure.missingFile => {'path': normalizedValue},
-          SourceLoadValidationFailure.unsafePath => {'path': requestedValue},
-          _ => {'path': requestedValue, 'source': source.value},
-        },
-      );
-      return false;
-    }
-
-    final priorQueue = syncPlaylist ? _playlist.capture() : null;
-    if (syncPlaylist) {
-      _playlist.setPlayingSource(normalizedSource);
-    }
-    final queueRevision = _playlist.revision;
-    void restoreQueue() {
-      if (priorQueue == null) return;
-      if (_playlist.revision != queueRevision) return;
-      _playlist.restore(priorQueue);
-    }
-
-    final ext = normalizedSource.extension ?? '';
-    _log(
-      'file_load_started',
-      detailsBuilder: () => {
-        'source': normalizedValue,
-        'source_type': normalizedSource.type.name,
-        'extension': ext,
-      },
-    );
-    if (SourceLoadOpenPolicy.shouldWarnUnrecognizedExtension(
-      isFile: normalizedSource.isFile,
-      ext: ext,
-    )) {
-      _log(
-        'file_load_unrecognized_extension',
-        detailsBuilder: () => {'extension': ext, 'path': normalizedValue},
-        severity: DebugSeverity.warn,
-      );
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context).snackUnsupportedFileType,
-        );
-      }
-    }
-    final gen = _playback.beginLoad();
-    _media.resetArtForNewLoad();
-    if (SourceLoadPreOpenPolicy.shouldAbortBeforeOpen(
-      mounted: mounted,
-      isDisposed: _isDisposed,
-    )) {
-      restoreQueue();
-      return false;
-    }
-    _persistResumePosition();
-    _playback.chapterGate.invalidate();
-    setState(() {
-      _player.beginSourceLoad(normalizedSource, ext);
-      _media.clearDisplayMetadata();
-    });
-    await _advancedPlayback.setSource(normalizedSource);
-    _log(
-      'media_type_initial_state',
-      detailsBuilder: () => {
-        'is_audio_file': _player.isAudioFile,
-        'has_video_output': false,
-      },
-    );
-
-    try {
-      _player.fileOpenInProgress = true;
-      _tracks.resetMixLoadState();
-      await _playerService.setProperty('lavfi-complex', '');
-      _player.mixActive = false;
-      final open = SourceOpenPolicy.paramsFor(
-        normalizedPath: normalizedValue,
-        forcePlay: forcePlay,
-        autoPlaySetting: _settings.autoPlay,
-        playOverride: playOverride,
-      );
-      await _playerService.open(
-        open.path,
-        play: open.play,
-        allowUnc: origin.allowsUnc,
-      );
-      // Re-apply after open because libmpv may reset per-file properties.
-      await _advancedPlayback.applyForCurrentSource();
-    } catch (e) {
-      final failureKind = SourceLoadFailurePolicy.classify(e);
-      final failureReaction = SourceLoadOpenPolicy.openFailureReaction(
-        kind: failureKind,
-        isLoadCurrent: _playback.isLoadCurrent(gen),
-        mounted: mounted,
-      );
-      _log(
-        SourceLoadFailurePolicy.logEvent(failureKind),
-        message: e.toString(),
-        detailsBuilder: () => {'source': normalizedValue},
-        severity: failureReaction.logAsWarning
-            ? DebugSeverity.warn
-            : DebugSeverity.error,
-      );
-      restoreQueue();
-      if (!failureReaction.shouldUpdateUi) return false;
-      await _advancedPlayback.setSource(null);
-      if (!mounted) return false;
-      setState(_player.clearSourceOnLoadFailure);
-      unawaited(_seekPreviewService.setSource(null));
-      final failureMessage = _loadUserMessageText(
-        SourceLoadFailurePolicy.userMessage(failureKind),
-      );
-      if (failureBatch != null) {
-        failureBatch.add(failureMessage);
-      } else {
-        showAppSnackBar(context, failureMessage);
-      }
-      return false;
-    } finally {
-      _player.fileOpenInProgress = false;
-    }
-
-    if (_stopInProgress) return true;
-
-    final postOpen = SourceLoadPostOpenPolicy.plan(
-      isLoadCurrent: _playback.isLoadCurrent(gen),
-      isDisposed: _isDisposed,
-      mounted: mounted,
-      normalizedSource: normalizedSource,
-      isAudioFile: _player.isAudioFile,
-    );
-    final followUp = SourceLoadPostOpenPolicy.followUpFor(postOpen);
-    if (!postOpen.shouldProceed) {
-      return true;
-    }
-    if (followUp.shouldCacheTracks) {
-      _tracks.cacheTracksForCurrentLoad(_playerService.currentTracks, gen: gen);
-    }
-
-    if (followUp.shouldClearSeekPreview) {
-      unawaited(_seekPreviewService.setSource(null));
-    } else if (followUp.seekPreviewPath != null) {
-      unawaited(_seekPreviewService.setSource(followUp.seekPreviewPath));
-    }
-
-    _log(
-      'file_load_succeeded',
-      detailsBuilder: () => {
-        'source': normalizedValue,
-        'source_type': normalizedSource.type.name,
-        'auto_play': _settings.autoPlay,
-      },
-    );
-
-    try {
-      if (followUp.shouldPersistRecent) {
-        _media.rememberRecentAndJumpList(normalizedValue);
-      }
-      if (followUp.shouldRememberOpenDirectory) {
-        _pickers.rememberLastOpenDirectory(normalizedValue);
-      }
-      _log(
-        followUp.recentPersistLogEvent,
-        category: DebugLogCategory.settings,
-        detailsBuilder: () => {'source': normalizedValue},
-      );
-    } catch (e) {
-      _log(
-        'recent_file_persist_failed',
-        category: DebugLogCategory.settings,
-        message: e.toString(),
-        detailsBuilder: () => {'source': normalizedValue},
-        severity: DebugSeverity.warn,
-      );
-    }
-
-    if (followUp.shouldRefreshUi) {
-      setState(() {});
-    }
-
-    _player.resumePathInProgress = followUp.resumeTrackingPath;
-    if (followUp.shouldApplyAudioFilters) {
-      await _tracks.applyMergedAudioFilters(gen: gen);
-    }
-    if (followUp.shouldRefreshChapters) {
-      await _tracks.refreshChapters(gen: gen);
-    }
-    if (followUp.shouldApplyMultiAudioMix) {
-      await _tracks.applyMultiAudioMix(gen: gen);
-    }
-    if (followUp.shouldApplyResume && applyResume) {
-      await _maybeApplyResume(normalizedValue, gen: gen);
-    }
-    if (followUp.shouldUpdateMediaSessionMetadata) {
-      unawaited(_media.refreshMetadata(normalizedSource, gen: gen));
-    }
-    return true;
-  }
-
   void _onDragDone(DropDoneDetails details) {
     if (details.files.isEmpty) return;
-    _applyDroppedPaths(
+    _sourceLoad.applyDroppedPaths(
       details.files.map((file) => file.path),
       origin: SourceOrigin.dragDrop,
     );
-  }
-
-  void _applyDroppedPaths(
-    Iterable<String> rawPaths, {
-    required SourceOrigin origin,
-  }) {
-    final batch = DropPathBatchPolicy.fromRawPaths(
-      rawPaths: rawPaths,
-      windows: Platform.isWindows,
-      allowUnc: origin.allowsUnc,
-    );
-    if (batch.isEmpty) {
-      _log(
-        'drop_file_invalid_path',
-        detailsBuilder: () => {'count': rawPaths.length},
-        severity: DebugSeverity.warn,
-      );
-      if (mounted) {
-        final l10n = AppLocalizations.of(context);
-        showAppSnackBar(context, l10n.snackCouldNotReadDroppedFile);
-      }
-      return;
-    }
-    _log(
-      'drop_file_received',
-      detailsBuilder: () => {
-        'path': batch.paths.first,
-        'count': batch.paths.length,
-        'skipped': batch.skippedCount,
-      },
-    );
-    if (batch.skippedCount > 0 && mounted) {
-      final l10n = AppLocalizations.of(context);
-      showAppSnackBar(
-        context,
-        batch.skippedCount == 1
-            ? l10n.snackSkippedUnreadableFile
-            : l10n.snackSkippedUnreadableFiles(batch.skippedCount),
-      );
-    }
-    unawaited(_applyDroppedPathsExpanded(batch.paths, origin: origin));
-  }
-
-  Future<void> _applyDroppedPathsExpanded(
-    List<String> paths, {
-    required SourceOrigin origin,
-  }) async {
-    final media = <PlayableSource>[];
-    var inaccessible = 0;
-    for (final path in paths) {
-      if (PlayableSource.isSupportedUrl(path)) {
-        media.add(PlayableSource.url(path));
-        continue;
-      }
-      await _captureBookmarkFor(path);
-      try {
-        if (await PathProbe.directoryExists(path)) {
-          final scan = await MediaFolderScanner.scan(
-            path,
-            maxItems: PlaylistService.maxQueueItems,
-          );
-          media.addAll(scan.paths.map(PlayableSource.file));
-          continue;
-        }
-      } catch (_) {
-        // Fall through to file handling.
-      }
-      if (M3uPlaylist.isPlaylistPath(path)) {
-        try {
-          media.addAll(await M3uPlaylist.parseFile(path));
-        } catch (e) {
-          _log(
-            'drop_playlist_parse_failed',
-            message: e.toString(),
-            detailsBuilder: () => {'path': path},
-            severity: DebugSeverity.warn,
-          );
-        }
-        continue;
-      }
-      if (!_headlessMedia) {
-        try {
-          if (!await PathProbe.fileExists(path)) {
-            inaccessible++;
-            continue;
-          }
-        } catch (_) {
-          inaccessible++;
-          continue;
-        }
-      }
-      media.add(PlayableSource.file(path));
-    }
-    if (inaccessible > 0 && mounted) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context).snackDropPathInaccessible,
-      );
-    }
-    if (media.isEmpty) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context).snackPlaylistEmptyOrInvalid,
-        );
-      }
-      return;
-    }
-    switch (DropFilePolicy.action(validPathCount: media.length)) {
-      case DropFileAction.none:
-        return;
-      case DropFileAction.loadSingle:
-        final only = media.first;
-        if (only.isFile) {
-          unawaited(_loadFile(only.value, origin: origin));
-        } else {
-          unawaited(_loadSource(only, origin: origin));
-        }
-      case DropFileAction.enqueuePlayNow:
-        _enqueueSources(media, playNow: true, origin: origin);
-    }
   }
 
   void _onDragEntered() {
@@ -2000,9 +1384,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final source = PlayableSource.fromStored(path);
     if (source == null) return;
     if (source.isUrl) {
-      unawaited(_loadSource(source, origin: SourceOrigin.recents));
+      unawaited(_sourceLoad.loadSource(source, origin: SourceOrigin.recents));
     } else {
-      unawaited(_openRequestedFile(source.value, origin: SourceOrigin.recents));
+      unawaited(
+        _sourceLoad.openRequestedFile(
+          source.value,
+          origin: SourceOrigin.recents,
+        ),
+      );
     }
   }
 
@@ -2024,9 +1413,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final source = PlayableSource.fromStored(lastPath);
     if (source == null) return;
     if (source.isUrl) {
-      await _loadSource(source, origin: SourceOrigin.recents);
+      await _sourceLoad.loadSource(source, origin: SourceOrigin.recents);
     } else {
-      await _openRequestedFile(source.value, origin: SourceOrigin.recents);
+      await _sourceLoad.openRequestedFile(
+        source.value,
+        origin: SourceOrigin.recents,
+      );
     }
   }
 
@@ -2206,11 +1598,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         return KeyEventResult.handled;
       case PlayerShortcutAction.playlistNext:
         _log('shortcut_playlist_next', category: DebugLogCategory.ui);
-        unawaited(_advancePlaylist(1));
+        unawaited(_sourceLoad.advancePlaylist(1));
         return KeyEventResult.handled;
       case PlayerShortcutAction.playlistPrev:
         _log('shortcut_playlist_prev', category: DebugLogCategory.ui);
-        unawaited(_advancePlaylist(-1));
+        unawaited(_sourceLoad.advancePlaylist(-1));
         return KeyEventResult.handled;
       case PlayerShortcutAction.toggleCompactMode:
         _log('shortcut_toggle_compact', category: DebugLogCategory.ui);
@@ -2501,7 +1893,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       },
       onStop: () async {
         _log('control_stop_pressed', category: DebugLogCategory.ui);
-        await _stopPlaybackAndResetUi();
+        await _sourceLoad.stopPlaybackAndResetUi();
       },
       onOpenFile: _openFile,
       onOpenFolder: () => unawaited(_openFolder()),
@@ -2539,8 +1931,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       onRecentFileSelected: _loadRecentFile,
       onSettingsPressed: _openSettings,
       onMoreActions: _showMoreMenu,
-      onPrevious: () => unawaited(_advancePlaylist(-1)),
-      onNext: () => unawaited(_advancePlaylist(1)),
+      onPrevious: () => unawaited(_sourceLoad.advancePlaylist(-1)),
+      onNext: () => unawaited(_sourceLoad.advancePlaylist(1)),
       onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
       onToggleMute: _toggleMute,
       onCycleSpeed: _cyclePlaybackSpeed,
@@ -2555,7 +1947,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       onSetShuffle: _setShuffle,
       onClearQueue: () => unawaited(_confirmClearQueue()),
       onActivateItem: (source) => unawaited(
-        _loadSource(source, syncPlaylist: false, origin: SourceOrigin.queue),
+        _sourceLoad.loadSource(
+          source,
+          syncPlaylist: false,
+          origin: SourceOrigin.queue,
+        ),
       ),
       onRemoveItem: (index) => unawaited(_removeQueueItem(index)),
       onAddFiles: _pickFilesToEnqueue,
@@ -2639,7 +2035,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           : null;
       final saver = ScreenshotSaver(
         capture: (mime) => _playerService.screenshot(format: mime),
-        resolveScope: _resolveBookmarkScope,
+        resolveScope: _sourceLoad.resolveBookmarkScope,
         releaseScope: BookmarkService.stop,
       );
       final result = await saver.save(
@@ -2680,230 +2076,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
-  Future<void> _stopPlaybackAndResetUi() async {
-    _stopInProgress = true;
-    _playback.beginLoad();
-    try {
-      await _playback.loadQueue.enqueue(
-        () async {
-          if (_isDisposed) return;
-          _playback.beginLoad();
-          _persistResumePosition();
-          await _playerService.setProperty('lavfi-complex', '');
-          _player.mixActive = false;
-          await _playerService.stop();
-          await _advancedPlayback.setSource(null);
-          unawaited(_seekPreviewService.setSource(null));
-          _media.clearSession();
-          if (!mounted || _isDisposed) return;
-          setState(() {
-            _player.clearMediaSurface();
-            _media.clearDisplayMetadata();
-          });
-        },
-        onError: (Object e, StackTrace st) {
-          _log(
-            'stop_queue_failed',
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-        },
-      );
-    } finally {
-      _stopInProgress = false;
-    }
-  }
-
-  // ── Resume position ─────────────────────────────────
-
-  void _persistResumePosition({bool requirePlaying = false}) {
-    if (!_settings.resumePlaybackEnabled) return;
-    if (requirePlaying && !_player.isPlaying) return;
-    final path = _player.resumePathInProgress;
-    if (path == null) return;
-    final action = ResumePlaybackPolicy.persistAction(
-      position: _player.position,
-      duration: _player.duration,
-    );
-    switch (action) {
-      case ResumePersistAction.skip:
-        return;
-      case ResumePersistAction.clear:
-        _settings.saveResumePosition(path, null);
-      case ResumePersistAction.save:
-        _settings.saveResumePosition(path, _player.position.inMilliseconds);
-    }
-  }
-
-  Future<void> _maybeApplyResume(String path, {int? gen}) async {
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    final l10n = AppLocalizations.of(context);
-    final ms = _settings.resumePositionFor(path);
-    var action = ResumePlaybackPolicy.applyAction(
-      resumeMs: ms,
-      durationMs: _player.duration.inMilliseconds,
-    );
-    for (
-      var i = 0;
-      i < ResumePlaybackPolicy.durationPollAttempts &&
-          action == ResumeApplyAction.waitForDuration;
-      i++
-    ) {
-      await Future<void>.delayed(_durationPollInterval);
-      if (_isDisposed ||
-          _currentFile != path ||
-          (gen != null && !_playback.isLoadCurrent(gen))) {
-        return;
-      }
-      action = ResumePlaybackPolicy.applyAction(
-        resumeMs: ms,
-        durationMs: _player.duration.inMilliseconds,
-      );
-    }
-    switch (action) {
-      case ResumeApplyAction.skip:
-      case ResumeApplyAction.waitForDuration:
-        return;
-      case ResumeApplyAction.clearStored:
-        _settings.saveResumePosition(path, null);
-        return;
-      case ResumeApplyAction.seek:
-        break;
-    }
-    if (gen != null && !_playback.isLoadCurrent(gen)) return;
-    try {
-      await _playerService.seek(Duration(milliseconds: ms!));
-      if (mounted && (gen == null || _playback.isLoadCurrent(gen))) {
-        _showOsdMessage(
-          l10n.osdResumedAt(
-            ResumePlaybackPolicy.formatHms(Duration(milliseconds: ms)),
-          ),
-        );
-      }
-    } catch (e) {
-      _log(
-        'resume_seek_failed',
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    }
-  }
-
-  // ── Playlist ────────────────────────────────────────
-
-  Future<void> _advancePlaylist(int delta) async {
-    if (_playlist.isEmpty) return;
-    await _playback.loadQueue.enqueue(
-      () async {
-        if (_isDisposed || _playlist.isEmpty) return;
-        final wrap = PlaylistAdvancePolicy.shouldWrapQueue(_settings.loopMode);
-        final next = _playlist.advance(delta, wrap: wrap);
-        if (next == null) return;
-        final l10n = AppLocalizations.of(context);
-        _showOsdMessage(
-          delta > 0 ? l10n.osdNextInQueue : l10n.osdPreviousInQueue,
-        );
-        await _loadSourceInternal(
-          next,
-          syncPlaylist: false,
-          origin: SourceOrigin.queue,
-        );
-      },
-      onError: (Object e, StackTrace st) {
-        _log(
-          'load_queue_failed',
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
-      },
-    );
-  }
-
-  void _enqueue(
-    List<String> paths, {
-    bool playNow = false,
-    SourceOrigin origin = SourceOrigin.other,
-  }) {
-    _enqueueSources(
-      paths.map(PlayableSource.file).toList(growable: false),
-      playNow: playNow,
-      origin: origin,
-    );
-  }
-
-  void _enqueueSources(
-    List<PlayableSource> sources, {
-    bool playNow = false,
-    SourceOrigin origin = SourceOrigin.other,
-  }) {
-    if (sources.isEmpty) return;
-    switch (EnqueuePolicy.mode(
-      playNow: playNow,
-      playlistEmpty: _playlist.isEmpty,
-    )) {
-      case EnqueueMode.replaceAndPlay:
-        final candidates = sources
-            .where((source) => source.value.trim().isNotEmpty)
-            .toList(growable: false);
-        final attemptLimit = math.min(
-          candidates.length,
-          PlaylistService.maxQueueItems,
-        );
-        unawaited(
-          _playback.loadQueue.enqueue(() async {
-            var openedIndex = -1;
-            final failureBatch = candidates.length > 1
-                ? _LoadFailureBatch()
-                : null;
-            try {
-              for (var i = 0; i < attemptLimit; i++) {
-                if (_isDisposed) return;
-                if (await _loadSourceInternal(
-                  candidates[i],
-                  syncPlaylist: false,
-                  failureBatch: failureBatch,
-                  origin: origin,
-                )) {
-                  openedIndex = i;
-                  break;
-                }
-              }
-            } finally {
-              if (failureBatch != null) _flushLoadFailureBatch(failureBatch);
-            }
-            if (openedIndex < 0 || _isDisposed) return;
-            final dropped = _playlist.replaceSources(
-              candidates,
-              startIndex: openedIndex,
-            );
-            if (dropped > 0 && mounted) {
-              showAppSnackBar(
-                context,
-                AppLocalizations.of(
-                  context,
-                ).snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
-              );
-            }
-          }),
-        );
-      case EnqueueMode.append:
-        final dropped = _playlist.addAllSources(sources);
-        _showOsdMessage(
-          sources.length == 1
-              ? AppLocalizations.of(context).osdAddedToQueue
-              : AppLocalizations.of(context)
-                    .osdAddedMultipleToQueue(sources.length),
-        );
-        if (dropped > 0 && mounted) {
-          showAppSnackBar(
-            context,
-            AppLocalizations.of(context)
-                .snackQueueTruncated(PlaylistService.maxQueueItems, dropped),
-          );
-        }
-    }
-  }
-
   Future<void> _confirmClearQueue() async {
     if (_playlist.isEmpty) return;
     final confirmed = await showClearQueueConfirmation(context);
@@ -2911,7 +2083,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final wasPlaying = _currentFile != null;
     _playlist.clear();
     if (wasPlaying) {
-      await _stopPlaybackAndResetUi();
+      await _sourceLoad.stopPlaybackAndResetUi();
     }
   }
 
@@ -2922,12 +2094,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     if (!mounted) return;
     if (_playlist.isEmpty) {
-      unawaited(_stopPlaybackAndResetUi());
+      unawaited(_sourceLoad.stopPlaybackAndResetUi());
     } else if (currentRemoved) {
       final next = _playlist.current;
       if (next != null) {
         unawaited(
-          _loadSource(next, syncPlaylist: false, origin: SourceOrigin.queue),
+          _sourceLoad.loadSource(
+            next,
+            syncPlaylist: false,
+            origin: SourceOrigin.queue,
+          ),
         );
       }
     }
@@ -2943,10 +2119,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (!wasCurrent) return;
     final next = _playlist.current;
     if (next == null) {
-      await _stopPlaybackAndResetUi();
+      await _sourceLoad.stopPlaybackAndResetUi();
       return;
     }
-    await _loadSource(next, syncPlaylist: false, origin: SourceOrigin.queue);
+    await _sourceLoad.loadSource(
+      next,
+      syncPlaylist: false,
+      origin: SourceOrigin.queue,
+    );
   }
 
   // ── Media info ────────────────────────────────────────────
@@ -3176,7 +2356,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (paths.isEmpty) return;
       final sources = <PlayableSource>[];
       for (final path in paths) {
-        await _captureBookmarkFor(path);
+        await _sourceLoad.captureBookmarkFor(path);
         if (M3uPlaylist.isPlaylistPath(path)) {
           try {
             sources.addAll(await M3uPlaylist.parseFile(path));
@@ -3202,7 +2382,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         return;
       }
-      _enqueueSources(sources, origin: SourceOrigin.fileDialog);
+      _sourceLoad.enqueueSources(sources, origin: SourceOrigin.fileDialog);
     } on PlatformException catch (e) {
       _log(
         'enqueue_picker_platform_exception',
@@ -3232,16 +2412,5 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         );
       }
     }
-  }
-}
-
-class _LoadFailureBatch {
-  int count = 0;
-  bool pruneRecents = false;
-  String? firstMessage;
-
-  void add(String message) {
-    count++;
-    firstMessage ??= message;
   }
 }

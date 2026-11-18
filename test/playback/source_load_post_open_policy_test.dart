@@ -95,8 +95,6 @@ void main() {
 
       final followUp = SourceLoadPostOpenPolicy.followUpFor(plan);
       expect(followUp, SourceLoadPostOpenFollowUp.noop);
-      expect(followUp.shouldCacheTracks, isFalse);
-      expect(followUp.shouldUpdateMediaSessionMetadata, isFalse);
     });
 
     test('schedules full follow-up for video files', () {
@@ -109,11 +107,6 @@ void main() {
       );
 
       final followUp = SourceLoadPostOpenPolicy.followUpFor(plan);
-      expect(followUp.shouldCacheTracks, isTrue);
-      expect(followUp.shouldApplyAudioFilters, isTrue);
-      expect(followUp.shouldRefreshChapters, isTrue);
-      expect(followUp.shouldApplyMultiAudioMix, isTrue);
-      expect(followUp.shouldUpdateMediaSessionMetadata, isTrue);
       expect(followUp.seekPreviewPath, '/media/movie.mp4');
       expect(followUp.shouldClearSeekPreview, isFalse);
       expect(followUp.shouldApplyResume, isTrue);

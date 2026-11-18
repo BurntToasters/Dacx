@@ -28,11 +28,6 @@ class SourceLoadPostOpenPlan {
 /// Post-open follow-up work scheduled by the screen after a successful open.
 class SourceLoadPostOpenFollowUp {
   const SourceLoadPostOpenFollowUp({
-    required this.shouldCacheTracks,
-    required this.shouldApplyAudioFilters,
-    required this.shouldRefreshChapters,
-    required this.shouldApplyMultiAudioMix,
-    required this.shouldUpdateMediaSessionMetadata,
     required this.seekPreviewPath,
     required this.shouldClearSeekPreview,
     required this.resumeTrackingPath,
@@ -43,11 +38,6 @@ class SourceLoadPostOpenFollowUp {
     required this.recentPersistLogEvent,
   });
 
-  final bool shouldCacheTracks;
-  final bool shouldApplyAudioFilters;
-  final bool shouldRefreshChapters;
-  final bool shouldApplyMultiAudioMix;
-  final bool shouldUpdateMediaSessionMetadata;
   final String? seekPreviewPath;
   final bool shouldClearSeekPreview;
   final String? resumeTrackingPath;
@@ -58,11 +48,6 @@ class SourceLoadPostOpenFollowUp {
   final String recentPersistLogEvent;
 
   static const SourceLoadPostOpenFollowUp noop = SourceLoadPostOpenFollowUp(
-    shouldCacheTracks: false,
-    shouldApplyAudioFilters: false,
-    shouldRefreshChapters: false,
-    shouldApplyMultiAudioMix: false,
-    shouldUpdateMediaSessionMetadata: false,
     seekPreviewPath: null,
     shouldClearSeekPreview: false,
     resumeTrackingPath: null,
@@ -128,11 +113,6 @@ abstract final class SourceLoadPostOpenPolicy {
   static SourceLoadPostOpenFollowUp followUpFor(SourceLoadPostOpenPlan plan) {
     if (!plan.shouldProceed) return SourceLoadPostOpenFollowUp.noop;
     return SourceLoadPostOpenFollowUp(
-      shouldCacheTracks: true,
-      shouldApplyAudioFilters: true,
-      shouldRefreshChapters: true,
-      shouldApplyMultiAudioMix: true,
-      shouldUpdateMediaSessionMetadata: true,
       seekPreviewPath: plan.seekPreviewPath,
       shouldClearSeekPreview: plan.seekPreviewPath == null,
       resumeTrackingPath: plan.resumeTrackingPath,
