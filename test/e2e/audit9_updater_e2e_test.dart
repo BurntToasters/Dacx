@@ -169,8 +169,9 @@ void main() {
       expect(none.hiddenCount, 0);
       expect(none.isEmpty, isTrue);
 
-      final real = formatReleaseNotes(changelog, version: '1.1.0');
-      expect(real.entries, isEmpty);
+      final real = formatReleaseNotes(changelog, version: '1.0.2');
+      expect(real.sectionVersion, '1.0.2');
+      expect(real.entries, ['PKG: Updated Dependency & Packages.']);
       report.pass('M26.2');
     });
 

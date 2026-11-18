@@ -202,6 +202,29 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] Force a self-update failure: dialog retains the diagnostic error and **Download the update manually** opens the Rosie update page for stable builds or the exact GitHub prerelease page for beta builds
 - [ ] Flatpak (if tested): empty-state copy mentions picker; update guidance mentions reinstalling the `.flatpak` (not Flathub / `flatpak update`)
 
+## 1.1.0 changes
+
+- [ ] Fullscreen: video does not resize when controls show or hide; controls stay up while hovering the dock, dragging seek or volume, with the ⋯ menu or queue open, and while paused; otherwise controls and cursor hide after 3 s
+- [ ] Mini-player with audio: no title bar; cover art fills the window; hover shows title, artist, prev / play-pause / next and seek; overlay fades after 2 s idle; dragging moves the window; double-click leaves
+- [ ] Mini-player with video: window keeps the video aspect ratio while resizing; leaving restores the previous size and the 480×320 minimum
+- [ ] Mini-player: toggle twice quickly; leaving restores the original size and always-on-top setting
+- [ ] Linux: mini-player keeps the GTK header bar and can be moved by it
+- [ ] Window geometry: quit while normal, maximized, and in mini-player; relaunch restores the last normal size, and maximized reopens maximized
+- [ ] Windows + blur: switch focus while maximized and fullscreen; window does not jump or resize
+- [ ] Scroll volume with a notched mouse wheel (one step per notch) and a trackpad (no jump to 0 / 100)
+- [ ] Click on video pauses immediately; double-click toggles fullscreen
+- [ ] Queue drawer **Add files**: audio files are visible and selectable on Windows and Linux; picker opens in the last folder
+- [ ] Network paths: open a file from `\\server\share` by Open File and by drag-and-drop; it plays. The same path passed on the command line is refused
+- [ ] ⋯ menu opens next to its button; sleep timer and Tracks submenus work with mouse and keyboard; shortcut hints match custom keybinds
+- [ ] macOS: `Cmd+,` opens Settings once (native menu and shortcut do not double-open)
+- [ ] New shortcuts: `Q`, `Shift+S`, `Ctrl/Cmd+,`, `I`, `Shift+Left/Right` (holds repeat)
+- [ ] Click the duration label: switches to `-mm:ss` remaining; relaunch keeps the choice
+- [ ] Tray (minimize to tray on): Play/Pause, Next, Previous enable correctly; tooltip shows the title; Windows left-click restores the window, right-click opens the menu
+- [ ] Beta channel update: What's new dialog shows the release's changes; Release notes opens GitHub; Windows: Cancel during download closes quietly and leaves no partial MSI under `%LOCALAPPDATA%\Dacx\updates`
+- [ ] System media overlay (Windows and macOS): play a tagged track, then an untagged one; artist and album clear
+- [ ] Empty state at 480×320: no overflow; Reopen Last and recent list hidden on a fresh profile, shown after opening a file
+- [ ] Audio view in a 480×320 window and the mini-player: no overflow; album name shown when tagged
+
 ## Trust smoke
 
 - [ ] Unsupported / unsafe paths (e.g. credential URLs) are refused with feedback

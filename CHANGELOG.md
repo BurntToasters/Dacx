@@ -19,6 +19,35 @@
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
 ## Changes in `v1.1.0:`
+- **NEW - Fullscreen controls:** In fullscreen, the title bar and controls now slide in over the video, so the video no longer resizes. They stay visible while you hover or drag on them, while a menu or the queue is open, and while playback is paused. Otherwise they hide after 3 seconds, and the cursor hides with them.
+- **NEW - Mini-player:** The mini-player has its own compact layout with no title bar. Drag anywhere to move the window. Hover to show the title, previous / play-pause / next, and a seek bar. Audio shows its cover art, and video windows keep the video's aspect ratio. Double-click to leave the mini-player.
+- **NEW - More menu:** The ⋯ menu opens instantly next to its button. Sleep timer and track options are in submenus, and items show their keyboard shortcuts.
+- **NEW - Shortcuts:** `Q` toggles the play queue, `Shift+S` stops, `Ctrl/Cmd+,` opens Settings, `I` shows media info, and `Shift+Left/Right` seeks 30 seconds. You can rebind all of them.
+- **NEW - Remaining time:** Click the duration next to the seek bar to switch between total and remaining time. The choice is remembered.
+- **NEW - Tray controls:** The tray menu now has Play/Pause, Next and Previous. The tray tooltip shows what is playing. On Windows, left-clicking the tray icon restores the window.
+- **NEW - Updates:** Before an update installs, Dacx shows what's new in that release and links to the full release notes. You can cancel a Windows update download.
+- **NEW - Network paths:** Files on network shares (`\\server\share`) now open when you pick them in a dialog, drop them, or reopen them from Recents or the queue. Network paths from the command line, Open With, playlist files and media controls are still refused.
+- **NEW - Formats:** Folder scans, drops and pickers now accept `m4b`, `oga`, `mka`, `ac3`, `eac3`, `dts`, `amr`, `weba`, `3gp` and `f4v` files.
+- **Update - Empty state:** Open File is now the main action. Reopen Last only appears when there is a recent file, and your most recent files are listed for one-click opening.
+- **Update - Audio view:** The now-playing view adapts to small windows and the mini-player instead of overflowing. It shows the album name when the file has one.
+- **Update - Transport:** Previous and Next are disabled when there is nothing to go to. The volume icon shows muted, low and high levels.
+- **Update - Settings:** Wide controls move under their label in narrow windows. You can reach and select accent colors with the keyboard.
+- **Update - Playback speed:** The speed chip and on-screen message show the exact rate instead of the nearest preset.
+- **Update - Messages:** A new message now replaces the one on screen instead of waiting in a queue. Loading a folder or playlist with missing files shows one summary instead of one message per file.
+- **Fix - Add files to queue:** The picker now shows audio files on Windows and Linux, opens in your last folder, and reports errors.
+- **Fix - Track title:** The audio view and Media Info show the title and artist even when system media controls are turned off. They no longer keep the previous file's title.
+- **Fix - System media controls:** Windows and macOS media overlays no longer keep the previous track's artist or album when the new track has none.
+- **Fix - Window size:** Dacx no longer saves the window size while maximized, fullscreen, minimized or in the mini-player. A maximized window reopens maximized, and an invalid saved size falls back to the default.
+- **Fix - Mini-player toggle:** Toggling the mini-player twice quickly no longer loses the previous window size. If the resize fails, Dacx stays in the normal layout. Always-on-top returns to your current setting.
+- **Fix - macOS install location:** The warning shown when Dacx runs outside `/Applications` now appears instead of failing silently.
+- **Fix - macOS screenshot folder:** A custom screenshot folder keeps its access permission after you open files or clear Recents.
+- **Fix - Scroll volume:** Trackpads and high-resolution mouse wheels now change volume by one step per notch instead of jumping to 0 or 100.
+- **Fix - Click to pause:** Clicking the video pauses or resumes immediately instead of after about half a second.
+- **Fix - Windows blur:** Focusing the window no longer re-applies blur and nudges the window size when blur is off, maximized or fullscreen.
+- **Fix - Performance:** Volume, equalizer, subtitle and appearance sliders and window moves now save settings after you stop changing them, instead of rewriting the settings file on every step. Playback position updates no longer rebuild the controls on every tick, and changing a setting no longer rebuilds the whole app.
+- **Fix - Dialogs:** Advanced playback and Media Info dialogs now fit small windows.
+- **Codebase:** The player screen is split from one 5,400-line file into focused controllers and widgets. Light and dark themes share one builder, and unused code is removed.
+- **Testing:** Audit 9 adds documented failure modes and E2E tests for every change above, each writing a JSON report under `test-results/e2e/<os>/`.
 
 ## Changes in `v1.0.2:`
 - **PKG:** Updated Dependency & Packages.
