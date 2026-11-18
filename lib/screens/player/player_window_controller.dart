@@ -23,9 +23,15 @@ class PlayerWindowController extends ChangeNotifier {
     required this.onFullscreenRejected,
     required this.onCompactModeChanged,
     this.shouldHoldChrome,
+    this.videoAspectRatio,
   });
 
   static const Size compactWindowSize = Size(480, 320);
+  static const Size compactMinimumSize = Size(240, 135);
+  static const Size normalMinimumSize = Size(480, 320);
+
+  @visibleForTesting
+  static bool? debugLinuxOverride;
   static const Duration fullscreenChromeIdleDelay = Duration(seconds: 3);
 
   final bool Function() isMounted;
@@ -35,6 +41,7 @@ class PlayerWindowController extends ChangeNotifier {
   final VoidCallback onFullscreenRejected;
   final ValueChanged<bool> onCompactModeChanged;
   final bool Function()? shouldHoldChrome;
+  final Future<double?> Function()? videoAspectRatio;
 
   Timer? _fullscreenChromeHideTimer;
   bool _pointerOverChrome = false;
@@ -50,6 +57,7 @@ class PlayerWindowController extends ChangeNotifier {
   Size? _preCompactSize;
   Offset? _preCompactPos;
   bool _preCompactMaximized = false;
+  double? _compactAspect;
 
   bool get isFullscreen => _isFullscreen;
   bool get fullscreenChromeVisible => _fullscreenChromeVisible;
@@ -228,6 +236,8 @@ class PlayerWindowController extends ChangeNotifier {
       if (_compactMode) {
         // Restore window state.
         try {
+          await windowManager.setAspectRatio(0);
+          await windowManager.setMinimumSize(normalMinimumSize);
           if (_preCompactMaximized) {
             await windowManager.maximize();
           } else {
@@ -246,8 +256,10 @@ class PlayerWindowController extends ChangeNotifier {
             message: e.toString(),
             severity: DebugSeverity.warn,
           );
+          await _reapplyCompactConstraints();
           return;
         }
+        _compactAspect = null;
         if (!isMounted() || isDisposed()) return;
         _compactMode = false;
         notifyListeners();
@@ -266,8 +278,14 @@ class PlayerWindowController extends ChangeNotifier {
           if (maximized) {
             await windowManager.unmaximize();
           }
-          await windowManager.setSize(compactWindowSize);
+          final aspect = await _currentVideoAspect();
+          await windowManager.setMinimumSize(compactMinimumSize);
+          await windowManager.setSize(_compactSizeFor(aspect));
           await windowManager.setAlwaysOnTop(true);
+          if (aspect != null) {
+            await windowManager.setAspectRatio(aspect);
+            _compactAspect = aspect;
+          }
           _preCompactSize = size;
           _preCompactPos = position;
           _preCompactMaximized = maximized;
@@ -278,6 +296,7 @@ class PlayerWindowController extends ChangeNotifier {
             message: e.toString(),
             severity: DebugSeverity.warn,
           );
+          await _releaseCompactConstraints();
           return;
         }
         if (!isMounted() || isDisposed()) return;
@@ -288,6 +307,115 @@ class PlayerWindowController extends ChangeNotifier {
     } finally {
       _compactToggleInFlight = false;
     }
+  }
+
+  Future<double?> _currentVideoAspect() async {
+    final provider = videoAspectRatio;
+    if (provider == null) return null;
+    try {
+      final ratio = await provider();
+      if (ratio == null || !ratio.isFinite || ratio <= 0) return null;
+      return ratio;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Size _compactSizeFor(double? aspect) {
+    if (aspect == null) return compactWindowSize;
+    const box = compactWindowSize;
+    var width = box.width;
+    var height = width / aspect;
+    if (height > box.height) {
+      height = box.height;
+      width = height * aspect;
+    }
+    return Size(
+      width.clamp(compactMinimumSize.width, double.infinity).roundToDouble(),
+      height.clamp(compactMinimumSize.height, double.infinity).roundToDouble(),
+    );
+  }
+
+  Future<void> _releaseCompactConstraints() async {
+    _compactAspect = null;
+    try {
+      await windowManager.setAspectRatio(0);
+      await windowManager.setMinimumSize(normalMinimumSize);
+    } catch (e) {
+      log(
+        'compact_mode_constraints_release_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
+  Future<void> _reapplyCompactConstraints() async {
+    try {
+      await windowManager.setMinimumSize(compactMinimumSize);
+      final aspect = _compactAspect;
+      if (aspect != null) {
+        await windowManager.setAspectRatio(aspect);
+      }
+    } catch (e) {
+      log(
+        'compact_mode_constraints_reapply_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
+  Future<void> syncCompactAspectRatio() async {
+    if (!_compactMode || _compactToggleInFlight) return;
+    final aspect = await _currentVideoAspect();
+    if (!_compactMode || _compactToggleInFlight || !isMounted()) return;
+    final previous = _compactAspect;
+    if (aspect == previous) return;
+    if (aspect != null && previous != null) {
+      if ((aspect - previous).abs() < 0.001) return;
+    }
+    try {
+      if (aspect == null) {
+        await windowManager.setAspectRatio(0);
+        _compactAspect = null;
+        return;
+      }
+      await windowManager.setAspectRatio(aspect);
+      _compactAspect = aspect;
+      final current = await windowManager.getSize();
+      final target = Size(
+        current.width,
+        (current.width / aspect).roundToDouble(),
+      );
+      if (target.height >= compactMinimumSize.height &&
+          (target.height - current.height).abs() >= 1) {
+        await windowManager.setSize(target);
+      }
+    } catch (e) {
+      log(
+        'compact_mode_aspect_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
+  void startWindowDrag() {
+    if (debugLinuxOverride ?? Platform.isLinux) return;
+    unawaited(
+      windowManager.startDragging().catchError((Object e) {
+        log(
+          'window_drag_failed',
+          category: DebugLogCategory.ui,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
   }
 
   void applyAlwaysOnTop(bool value) {

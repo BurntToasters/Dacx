@@ -406,7 +406,53 @@ where the value is used and are handled by a later package.
 
 ## Finding 19: mini-player layout
 
-Modes: pending.
+- M19.1 In mini-player mode the screen has no `CustomTitleBar` and no
+  `PlayerBottomDock` anywhere in the tree (not merely hidden).
+- M19.2 In mini-player mode the media surface fills the whole window (same
+  rect as the scaffold), with the controls shown and after they hide.
+- M19.3 The hover overlay is shown on entering, hides about 2 s after the
+  pointer stops (not before), reappears on any pointer movement, and starts a
+  new 2 s countdown when the pointer leaves the window.
+- M19.4 A pointer held down on a control keeps the overlay up indefinitely;
+  releasing it starts a 2 s countdown and a cancelled pointer does too.
+- M19.5 A hidden overlay ignores pointer input: a tap where a control was
+  toggles play/pause through the surface instead of pressing the control.
+- M19.6 Previous and next follow `PlaylistAdvancePolicy`: first item disables
+  previous, last item disables next, loop-all enables both, no queue disables
+  both, and nothing is enabled with no media loaded.
+- M19.7 Play/pause toggles playback once, next opens the next queue item and
+  previous opens the previous one.
+- M19.8 Audio without cover art shows the icon surface plus title and artist
+  from the metadata (file name when untagged); video shows the title without an
+  artist even if tags exist.
+- M19.9 Audio with cover art shows the art full-bleed (the art fills the whole
+  window rect) behind the overlay, with title and artist.
+- M19.10 Entering with a known video size sets the window aspect ratio to
+  width/height and sizes the window to match it.
+- M19.11 A video size that becomes known or changes after entering updates the
+  aspect ratio; no aspect call happens while the size is unknown.
+- M19.12 Entering lowers the minimum size to 240x135; leaving resets the aspect
+  ratio to 0 first, then restores the 480x320 minimum, then restores the saved
+  window size.
+- M19.13 Audio-only media never sets an aspect ratio, and switching from video
+  to audio inside the mini-player resets it.
+- M19.14 Double-clicking the surface leaves the mini-player and does not toggle
+  fullscreen; double-clicking in the normal layout still toggles fullscreen.
+- M19.15 Dragging on the surface starts a window drag exactly once per gesture;
+  a plain tap, a drag that starts on the seek bar, and Linux never do.
+- M19.16 Leaving restores the normal layout exactly: title bar, dock, a surface
+  shorter than the window, the saved size, and the user's always-on-top setting.
+- M19.17 The exit button leaves the mini-player and reports it.
+- M19.18 A failed enter keeps the normal layout and leaves no lowered minimum
+  size or aspect lock behind.
+- M19.19 A failed leave keeps the mini layout with the aspect lock and lowered
+  minimum size intact.
+- M19.20 The seek bar shows the playback position and seeks to the released
+  value on change end, not while dragging.
+- M19.21 The mini layout builds without overflow or exceptions at the 240x135
+  minimum size for audio, audio with art, video and an empty player.
+- M19.22 Layering: no file under `lib/widgets` imports from `lib/screens`, and
+  `globalRectOfContext` lives in `lib/widgets/widget_geometry.dart` only.
 
 ## Finding 20: audio view overflow
 
@@ -583,7 +629,50 @@ Covered in `test/e2e/audit9_transport_settings_e2e_test.dart`.
 
 ## Finding 26: updater notes and cancel
 
-Modes: pending.
+Covered in `test/e2e/audit9_updater_e2e_test.dart`.
+
+- M26.1 Formatter picks the `Changes in vX` section matching the offered
+  version (with or without a leading `v`, backticks and trailing colon) from
+  the real `CHANGELOG.md` text and ignores the other sections and the download
+  tables and links around them.
+- M26.2 With no section for the version the formatter falls back to the first
+  `Changes in` section; with no such section at all it returns nothing.
+- M26.3 Markdown emphasis, inline code, links, images, HTML tags and entities
+  are stripped to plain text while the bullet wording is kept; continuation
+  lines join their bullet.
+- M26.4 Length is capped: at most the entry limit is returned with the
+  remaining count reported as hidden, and an over-long entry is truncated with
+  an ellipsis.
+- M26.5 Empty, whitespace-only, heading-only, garbage and huge input never
+  throws and yields no entries.
+- M26.6 Release-notes links are accepted only for https GitHub hosts; http,
+  other hosts, look-alike hosts, `javascript:` and malformed strings are
+  rejected.
+- M26.7 The update-available dialog shows a scrollable What's new list with the
+  entries and a "+N more" line when entries are hidden, fits a 360 px window
+  without overflow, and the Release notes button hands the release URL to the
+  opener; no button appears when the URL is not an allowed GitHub URL.
+- M26.8 `showUpdateAvailableDialog` resolves true on the confirm action and
+  false on Later, and Release notes opens the page through the update service
+  without closing the dialog.
+- M26.9 Windows cancel mid-download: the HTTP stream is cancelled, the partial
+  MSI is deleted, the outcome is `SelfUpdateOutcome.cancelled`, and no
+  checksum, manifest or signature step ran.
+- M26.10 Cancel while still waiting for response headers also returns
+  `cancelled` and leaves no file.
+- M26.11 Cancel is refused (returns false) once the download has finished and
+  verification has begun, and a normal download still runs verification
+  (manifest validation is called and its failure is returned).
+- M26.12 Cancel is refused when no download is in flight and on the macOS path
+  (the XPC helper cannot be cancelled from Dart); `supportsCancel` is true only
+  on Windows.
+- M26.13 The progress dialog shows Cancel only when cancel is supported and
+  the download has not reached 100%; tapping it cancels the service, closes the
+  dialog with `cancelled` and shows no failure dialog.
+- M26.14 The progress dialog shows no Cancel button when cancel is unsupported
+  or once progress reaches 100% (verification).
+- M26.15 `UpdateInfo` carries the release page URL from the GitHub release,
+  falling back safely when absent.
 
 ## Finding 27: tray controls
 

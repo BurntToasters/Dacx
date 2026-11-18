@@ -4,9 +4,8 @@ import 'package:path/path.dart' as p;
 import '../l10n/app_localizations.dart';
 import '../models/playable_source.dart';
 import '../playback/playback_speed_policy.dart';
-import '../screens/player/widgets/player_more_menu.dart'
-    show globalRectOfContext;
 import '../services/settings_service.dart';
+import 'widget_geometry.dart';
 
 class TransportControls extends StatelessWidget {
   static const double fullLayoutMinWidth = 848.0;

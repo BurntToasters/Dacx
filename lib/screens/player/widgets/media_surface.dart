@@ -4,9 +4,9 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../playback/player_controller.dart';
 import '../../../services/settings_service.dart';
-import '../../../widgets/compact_exit_button.dart';
 import '../../../widgets/osd_overlay.dart';
 import 'audio_now_playing_view.dart';
+import 'mini_audio_surface.dart';
 import 'player_empty_state.dart';
 import 'video_surface.dart';
 
@@ -31,7 +31,6 @@ class MediaSurface extends StatelessWidget {
     required this.onDoubleTap,
     required this.onHover,
     required this.onScrollVolume,
-    required this.onExitCompactMode,
     required this.onDismissEmptyStateTip,
     required this.onOpenFile,
     required this.onOpenFolder,
@@ -56,7 +55,6 @@ class MediaSurface extends StatelessWidget {
   final VoidCallback onDoubleTap;
   final VoidCallback onHover;
   final void Function(double scrollDeltaY, Duration timeStamp) onScrollVolume;
-  final VoidCallback onExitCompactMode;
   final VoidCallback onDismissEmptyStateTip;
   final VoidCallback onOpenFile;
   final VoidCallback onOpenFolder;
@@ -84,6 +82,17 @@ class MediaSurface extends StatelessWidget {
 
     if (player.isAudioFile) {
       final showAlbumArt = player.hasAlbumArtTrack;
+      if (compactMode) {
+        return KeyedSubtree(
+          key: ValueKey(
+            showAlbumArt ? 'media-mini-audio-with-art' : 'media-mini-audio',
+          ),
+          child: MiniAudioSurface(
+            showAlbumArt: showAlbumArt,
+            videoController: videoController,
+          ),
+        );
+      }
       return KeyedSubtree(
         key: ValueKey(showAlbumArt ? 'media-audio-with-art' : 'media-audio'),
         child: AudioNowPlayingView(
@@ -159,7 +168,7 @@ class MediaSurface extends StatelessWidget {
               if (hasMedia && settings.osdEnabled)
                 Positioned.fill(
                   child: OsdOverlay(
-                    title: player.osdTitle(),
+                    title: compactMode ? '' : player.osdTitle(),
                     position: player.position,
                     duration: player.duration,
                     visible: player.osdVisible,
@@ -167,12 +176,6 @@ class MediaSurface extends StatelessWidget {
                       player.osdTransientMessage,
                     ),
                   ),
-                ),
-              if (compactMode)
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: CompactExitButton(onPressed: onExitCompactMode),
                 ),
             ],
           ),

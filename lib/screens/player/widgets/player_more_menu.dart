@@ -54,12 +54,6 @@ class PlayerMoreMenuActions {
   final VoidCallback onCompact;
 }
 
-Rect? globalRectOfContext(BuildContext context) {
-  final box = context.findRenderObject();
-  if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-  return box.localToGlobal(Offset.zero) & box.size;
-}
-
 class _MoreMenuConfig {
   const _MoreMenuConfig({
     required this.hasAudioOptions,

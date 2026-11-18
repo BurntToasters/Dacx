@@ -56,6 +56,7 @@ import 'player/track_chapter_controller.dart';
 import 'player/widgets/drag_overlay.dart';
 import 'player/widgets/fullscreen_chrome_overlay.dart';
 import 'player/widgets/media_surface.dart';
+import 'player/widgets/mini_player_layout.dart';
 import 'player/widgets/player_bottom_dock.dart';
 import 'player/widgets/play_queue_drawer.dart';
 
@@ -302,6 +303,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     onCompactModeChanged: _onCompactModeChanged,
     shouldHoldChrome: () =>
         !_player.isPlaying || _endDrawerOpen || !_playerRouteIsCurrent(),
+    videoAspectRatio: _currentVideoAspectRatio,
   );
 
   bool _endDrawerOpen = false;
@@ -469,6 +471,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.durationStream.listen((dur) {
         if (!mounted || _isDisposed) return;
+        unawaited(_window.syncCompactAspectRatio());
         final packagedProbe = _packagedE2eProbe;
         if (packagedProbe != null) {
           unawaited(packagedProbe.recordDuration(dur));
@@ -521,7 +524,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }),
       _playerService.videoWidthStream.listen((w) {
         if (!mounted || _isDisposed) return;
-        if (_player.onVideoWidth(w)) {
+        final videoOutputChanged = _player.onVideoWidth(w);
+        unawaited(_window.syncCompactAspectRatio());
+        if (videoOutputChanged) {
           setState(() {});
           _media.syncIdleInhibit();
           if (widget.debugLog.isEnabled) {
@@ -538,6 +543,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _playerService.tracksStream.listen((tracks) {
         if (!mounted || _isDisposed) return;
         _onAlbumArtTracks(tracks);
+        unawaited(_window.syncCompactAspectRatio());
         if (_sourceLoad.stopInProgress || _player.fileOpenInProgress) return;
         _tracks.cacheTracksForCurrentLoad(
           tracks,
@@ -912,7 +918,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         body: GlassShellBackground(
           child: _window.isFullscreen
               ? _buildFullscreenBody()
-              : _buildWindowedBody(),
+              : (_window.compactMode
+                    ? _buildCompactBody()
+                    : _buildWindowedBody()),
         ),
       ),
     );
@@ -961,6 +969,101 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         ),
       ],
     );
+  }
+
+  Widget _buildCompactBody() {
+    return _buildDropTarget(
+      child: ListenableBuilder(
+        listenable: Listenable.merge([_playlist, _settings]),
+        builder: (context, _) {
+          return MiniPlayerLayout(
+            key: const ValueKey('mini-player-layout'),
+            surface: _buildMediaStack(),
+            title: _miniPlayerTitle(),
+            artist: _player.isAudioFile ? _media.displayArtist : null,
+            hasMedia: _currentFile != null,
+            isPlaying: _player.isPlaying,
+            position: _player.position,
+            duration: _player.duration,
+            canGoPrevious: PlaylistAdvancePolicy.canGoPrevious(
+              queueLength: _playlist.length,
+              loopMode: _settings.loopMode,
+              hasPreviousInOrder: _playlist.hasPrevious,
+            ),
+            canGoNext: PlaylistAdvancePolicy.canGoNext(
+              queueLength: _playlist.length,
+              loopMode: _settings.loopMode,
+              hasNextInOrder: _playlist.hasNext,
+            ),
+            onExit: () => unawaited(_window.toggleCompactMode()),
+            onPlayPause: _onControlPlayPause,
+            onPrevious: () => unawaited(_sourceLoad.advancePlaylist(-1)),
+            onNext: () => unawaited(_sourceLoad.advancePlaylist(1)),
+            onSeekStart: _onSeekStart,
+            onSeekChange: _onSeekChange,
+            onSeekEnd: _onSeekEnd,
+            onDragWindow: _window.startWindowDrag,
+          );
+        },
+      ),
+    );
+  }
+
+  String _miniPlayerTitle() {
+    final shown = _media.displayTitle;
+    if (shown != null && shown.isNotEmpty) return shown;
+    return _player.osdTitle();
+  }
+
+  Future<double?> _currentVideoAspectRatio() async {
+    if (_player.isAudioFile || !_player.hasVideoOutput) return null;
+    final width = double.tryParse(
+      await _playerService.getProperty('dwidth') ?? '',
+    );
+    final height = double.tryParse(
+      await _playerService.getProperty('dheight') ?? '',
+    );
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return width / height;
+  }
+
+  void _onSeekStart() => _player.isSeeking = true;
+
+  void _onSeekChange(double value) {
+    setState(() {
+      _player.position = Duration(milliseconds: value.toInt());
+    });
+  }
+
+  void _onSeekEnd(double value) {
+    _player.isSeeking = false;
+    unawaited(
+      _playerService.seek(Duration(milliseconds: value.toInt())).catchError((
+        Object e,
+      ) {
+        _log(
+          'seek_slider_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
+  }
+
+  Future<void> _onControlPlayPause() async {
+    _log('control_play_pause_pressed', category: DebugLogCategory.ui);
+    try {
+      await _playerService.playPause();
+    } catch (e) {
+      _log(
+        'control_play_pause_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
   }
 
   Widget _buildFullscreenBody() {
@@ -1018,39 +1121,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       seekPreviewService: _seekPreviewService,
       hasMedia: _currentFile != null,
       playlist: _playlist,
-      onSeekStart: () => _player.isSeeking = true,
-      onSeekChange: (value) {
-        setState(() {
-          _player.position = Duration(milliseconds: value.toInt());
-        });
-      },
-      onSeekEnd: (value) {
-        _player.isSeeking = false;
-        unawaited(
-          _playerService.seek(Duration(milliseconds: value.toInt())).catchError(
-            (Object e) {
-              _log(
-                'seek_slider_failed',
-                message: e.toString(),
-                severity: DebugSeverity.warn,
-              );
-            },
-          ),
-        );
-      },
-      onPlayPause: () async {
-        _log('control_play_pause_pressed', category: DebugLogCategory.ui);
-        try {
-          await _playerService.playPause();
-        } catch (e) {
-          _log(
-            'control_play_pause_failed',
-            category: DebugLogCategory.ui,
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-        }
-      },
+      onSeekStart: _onSeekStart,
+      onSeekChange: _onSeekChange,
+      onSeekEnd: _onSeekEnd,
+      onPlayPause: _onControlPlayPause,
       onStop: () async {
         _log('control_stop_pressed', category: DebugLogCategory.ui);
         await _sourceLoad.stopPlaybackAndResetUi();
@@ -1154,6 +1228,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       },
       onDoubleTap: () {
         _log('media_surface_double_tap', category: DebugLogCategory.ui);
+        if (_window.compactMode) {
+          unawaited(_window.toggleCompactMode());
+          return;
+        }
         unawaited(_window.toggleFullscreen());
       },
       onHover: () {
@@ -1166,7 +1244,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         final step = _scrollVolume.add(scrollDeltaY, timeStamp);
         if (step != 0) _transport.adjustVolume(step);
       },
-      onExitCompactMode: () => unawaited(_window.toggleCompactMode()),
       onDismissEmptyStateTip: () => setState(() {
         _settings.emptyStateTipDismissed = true;
       }),
