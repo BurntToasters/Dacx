@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -46,7 +44,6 @@ import '../playback/player_audio_session.dart';
 import '../playback/player_controller.dart';
 import '../playback/sleep_timer_controller.dart';
 import '../playback/player_settings_sync.dart';
-import '../playback/player_ui_policies.dart';
 import '../playback/chapter_navigation_policy.dart';
 import '../playback/drop_path_batch_policy.dart';
 import '../playback/enqueue_policy.dart';
@@ -68,22 +65,22 @@ import '../playback/track_label.dart';
 import '../playback/update_launch_policy.dart';
 import '../playback/subscription_bag.dart';
 import '../widgets/app_snackbar.dart';
-import '../widgets/compact_exit_button.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/dialog_sizing.dart';
 import '../widgets/equalizer_dialog.dart';
 import '../widgets/keybinds_dialog.dart';
 import '../widgets/manual_update_check.dart';
 import '../widgets/media_info_dialog.dart';
-import '../widgets/osd_overlay.dart';
 import '../widgets/update_progress_dialog.dart';
-import '../widgets/seek_slider.dart';
 import '../widgets/track_pickers.dart';
 import '../widgets/advanced_playback_dialog.dart';
-import '../widgets/transport_controls.dart';
 import 'player/player_file_pickers.dart';
 import 'player/player_messenger.dart';
+import 'player/widgets/drag_overlay.dart';
+import 'player/widgets/media_surface.dart';
+import 'player/widgets/player_bottom_dock.dart';
 import 'player/widgets/play_queue_drawer.dart';
+import 'player/widgets/player_more_menu.dart';
 import 'settings_screen.dart';
 
 const _resumeSaveInterval = Duration(seconds: 5);
@@ -93,10 +90,6 @@ const _updateSnackbarDuration = Duration(seconds: 10);
 const _snackbarShortDuration = Duration(seconds: 2);
 const _settingsFwdTransition = Duration(milliseconds: 340);
 const _settingsRevTransition = Duration(milliseconds: 280);
-const _sheetTransitionDuration = Duration(milliseconds: 180);
-const _contentSwitchDuration = Duration(milliseconds: 240);
-const _animFastDuration = Duration(milliseconds: 140);
-const _seekBarSizeDuration = Duration(milliseconds: 190);
 const _mixReloadDelay = Duration(milliseconds: 200);
 const _durationPollInterval = Duration(milliseconds: 50);
 
@@ -2856,174 +2849,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            AnimatedSwitcher(
-                              duration: _contentSwitchDuration,
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeInCubic,
-                              layoutBuilder: (currentChild, previousChildren) {
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ...previousChildren,
-                                    ...(currentChild == null
-                                        ? const <Widget>[]
-                                        : <Widget>[currentChild]),
-                                  ],
-                                );
-                              },
-                              transitionBuilder: (child, animation) {
-                                final fade = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeOutCubic,
-                                );
-                                final scale = Tween<double>(
-                                  begin: 0.985,
-                                  end: 1.0,
-                                ).animate(fade);
-                                return FadeTransition(
-                                  opacity: fade,
-                                  child: ScaleTransition(
-                                    scale: scale,
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _currentFile == null
-                                    ? null
-                                    : () {
-                                        _restoreShortcutFocus(
-                                          refocusNativeWindow: false,
-                                        );
-                                        _revealFullscreenChrome();
-                                        unawaited(
-                                          _playerService.playPause().catchError(
-                                            (Object e) {
-                                              _log(
-                                                'media_surface_tap_play_pause_failed',
-                                                category: DebugLogCategory.ui,
-                                                message: e.toString(),
-                                                severity: DebugSeverity.warn,
-                                              );
-                                            },
-                                          ),
-                                        );
-                                      },
-                                onDoubleTap: _currentFile == null
-                                    ? null
-                                    : () {
-                                        _log(
-                                          'media_surface_double_tap',
-                                          category: DebugLogCategory.ui,
-                                        );
-                                        unawaited(_toggleFullscreen());
-                                      },
-                                child: MouseRegion(
-                                  cursor:
-                                      !_isFullscreen || _fullscreenChromeVisible
-                                      ? MouseCursor.defer
-                                      : SystemMouseCursors.none,
-                                  onHover: (_) {
-                                    _pulseOsd();
-                                    _revealFullscreenChrome();
-                                  },
-                                  child: Listener(
-                                    onPointerSignal: (event) {
-                                      if (event is PointerScrollEvent &&
-                                          _currentFile != null) {
-                                        _revealFullscreenChrome();
-                                        final step = _scrollVolume.add(
-                                          event.scrollDelta.dy,
-                                          event.timeStamp,
-                                        );
-                                        if (step != 0) _adjustVolume(step);
-                                      }
-                                    },
-                                    child: Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: _buildMediaSurface(),
-                                        ),
-                                        if (_currentFile != null &&
-                                            _settings.osdEnabled)
-                                          Positioned.fill(
-                                            child: OsdOverlay(
-                                              title: _player.osdTitle(),
-                                              position: _player.position,
-                                              duration: _player.duration,
-                                              visible: _player.osdVisible,
-                                              transientMessage:
-                                                  PlayerController.stripOsdTimestamp(
-                                                    _player.osdTransientMessage,
-                                                  ),
-                                            ),
-                                          ),
-                                        if (_compactMode)
-                                          Positioned(
-                                            top: 8,
-                                            left: 8,
-                                            child: CompactExitButton(
-                                              onPressed: () => unawaited(
-                                                _toggleCompactMode(),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            IgnorePointer(
-                              child: AnimatedOpacity(
-                                duration: _animFastDuration,
-                                curve: Curves.easeOutCubic,
-                                opacity: _isDragging ? 1 : 0,
-                                child: ClipRect(
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(
-                                      sigmaX: 8.0,
-                                      sigmaY: 8.0,
-                                    ),
-                                    child: ColoredBox(
-                                      color: context
-                                          .windowVisuals
-                                          .dragOverlayColor
-                                          .withValues(alpha: 0.28),
-                                      child: Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.file_download,
-                                              size: 64,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .primary,
-                                            ),
-                                            const SizedBox(height: 16),
-                                            Text(
-                                              AppLocalizations.of(context)
-                                                  .dropOverlayHint,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium
-                                                  ?.copyWith(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurface,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                            _buildMediaSurface(),
+                            PlayerDragOverlay(visible: _isDragging),
                           ],
                         ),
                       ),
@@ -3042,187 +2869,91 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Widget _buildBottomDock() {
-    return ListenableBuilder(
-      listenable: Listenable.merge([_sleepTimer, _advancedPlayback]),
-      builder: (context, _) {
-        final remaining = _sleepTimer.remaining;
-        return GlassChrome(
-          borderOnTop: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (remaining != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: InputChip(
-                      avatar: const Icon(Icons.timer_outlined, size: 16),
-                      label: Text(
-                        '${AppLocalizations.of(context).menuSleepTimer} (${PlayerController.formatDuration(remaining)})',
-                      ),
-                      onDeleted: () => _sleepTimer.cancel(),
-                    ),
-                  ),
-                ),
-              AnimatedSize(
-                duration: _seekBarSizeDuration,
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: _player.duration.inMilliseconds > 0
-                    ? Padding(
-                        key: const ValueKey('seek-visible'),
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                        child: Row(
-                          children: [
-                            Text(
-                              PlayerController.formatDuration(_player.position),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            Expanded(
-                              child: SeekSliderWithHover(
-                                position: _player.position,
-                                duration: _player.duration,
-                                previewService: _seekPreviewService,
-                                previewEnabled:
-                                    PlayerUiPolicies.showSeekPreview(
-                                      settings: _settings,
-                                      isAudioFile: _player.isAudioFile,
-                                    ),
-                                markerPositions:
-                                    _settings.advancedPlaybackToolsEnabled
-                                    ? _advancedPlayback.markers
-                                          .map(
-                                            (marker) => SeekMarker(
-                                              position: Duration(
-                                                milliseconds: marker.positionMs,
-                                              ),
-                                              label: marker.label,
-                                            ),
-                                          )
-                                          .toList(growable: false)
-                                    : const [],
-                                rangeStart:
-                                    _settings.advancedPlaybackToolsEnabled
-                                    ? _advancedPlayback.a
-                                    : null,
-                                rangeEnd: _settings.advancedPlaybackToolsEnabled
-                                    ? _advancedPlayback.b
-                                    : null,
-                                onSeekStart: () => _player.isSeeking = true,
-                                onSeekChange: (value) {
-                                  setState(() {
-                                    _player.position = Duration(
-                                      milliseconds: value.toInt(),
-                                    );
-                                  });
-                                },
-                                onSeekEnd: (value) {
-                                  _player.isSeeking = false;
-                                  unawaited(
-                                    _playerService
-                                        .seek(
-                                          Duration(milliseconds: value.toInt()),
-                                        )
-                                        .catchError((Object e) {
-                                          _log(
-                                            'seek_slider_failed',
-                                            message: e.toString(),
-                                            severity: DebugSeverity.warn,
-                                          );
-                                        }),
-                                  );
-                                },
-                              ),
-                            ),
-                            Text(
-                              PlayerController.formatDuration(_player.duration),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      )
-                    : const SizedBox(
-                        key: ValueKey('seek-hidden'),
-                        width: double.infinity,
-                      ),
-              ),
-              TransportControls(
-                isPlaying: _player.isPlaying,
-                volume: _player.volume,
-                hasMedia: _currentFile != null,
-                speed: _settings.speed,
-                loopMode: _settings.loopMode,
-                recentFiles: _settings.recentFiles,
-                onPlayPause: () async {
-                  _log(
-                    'control_play_pause_pressed',
-                    category: DebugLogCategory.ui,
-                  );
-                  try {
-                    await _playerService.playPause();
-                  } catch (e) {
-                    _log(
-                      'control_play_pause_failed',
-                      category: DebugLogCategory.ui,
-                      message: e.toString(),
-                      severity: DebugSeverity.warn,
-                    );
-                  }
-                },
-                onStop: () async {
-                  _log('control_stop_pressed', category: DebugLogCategory.ui);
-                  await _stopPlaybackAndResetUi();
-                },
-                onOpenFile: _openFile,
-                onOpenFolder: () => unawaited(_openFolder()),
-                onOpenUrl: () => unawaited(_openUrl()),
-                onReopenLast: () {
-                  _log(
-                    'control_reopen_last_pressed',
-                    category: DebugLogCategory.ui,
-                  );
-                  unawaited(_reopenLastFile());
-                },
-                onVolumeChanged: (vol) async {
-                  _log(
-                    'control_volume_changed',
-                    category: DebugLogCategory.ui,
-                    detailsBuilder: () => {'volume': vol.toStringAsFixed(2)},
-                  );
-                  try {
-                    await _playerService.setVolume(vol);
-                    _settings.volume = vol;
-                  } catch (e) {
-                    _log(
-                      'control_volume_apply_failed',
-                      category: DebugLogCategory.ui,
-                      message: e.toString(),
-                      severity: DebugSeverity.warn,
-                    );
-                  }
-                },
-                onLoopModeChanged: (mode) {
-                  _log(
-                    'control_loop_mode_changed',
-                    category: DebugLogCategory.ui,
-                    detailsBuilder: () => {'loop_mode': mode.name},
-                  );
-                  _settings.loopMode = mode;
-                },
-                onRecentFileSelected: _loadRecentFile,
-                onSettingsPressed: _openSettings,
-                onMoreActions: _showMoreMenu,
-                onPrevious: () => unawaited(_advancePlaylist(-1)),
-                onNext: () => unawaited(_advancePlaylist(1)),
-                onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
-                onToggleMute: _toggleMute,
-                onCycleSpeed: _cyclePlaybackSpeed,
-              ),
-            ],
+    return PlayerBottomDock(
+      sleepTimer: _sleepTimer,
+      advancedPlayback: _advancedPlayback,
+      player: _player,
+      settings: _settings,
+      seekPreviewService: _seekPreviewService,
+      hasMedia: _currentFile != null,
+      onSeekStart: () => _player.isSeeking = true,
+      onSeekChange: (value) {
+        setState(() {
+          _player.position = Duration(milliseconds: value.toInt());
+        });
+      },
+      onSeekEnd: (value) {
+        _player.isSeeking = false;
+        unawaited(
+          _playerService.seek(Duration(milliseconds: value.toInt())).catchError(
+            (Object e) {
+              _log(
+                'seek_slider_failed',
+                message: e.toString(),
+                severity: DebugSeverity.warn,
+              );
+            },
           ),
         );
       },
+      onPlayPause: () async {
+        _log('control_play_pause_pressed', category: DebugLogCategory.ui);
+        try {
+          await _playerService.playPause();
+        } catch (e) {
+          _log(
+            'control_play_pause_failed',
+            category: DebugLogCategory.ui,
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }
+      },
+      onStop: () async {
+        _log('control_stop_pressed', category: DebugLogCategory.ui);
+        await _stopPlaybackAndResetUi();
+      },
+      onOpenFile: _openFile,
+      onOpenFolder: () => unawaited(_openFolder()),
+      onOpenUrl: () => unawaited(_openUrl()),
+      onReopenLast: () {
+        _log('control_reopen_last_pressed', category: DebugLogCategory.ui);
+        unawaited(_reopenLastFile());
+      },
+      onVolumeChanged: (vol) async {
+        _log(
+          'control_volume_changed',
+          category: DebugLogCategory.ui,
+          detailsBuilder: () => {'volume': vol.toStringAsFixed(2)},
+        );
+        try {
+          await _playerService.setVolume(vol);
+          _settings.volume = vol;
+        } catch (e) {
+          _log(
+            'control_volume_apply_failed',
+            category: DebugLogCategory.ui,
+            message: e.toString(),
+            severity: DebugSeverity.warn,
+          );
+        }
+      },
+      onLoopModeChanged: (mode) {
+        _log(
+          'control_loop_mode_changed',
+          category: DebugLogCategory.ui,
+          detailsBuilder: () => {'loop_mode': mode.name},
+        );
+        _settings.loopMode = mode;
+      },
+      onRecentFileSelected: _loadRecentFile,
+      onSettingsPressed: _openSettings,
+      onMoreActions: _showMoreMenu,
+      onPrevious: () => unawaited(_advancePlaylist(-1)),
+      onNext: () => unawaited(_advancePlaylist(1)),
+      onToggleQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
+      onToggleMute: _toggleMute,
+      onCycleSpeed: _cyclePlaybackSpeed,
     );
   }
 
@@ -3246,319 +2977,54 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
-  Widget _buildDropZone() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context);
-    final flatpak = LinuxInstallDetector.isFlatpak;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: _buildCenterPanel(
-                maxWidth: 440,
-                children: [
-                  _buildCenterIconSurface(
-                    icon: Icons.music_note,
-                    size: 40,
-                    color: colorScheme.primary.withValues(alpha: 0.88),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    flatpak
-                        ? l10n.emptyStateFlatpakMessage
-                        : l10n.emptyStateMessage,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.74),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (!_settings.emptyStateTipDismissed) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.emptyStateTipReopenLast,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.58),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    TextButton(
-                      key: const Key('empty-state-tip-dismiss'),
-                      onPressed: () => setState(() {
-                        _settings.emptyStateTipDismissed = true;
-                      }),
-                      child: Text(l10n.actionDismissTip),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: _openFile,
-                        icon: const Icon(Icons.folder_open),
-                        label: Text(l10n.buttonOpenFile),
-                      ),
-                      FilledButton.tonalIcon(
-                        key: const Key('open-folder-empty-button'),
-                        onPressed: () => unawaited(_openFolder()),
-                        icon: const Icon(Icons.create_new_folder),
-                        label: Text(l10n.buttonOpenFolder),
-                      ),
-                      FilledButton.tonalIcon(
-                        key: const Key('open-playlist-empty-button'),
-                        onPressed: () => unawaited(_openPlaylistPicker()),
-                        icon: const Icon(Icons.queue_music),
-                        label: Text(l10n.buttonOpenPlaylist),
-                      ),
-                      FilledButton.tonalIcon(
-                        key: const Key('open-url-empty-button'),
-                        onPressed: () => unawaited(_openUrl()),
-                        icon: const Icon(Icons.link),
-                        label: Text(l10n.buttonOpenUrl),
-                      ),
-                      FilledButton.tonalIcon(
-                        key: const Key('reopen-last-empty-button'),
-                        onPressed: _reopenLastFile,
-                        icon: const Icon(Icons.history),
-                        label: Text(l10n.buttonReopenLast),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCenterPanel({
-    required List<Widget> children,
-    double maxWidth = 560,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: GlassPanel(
-        maxWidth: maxWidth,
-        padding: const EdgeInsets.fromLTRB(32, 34, 32, 38),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCenterIconSurface({
-    required IconData icon,
-    required double size,
-    required Color color,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final visuals = context.windowVisuals;
-    final glass = visuals.isGlass;
-
-    return Container(
-      width: 132,
-      height: 132,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: glass
-            ? RadialGradient(
-                colors: [
-                  colorScheme.primary.withValues(alpha: 0.20),
-                  colorScheme.primary.withValues(alpha: 0.06),
-                ],
-              )
-            : null,
-        color: glass ? null : colorScheme.primary.withValues(alpha: 0.14),
-        boxShadow: glass
-            ? [
-                BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.12),
-                  blurRadius: 24,
-                  spreadRadius: 2,
-                ),
-              ]
-            : null,
-      ),
-      alignment: Alignment.center,
-      child: Container(
-        width: 86,
-        height: 86,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: glass
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    visuals.panelTopColor.withValues(alpha: 0.92),
-                    visuals.panelBottomColor.withValues(alpha: 0.88),
-                  ],
-                )
-              : null,
-          color: glass ? null : colorScheme.surface.withValues(alpha: 0.52),
-          border: Border.all(
-            color: glass
-                ? visuals.panelBorderColor
-                : colorScheme.primary.withValues(alpha: 0.22),
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Icon(icon, size: size, color: color),
-      ),
-    );
-  }
-
   Widget _buildMediaSurface() {
-    if (_currentFile == null) {
-      return KeyedSubtree(
-        key: const ValueKey('media-drop-zone'),
-        child: _buildDropZone(),
-      );
-    }
-
-    if (_player.isAudioFile) {
-      final showAlbumArt = _player.hasAlbumArtTrack;
-      return KeyedSubtree(
-        key: ValueKey(showAlbumArt ? 'media-audio-with-art' : 'media-audio'),
-        child: _buildAudioBackground(showAlbumArt: showAlbumArt),
-      );
-    }
-
-    return Container(
-      key: const ValueKey('media-video'),
-      color: Colors.black,
-      child: _buildVideoSurface(),
-    );
-  }
-
-  Widget _buildVideoSurface({BoxFit fit = BoxFit.contain, Color? fill}) {
-    final controller = _videoController;
-    if (controller == null) {
-      return const ColoredBox(color: Colors.black);
-    }
-    return RepaintBoundary(
-      child: Video(
-        controller: controller,
-        controls: NoVideoControls,
-        fit: fit,
-        fill: fill ?? Colors.transparent,
-      ),
-    );
-  }
-
-  Widget _buildAudioBackground({required bool showAlbumArt}) {
-    final source = _player.currentSource;
-    final fileName = source == null
-        ? ''
-        : (source.isFile
-              ? p.basenameWithoutExtension(source.value)
-              : source.displayName);
-    final title = (_mediaDisplayTitle != null && _mediaDisplayTitle!.isNotEmpty)
-        ? _mediaDisplayTitle!
-        : fileName;
-    final artist = _mediaDisplayArtist;
-    final colorScheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final shortestSide = MediaQuery.sizeOf(context).shortestSide;
-        final shortestSideSize = shortestSide.clamp(220.0, 360.0).toDouble();
-        final maxByHeight = (constraints.maxHeight - 260).clamp(170.0, 360.0);
-        final albumArtSize = math.min(shortestSideSize, maxByHeight);
-
-        return Semantics(
-          label: AppLocalizations.of(context).audioPlaybackLabel,
-          child: Center(
-            child: _buildCenterPanel(
-              maxWidth: 700,
-              children: [
-                if (showAlbumArt)
-                  _buildAlbumArtSurface(size: albumArtSize)
-                else
-                  _buildCenterIconSurface(
-                    icon: Icons.album,
-                    size: 54,
-                    color: colorScheme.primary.withValues(alpha: 0.88),
-                  ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.88),
-                      fontWeight: FontWeight.w500,
-                      height: 1.2,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (artist != null && artist.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    artist,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.72),
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Text(
-                  AppLocalizations.of(context).labelAudioPlayback,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.62),
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return MediaSurface(
+      player: _player,
+      settings: _settings,
+      hasMedia: _currentFile != null,
+      videoController: _videoController,
+      mediaDisplayTitle: _mediaDisplayTitle,
+      mediaDisplayArtist: _mediaDisplayArtist,
+      compactMode: _compactMode,
+      isFullscreen: _isFullscreen,
+      fullscreenChromeVisible: _fullscreenChromeVisible,
+      onTap: () {
+        _restoreShortcutFocus(refocusNativeWindow: false);
+        _revealFullscreenChrome();
+        unawaited(
+          _playerService.playPause().catchError((Object e) {
+            _log(
+              'media_surface_tap_play_pause_failed',
+              category: DebugLogCategory.ui,
+              message: e.toString(),
+              severity: DebugSeverity.warn,
+            );
+          }),
         );
       },
-    );
-  }
-
-  Widget _buildAlbumArtSurface({required double size}) {
-    final visuals = context.windowVisuals;
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: visuals.panelBorderColor),
-        boxShadow: [
-          BoxShadow(
-            color: visuals.shadowColor,
-            blurRadius: visuals.isGlass ? 28 : 24,
-            offset: Offset(0, visuals.isGlass ? 16 : 14),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: ColoredBox(
-          color: visuals.contentColor,
-          child: _buildVideoSurface(
-            fit: BoxFit.cover,
-            fill: Colors.transparent,
-          ),
-        ),
-      ),
+      onDoubleTap: () {
+        _log('media_surface_double_tap', category: DebugLogCategory.ui);
+        unawaited(_toggleFullscreen());
+      },
+      onHover: () {
+        _pulseOsd();
+        _revealFullscreenChrome();
+      },
+      onScrollVolume: (scrollDeltaY, timeStamp) {
+        if (_currentFile == null) return;
+        _revealFullscreenChrome();
+        final step = _scrollVolume.add(scrollDeltaY, timeStamp);
+        if (step != 0) _adjustVolume(step);
+      },
+      onExitCompactMode: () => unawaited(_toggleCompactMode()),
+      onDismissEmptyStateTip: () => setState(() {
+        _settings.emptyStateTipDismissed = true;
+      }),
+      onOpenFile: _openFile,
+      onOpenFolder: () => unawaited(_openFolder()),
+      onOpenPlaylist: () => unawaited(_openPlaylistPicker()),
+      onOpenUrl: () => unawaited(_openUrl()),
+      onReopenLast: _reopenLastFile,
     );
   }
 
@@ -4508,7 +3974,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   // ── More menu ─────────────────────────────────────────────
 
   Future<void> _showMoreMenu() async {
-    final l10n = AppLocalizations.of(context);
     final tracks = _player.currentTracks;
     final hasAudioOptions = tracks != null && tracks.audio.length > 1;
     final hasSubOptions = tracks != null && tracks.subtitle.isNotEmpty;
@@ -4516,382 +3981,47 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (!mounted) return;
     final hasChapters = _player.chapters.isNotEmpty;
 
-    final result = await showGeneralDialog<String>(
+    final result = await showPlayerMoreMenuSheet(
       context: context,
-      barrierDismissible: true,
-      barrierLabel: AppLocalizations.of(context).dismissBarrierLabel,
-      barrierColor: Colors.black.withValues(alpha: 0.20),
-      transitionDuration: _sheetTransitionDuration,
-      pageBuilder: (ctx, _, _) {
-        final cs = Theme.of(ctx).colorScheme;
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final experimentalAmber = Color.lerp(cs.tertiary, Colors.amber, 0.72)!;
-        final experimentalBackground = Color.alphaBlend(
-          experimentalAmber.withValues(alpha: isDark ? 0.16 : 0.11),
-          cs.surface,
-        );
-        final experimentalBorder = experimentalAmber.withValues(
-          alpha: isDark ? 0.45 : 0.36,
-        );
-        final experimentalIcon = Color.lerp(
-          experimentalAmber,
-          isDark ? Colors.amber.shade200 : Colors.amber.shade700,
-          0.22,
-        )!;
-        var sleepExpanded = false;
-        // Build the menu items as a compact, right-aligned vertical panel.
-        Widget item({
-          required IconData icon,
-          required String label,
-          required String action,
-          Widget? trailing,
-          Key? key,
-        }) {
-          return InkWell(
-            key: key,
-            onTap: () => Navigator.pop(ctx, action),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(icon, size: 18, color: cs.onSurface),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(label, style: const TextStyle(fontSize: 13)),
-                  ),
-                  ?trailing,
-                ],
-              ),
-            ),
-          );
-        }
-
-        Widget switchItem({
-          required IconData icon,
-          required String label,
-          required bool value,
-          required ValueChanged<bool> onChanged,
-          bool experimental = false,
-        }) {
-          final child = InkWell(
-            onTap: () => onChanged(!value),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 18,
-                    color: experimental ? experimentalIcon : cs.onSurface,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(label, style: const TextStyle(fontSize: 13)),
-                  ),
-                  Transform.scale(
-                    scale: 0.75,
-                    child: Switch(value: value, onChanged: onChanged),
-                  ),
-                ],
-              ),
-            ),
-          );
-          if (!experimental) return child;
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: experimentalBackground,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: experimentalBorder),
-              ),
-              child: child,
-            ),
-          );
-        }
-
-        return Align(
-          alignment: Alignment.bottomRight,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 12, bottom: 64),
-            child: Material(
-              color: cs.surface.withValues(alpha: 0.97),
-              elevation: 12,
-              borderRadius: BorderRadius.circular(10),
-              clipBehavior: Clip.antiAlias,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minWidth: 240,
-                  maxWidth: 280,
-                  maxHeight: 520,
-                ),
-                child: StatefulBuilder(
-                  builder: (ctx, setSheetState) {
-                    return SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          item(
-                            icon: Icons.link,
-                            label: l10n.buttonOpenUrl,
-                            action: 'open_url',
-                          ),
-                          const Divider(height: 1),
-                          if (hasAudioOptions)
-                            item(
-                              icon: Icons.audiotrack,
-                              label: l10n.dialogAudioTrackTitle,
-                              action: 'audio',
-                            ),
-                          if (hasSubOptions)
-                            item(
-                              icon: Icons.subtitles,
-                              label: l10n.dialogSubtitleTrackTitle,
-                              action: 'subtitle',
-                            ),
-                          if (_currentFile != null)
-                            item(
-                              icon: Icons.audio_file,
-                              label: l10n.menuLoadExternalAudio,
-                              action: 'external_audio',
-                            ),
-                          if (_currentFile != null)
-                            item(
-                              icon: Icons.subtitles_outlined,
-                              label: l10n.menuLoadExternalSubtitle,
-                              action: 'external_subtitle',
-                            ),
-                          if (hasChapters)
-                            item(
-                              icon: Icons.menu_book,
-                              label: l10n.dialogChaptersTitle,
-                              action: 'chapters',
-                            ),
-                          item(
-                            icon: Icons.graphic_eq,
-                            label: l10n.dialogEqualizerTitle,
-                            action: 'equalizer',
-                          ),
-                          if (_settings.advancedPlaybackToolsEnabled)
-                            item(
-                              key: const ValueKey('advanced-playback-entry'),
-                              icon: Icons.tune,
-                              label: l10n.menuAdvancedPlayback,
-                              action: 'advanced-playback',
-                            ),
-                          if (_currentFile != null)
-                            item(
-                              icon: Icons.photo_camera,
-                              label: l10n.menuTakeScreenshot,
-                              action: 'screenshot',
-                            ),
-                          const Divider(height: 1),
-                          ListenableBuilder(
-                            listenable: _sleepTimer,
-                            builder: (context, _) {
-                              final remaining = _sleepTimer.remaining;
-                              final sleepLabel = remaining == null
-                                  ? l10n.menuSleepTimer
-                                  : '${l10n.menuSleepTimer} (${PlayerController.formatDuration(remaining)})';
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  InkWell(
-                                    onTap: () => setSheetState(() {
-                                      sleepExpanded = !sleepExpanded;
-                                    }),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.bedtime_outlined,
-                                            size: 18,
-                                            color: cs.onSurface,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              sleepLabel,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            sleepExpanded
-                                                ? Icons.expand_less
-                                                : Icons.expand_more,
-                                            size: 18,
-                                            color: cs.onSurface,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  if (sleepExpanded) ...[
-                                    item(
-                                      icon: Icons.timer_off_outlined,
-                                      label: l10n.menuSleepTimerOff,
-                                      action: 'sleep_off',
-                                    ),
-                                    for (final minutes
-                                        in SleepTimerController.presetMinutes)
-                                      item(
-                                        icon: Icons.timer_outlined,
-                                        label: l10n.menuSleepTimerMinutes(
-                                          minutes,
-                                        ),
-                                        action: 'sleep_$minutes',
-                                      ),
-                                  ],
-                                ],
-                              );
-                            },
-                          ),
-                          const Divider(height: 1),
-                          if (hasAudioOptions &&
-                              PlaybackMixPolicy.userFacingEnabled &&
-                              _settings.experimentalFeaturesEnabled)
-                            switchItem(
-                              icon: Icons.multitrack_audio,
-                              label: l10n.menuMixAllAudioTracks,
-                              value: _settings.multiAudioMix,
-                              experimental: true,
-                              onChanged: (v) {
-                                _settings.multiAudioMix = v;
-                                setSheetState(() {});
-                              },
-                            ),
-                          item(
-                            icon: Icons.keyboard,
-                            label: l10n.dialogKeyboardShortcutsTitle,
-                            action: 'keybinds',
-                          ),
-                          const Divider(height: 1),
-                          item(
-                            icon: Icons.queue_music,
-                            label: _playlist.isEmpty
-                                ? l10n.menuQueueEmpty
-                                : l10n.menuQueueCount(_playlist.length),
-                            action: 'queue',
-                          ),
-                          item(
-                            icon: Icons.playlist_add,
-                            label: l10n.menuAddFilesToQueue,
-                            action: 'enqueue',
-                          ),
-                          switchItem(
-                            icon: Icons.shuffle,
-                            label: l10n.menuShuffleQueue,
-                            value: _settings.playlistShuffle,
-                            onChanged: (v) {
-                              _setShuffle(v);
-                              setSheetState(() {});
-                            },
-                          ),
-                          switchItem(
-                            icon: Icons.picture_in_picture_alt,
-                            label: l10n.menuMiniPlayer,
-                            value: _compactMode,
-                            onChanged: (_) => Navigator.pop(ctx, 'compact'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (ctx, anim, _, child) {
-        final curved = CurvedAnimation(
-          parent: anim,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0.15, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
+      hasAudioOptions: hasAudioOptions,
+      hasSubOptions: hasSubOptions,
+      hasChapters: hasChapters,
+      hasCurrentFile: () => _currentFile != null,
+      compactMode: () => _compactMode,
+      settings: _settings,
+      sleepTimer: _sleepTimer,
+      playlist: _playlist,
+      onSetShuffle: _setShuffle,
     );
     if (!mounted) return;
-    switch (result) {
-      case 'open_url':
-        unawaited(_openUrl());
-        break;
-      case 'audio':
-        unawaited(_showAudioTracksDialog());
-        break;
-      case 'subtitle':
-        unawaited(_showSubtitleTracksDialog());
-        break;
-      case 'external_audio':
-        unawaited(_pickExternalAudio());
-        break;
-      case 'external_subtitle':
-        unawaited(_pickExternalSubtitle());
-        break;
-      case 'chapters':
-        unawaited(_showChaptersDialog());
-        break;
-      case 'equalizer':
-        unawaited(
+    dispatchPlayerMoreMenuResult(
+      result,
+      PlayerMoreMenuActions(
+        onOpenUrl: () => unawaited(_openUrl()),
+        onAudioTracks: () => unawaited(_showAudioTracksDialog()),
+        onSubtitleTracks: () => unawaited(_showSubtitleTracksDialog()),
+        onExternalAudio: () => unawaited(_pickExternalAudio()),
+        onExternalSubtitle: () => unawaited(_pickExternalSubtitle()),
+        onChapters: () => unawaited(_showChaptersDialog()),
+        onEqualizer: () => unawaited(
           showEqualizerDialog(
             context: context,
             settings: _settings,
             onApply: _applyEqualizer,
           ),
-        );
-        break;
-      case 'advanced-playback':
-        unawaited(_showAdvancedPlaybackDialog());
-        break;
-      case 'screenshot':
-        unawaited(_takeScreenshot());
-        break;
-      case 'sleep_off':
-        _setSleepTimerMinutes(null);
-        break;
-      case 'sleep_15':
-        _setSleepTimerMinutes(15);
-        break;
-      case 'sleep_30':
-        _setSleepTimerMinutes(30);
-        break;
-      case 'sleep_45':
-        _setSleepTimerMinutes(45);
-        break;
-      case 'sleep_60':
-        _setSleepTimerMinutes(60);
-        break;
-      case 'keybinds':
-        unawaited(showKeybindsDialog(context: context, settings: _settings));
-        break;
-      case 'queue':
-        _scaffoldKey.currentState?.openEndDrawer();
-        break;
-      case 'enqueue':
-        unawaited(_pickFilesToEnqueue());
-        break;
-      case 'shuffle':
-        // already toggled inline
-        break;
-      case 'compact':
-        unawaited(_toggleCompactMode());
-        break;
-    }
+        ),
+        onAdvancedPlayback: () => unawaited(_showAdvancedPlaybackDialog()),
+        onScreenshot: () => unawaited(_takeScreenshot()),
+        onSleepTimer: _setSleepTimerMinutes,
+        onKeybinds: () => unawaited(
+          showKeybindsDialog(context: context, settings: _settings),
+        ),
+        onQueue: () => _scaffoldKey.currentState?.openEndDrawer(),
+        onEnqueue: () => unawaited(_pickFilesToEnqueue()),
+        onSetShuffle: _setShuffle,
+        onCompact: () => unawaited(_toggleCompactMode()),
+      ),
+    );
   }
 
   Future<void> _showAdvancedPlaybackDialog() async {
