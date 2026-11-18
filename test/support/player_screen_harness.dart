@@ -31,6 +31,10 @@ abstract final class PlayerScreenHarness {
   static Offset _windowPosition = Offset.zero;
   static final List<MethodCall> windowManagerCalls = <MethodCall>[];
   static final List<MethodCall> windowMethodsCalls = <MethodCall>[];
+  static bool windowMaximized = false;
+  static bool windowMinimized = false;
+  static final List<HarnessFilePickerCall> filePickerCalls =
+      <HarnessFilePickerCall>[];
 
   /// Force the mocked window-manager fullscreen flag (without going through F).
   @visibleForTesting
@@ -87,6 +91,9 @@ abstract final class PlayerScreenHarness {
     _windowPosition = Offset.zero;
     windowManagerCalls.clear();
     windowMethodsCalls.clear();
+    windowMaximized = false;
+    windowMinimized = false;
+    filePickerCalls.clear();
     filePickerPaths = null;
     filePickerSavePath = null;
     _previousFilePicker = FilePickerPlatform.instance;
@@ -98,7 +105,9 @@ abstract final class PlayerScreenHarness {
       windowManagerCalls.add(call);
       switch (call.method) {
         case 'isMaximized':
-          return false;
+          return windowMaximized;
+        case 'isMinimized':
+          return windowMinimized;
         case 'isFullScreen':
           return _fullscreen;
         case 'setFullScreen':
@@ -131,6 +140,8 @@ abstract final class PlayerScreenHarness {
           }
           return null;
         case 'setAlwaysOnTop':
+        case 'setAspectRatio':
+        case 'setMinimumSize':
           return null;
         case 'getTitleBarHeight':
           return 0;
@@ -220,6 +231,10 @@ abstract final class PlayerScreenHarness {
     messenger.setMockMethodCallHandler(openFileMethodsChannel, null);
     messenger.setMockMethodCallHandler(filePickerChannel, null);
     messenger.setMockMethodCallHandler(bookmarkChannel, null);
+    windowMaximized = false;
+    windowMinimized = false;
+    windowManagerCalls.clear();
+    filePickerCalls.clear();
     final previous = _previousFilePicker;
     if (previous != null) {
       FilePickerPlatform.instance = previous;
@@ -283,6 +298,22 @@ abstract final class PlayerScreenHarness {
   }
 }
 
+class HarnessFilePickerCall {
+  const HarnessFilePickerCall({
+    required this.kind,
+    this.type,
+    this.allowedExtensions,
+    this.initialDirectory,
+    this.allowMultiple = false,
+  });
+
+  final String kind;
+  final FileType? type;
+  final List<String>? allowedExtensions;
+  final String? initialDirectory;
+  final bool allowMultiple;
+}
+
 base class _HarnessPlatformFile extends PlatformFile {
   _HarnessPlatformFile(this._path)
     : name = _path
@@ -338,6 +369,14 @@ final class _HarnessFilePicker extends FilePickerPlatform {
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
   }) async {
+    PlayerScreenHarness.filePickerCalls.add(
+      HarnessFilePickerCall(
+        kind: 'pickFile',
+        type: type,
+        allowedExtensions: allowedExtensions,
+        initialDirectory: initialDirectory,
+      ),
+    );
     final paths = PlayerScreenHarness.filePickerPaths;
     if (paths == null || paths.isEmpty) return null;
     return _HarnessPlatformFile(paths.first);
@@ -357,6 +396,15 @@ final class _HarnessFilePicker extends FilePickerPlatform {
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
   }) async {
+    PlayerScreenHarness.filePickerCalls.add(
+      HarnessFilePickerCall(
+        kind: 'pickFiles',
+        type: type,
+        allowedExtensions: allowedExtensions,
+        initialDirectory: initialDirectory,
+        allowMultiple: true,
+      ),
+    );
     final paths = PlayerScreenHarness.filePickerPaths;
     if (paths == null || paths.isEmpty) return const [];
     return [for (final path in paths) _HarnessPlatformFile(path)];
@@ -371,6 +419,12 @@ final class _HarnessFilePicker extends FilePickerPlatform {
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
   }) async {
+    PlayerScreenHarness.filePickerCalls.add(
+      HarnessFilePickerCall(
+        kind: 'getDirectoryPath',
+        initialDirectory: initialDirectory,
+      ),
+    );
     return null;
   }
 
@@ -386,6 +440,12 @@ final class _HarnessFilePicker extends FilePickerPlatform {
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
   }) async {
+    PlayerScreenHarness.filePickerCalls.add(
+      HarnessFilePickerCall(
+        kind: 'saveFile',
+        initialDirectory: initialDirectory,
+      ),
+    );
     final path = PlayerScreenHarness.filePickerSavePath;
     if (path == null || path.isEmpty) return null;
     File(path).writeAsBytesSync(bytes);
