@@ -113,14 +113,21 @@ final class MediaSessionBridge {
       // Latest writer wins.
       if let channel { activeChannel = channel }
 
+      let replace = (args["replace"] as? Bool) == true
       if let title = args["title"] as? String, !title.isEmpty {
         info[MPMediaItemPropertyTitle] = title
+      } else if replace {
+        info.removeValue(forKey: MPMediaItemPropertyTitle)
       }
       if let artist = args["artist"] as? String, !artist.isEmpty {
         info[MPMediaItemPropertyArtist] = artist
+      } else if replace {
+        info.removeValue(forKey: MPMediaItemPropertyArtist)
       }
       if let album = args["album"] as? String, !album.isEmpty {
         info[MPMediaItemPropertyAlbumTitle] = album
+      } else if replace {
+        info.removeValue(forKey: MPMediaItemPropertyAlbumTitle)
       }
       if let durMs = intValue(args["durationMs"]), durMs > 0 {
         info[MPMediaItemPropertyPlaybackDuration] = Double(durMs) / 1000.0
@@ -154,7 +161,7 @@ final class MediaSessionBridge {
           info.removeValue(forKey: MPMediaItemPropertyArtwork)
           pendingArtUri = artUri
         }
-      } else if args.keys.contains("artUri") {
+      } else if replace || args.keys.contains("artUri") {
         info.removeValue(forKey: MPMediaItemPropertyArtwork)
       }
       return (info, playingFlag)

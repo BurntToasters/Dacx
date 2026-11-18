@@ -228,20 +228,32 @@ class MediaSession {
     std::string title = GetString(m, "title");
     std::string artist = GetString(m, "artist");
     std::string album = GetString(m, "album");
+    const bool replace = GetOr<bool>(m, "replace", false);
     bool changedDisplay = false;
-    if (!title.empty()) {
+    if (replace) {
       updater_.MusicProperties().Title(Utf8ToWide(title));
-      changedDisplay = true;
-    }
-    if (!artist.empty()) {
       updater_.MusicProperties().Artist(Utf8ToWide(artist));
-      changedDisplay = true;
-    }
-    if (!album.empty()) {
       updater_.MusicProperties().AlbumTitle(Utf8ToWide(album));
       changedDisplay = true;
+    } else {
+      if (!title.empty()) {
+        updater_.MusicProperties().Title(Utf8ToWide(title));
+        changedDisplay = true;
+      }
+      if (!artist.empty()) {
+        updater_.MusicProperties().Artist(Utf8ToWide(artist));
+        changedDisplay = true;
+      }
+      if (!album.empty()) {
+        updater_.MusicProperties().AlbumTitle(Utf8ToWide(album));
+        changedDisplay = true;
+      }
     }
     auto artIt = m.find(EncodableValue("artUri"));
+    if (replace && artIt == m.end()) {
+      updater_.Thumbnail(nullptr);
+      changedDisplay = true;
+    }
     if (artIt != m.end()) {
       std::string artUri;
       if (auto p = std::get_if<std::string>(&artIt->second)) artUri = *p;

@@ -187,6 +187,7 @@ class MediaSessionService {
       'album': album,
       'durationMs': _lastDuration.inMilliseconds,
       'artUri': artUri,
+      'replace': true,
     });
   }
 
