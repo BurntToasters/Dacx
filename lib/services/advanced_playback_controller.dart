@@ -30,7 +30,9 @@ class AdvancedPlaybackController extends ChangeNotifier {
     required SettingsService settings,
     required this._player,
   }) : _settings = settings,
-       _lastEnabled = settings.advancedPlaybackToolsEnabled;
+       _lastEnabled = settings.advancedPlaybackToolsEnabled {
+    _settings.addListener(_invalidateMarkers);
+  }
 
   final SettingsService _settings;
   final IPlayerService _player;
@@ -80,16 +82,45 @@ class AdvancedPlaybackController extends ChangeNotifier {
       ? const PlaybackAdjustment()
       : _settings.playbackAdjustmentFor(_source!);
 
-  List<PlaybackMarker> get markers => _source == null
-      ? const []
-      : _settings
-            .playbackMarkersFor(_source!)
-            .where(
-              (marker) =>
-                  _duration.inMilliseconds <= 0 ||
-                  marker.positionMs <= _duration.inMilliseconds,
-            )
-            .toList(growable: false);
+  List<PlaybackMarker>? _markersRaw;
+  String? _markersRawSource;
+  List<PlaybackMarker>? _markersVisible;
+  int? _markersVisibleDurationMs;
+
+  void _invalidateMarkers() {
+    _markersRaw = null;
+    _markersRawSource = null;
+    _markersVisible = null;
+    _markersVisibleDurationMs = null;
+  }
+
+  @override
+  void dispose() {
+    _settings.removeListener(_invalidateMarkers);
+    super.dispose();
+  }
+
+  List<PlaybackMarker> get markers {
+    final source = _source;
+    if (source == null) return const [];
+    var raw = _markersRaw;
+    if (raw == null || _markersRawSource != source) {
+      raw = _settings.playbackMarkersFor(source);
+      _markersRaw = raw;
+      _markersRawSource = source;
+      _markersVisible = null;
+    }
+    final durationMs = _duration.inMilliseconds;
+    var visible = _markersVisible;
+    if (visible == null || _markersVisibleDurationMs != durationMs) {
+      visible = raw
+          .where((marker) => durationMs <= 0 || marker.positionMs <= durationMs)
+          .toList(growable: false);
+      _markersVisible = visible;
+      _markersVisibleDurationMs = durationMs;
+    }
+    return visible;
+  }
 
   Future<void> setSource(PlayableSource? source) async {
     final next = source?.value.trim();
@@ -102,15 +133,14 @@ class AdvancedPlaybackController extends ChangeNotifier {
     _b = null;
     _source = next == null || next.isEmpty ? null : next;
     _position = Duration.zero;
+    _invalidateMarkers();
     await applyForCurrentSource();
     notifyListeners();
   }
 
   void setPosition(Duration value) {
     final next = value < Duration.zero ? Duration.zero : value;
-    if (next == _position) return;
     _position = next;
-    notifyListeners();
   }
 
   void setDuration(Duration value) {
@@ -333,6 +363,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
       label: _safeLabel(label) ?? _formatTimestamp(_position),
     );
     _settings.addPlaybackMarker(_source!, marker);
+    _invalidateMarkers();
     notifyListeners();
     return marker;
   }
@@ -342,6 +373,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
     final safe = _safeLabel(label);
     if (safe == null) return;
     _settings.updatePlaybackMarker(_source!, id, label: safe);
+    _invalidateMarkers();
     notifyListeners();
   }
 
@@ -354,6 +386,7 @@ class AdvancedPlaybackController extends ChangeNotifier {
   void deleteMarker(String id) {
     if (!enabled || _source == null) return;
     _settings.removePlaybackMarker(_source!, id);
+    _invalidateMarkers();
     notifyListeners();
   }
 
