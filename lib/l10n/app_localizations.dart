@@ -160,6 +160,30 @@ abstract class AppLocalizations {
   /// **'Quit'**
   String get trayQuit;
 
+  /// No description provided for @trayNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get trayNext;
+
+  /// No description provided for @trayPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get trayPrevious;
+
+  /// System tray tooltip while media is loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} · Dacx'**
+  String trayTooltipTrack(String title);
+
+  /// System tray tooltip while media with a known artist is loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} - {artist} · Dacx'**
+  String trayTooltipTrackArtist(String title, String artist);
+
   /// No description provided for @settingsRememberWindow.
   ///
   /// In en, this message translates to:

@@ -16,6 +16,7 @@ import '../services/idle_inhibit_service.dart';
 import '../services/debug_log_service.dart';
 import '../services/media_session_service.dart';
 import '../services/packaged_e2e_probe.dart';
+import '../services/player_remote.dart';
 import '../services/playlist_service.dart';
 import '../services/open_file_bridge.dart';
 import '../services/seek_preview_service.dart';
@@ -81,6 +82,7 @@ class PlayerScreen extends StatefulWidget {
   final StreamController<MediaSessionCommand>? mediaSessionCommandsForTesting;
   final Future<void> Function()? onQuitRequest;
   final ValueChanged<bool>? onCompactModeChanged;
+  final PlayerRemote? playerRemote;
 
   const PlayerScreen({
     super.key,
@@ -101,6 +103,7 @@ class PlayerScreen extends StatefulWidget {
     @visibleForTesting this.mediaSessionCommandsForTesting,
     this.onQuitRequest,
     this.onCompactModeChanged,
+    this.playerRemote,
   });
 
   @override
@@ -139,6 +142,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _isDragging = false;
 
   bool _isDisposed = false;
+  PlayerRemoteCommands? _remoteCommands;
   final _scrollVolume = ScrollVolumeAccumulator();
 
   // Tracks / chapters / OSD state
@@ -431,6 +435,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     _media.init();
     _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
+    _attachRemote();
     _player.volume = _settings.volume;
     _settingsApplier.captureInitialState();
     _log(
@@ -702,6 +707,63 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
+  void _attachRemote() {
+    final remote = widget.playerRemote;
+    if (remote == null) return;
+    final commands = PlayerRemoteCommands(
+      playPause: _onControlPlayPause,
+      next: () => _sourceLoad.advancePlaylist(1),
+      previous: () => _sourceLoad.advancePlaylist(-1),
+    );
+    _remoteCommands = commands;
+    remote.attach(commands);
+    _playlist.addListener(_syncRemote);
+    _settings.addListener(_syncRemote);
+  }
+
+  void _detachRemote() {
+    final commands = _remoteCommands;
+    if (commands == null) return;
+    _remoteCommands = null;
+    _playlist.removeListener(_syncRemote);
+    _settings.removeListener(_syncRemote);
+    widget.playerRemote?.detach(commands);
+  }
+
+  NowPlayingState _remoteSnapshot() {
+    if (_currentFile == null) return NowPlayingState.idle;
+    final title = _miniPlayerTitle();
+    final artist = _player.isAudioFile ? _media.displayArtist : null;
+    return NowPlayingState(
+      title: title.isEmpty ? null : title,
+      artist: artist,
+      isPlaying: _player.isPlaying,
+      hasMedia: true,
+      canGoNext: PlaylistAdvancePolicy.canGoNext(
+        queueLength: _playlist.length,
+        loopMode: _settings.loopMode,
+        hasNextInOrder: _playlist.hasNext,
+      ),
+      canGoPrevious: PlaylistAdvancePolicy.canGoPrevious(
+        queueLength: _playlist.length,
+        loopMode: _settings.loopMode,
+        hasPreviousInOrder: _playlist.hasPrevious,
+      ),
+    );
+  }
+
+  void _syncRemote() {
+    if (_isDisposed) return;
+    widget.playerRemote?.update(_remoteSnapshot());
+  }
+
+  void _syncRemoteAfterBuild() {
+    final remote = widget.playerRemote;
+    if (remote == null || _remoteCommands == null) return;
+    if (_remoteSnapshot() == remote.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncRemote());
+  }
+
   void _onAlbumArtTracks(Tracks tracks) {
     final artChange = _player.onTracksStream(tracks);
     if (artChange.uiChanged) {
@@ -765,6 +827,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+    _detachRemote();
     if (_window.compactMode) {
       widget.onCompactModeChanged?.call(false);
     }
@@ -921,6 +984,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    _syncRemoteAfterBuild();
     return Focus(
       focusNode: _shortcuts.focusNode,
       autofocus: true,

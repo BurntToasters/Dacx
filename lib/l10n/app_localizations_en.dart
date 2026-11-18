@@ -44,6 +44,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trayQuit => 'Quit';
 
   @override
+  String get trayNext => 'Next';
+
+  @override
+  String get trayPrevious => 'Previous';
+
+  @override
+  String trayTooltipTrack(String title) {
+    return '$title · Dacx';
+  }
+
+  @override
+  String trayTooltipTrackArtist(String title, String artist) {
+    return '$title - $artist · Dacx';
+  }
+
+  @override
   String get settingsRememberWindow => 'Remember window size & position';
 
   @override

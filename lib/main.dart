@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/window_startup.dart';
 import 'l10n/app_localizations.dart';
+import 'l10n/app_localizations_en.dart';
 import 'models/playable_source.dart';
 import 'playback/native_runtime_probe.dart';
 import 'screens/player_screen.dart';
@@ -21,6 +22,7 @@ import 'services/debug_log_service.dart';
 import 'services/error_log_store.dart';
 import 'services/hardware_acceleration_service.dart';
 import 'services/instance_mode_service.dart';
+import 'services/player_remote.dart';
 import 'services/macos_install_location_service.dart';
 import 'services/preferences_recovery.dart';
 import 'services/resume_position_store.dart';
@@ -432,6 +434,7 @@ class _DacxAppState extends State<DacxApp>
   _ThemeBundle? _cachedThemes;
   _ThemeInputs? _cachedThemeInputs;
   late final TrayService _tray;
+  final PlayerRemote _playerRemote = PlayerRemote();
   bool _trayLabelsSynced = false;
   late WindowVisualInputs _visualInputs;
   late _ShellInputs _shell;
@@ -529,7 +532,7 @@ class _DacxAppState extends State<DacxApp>
   @override
   void initState() {
     super.initState();
-    _tray = TrayService(onQuit: _quitFromTray);
+    _tray = TrayService(onQuit: _quitFromTray, remote: _playerRemote);
     widget.debugLog.logLazy(
       category: DebugLogCategory.system,
       event: 'app_init',
@@ -558,6 +561,7 @@ class _DacxAppState extends State<DacxApp>
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
     unawaited(_tray.dispose());
+    _playerRemote.dispose();
     widget.settings.dispose();
     super.dispose();
   }
@@ -631,9 +635,9 @@ class _DacxAppState extends State<DacxApp>
       }
     }
     if (enabled) {
-      final showLabel = l10n?.trayShow ?? 'Show Dacx';
-      final quitLabel = l10n?.trayQuit ?? 'Quit';
-      await _tray.init(showLabel: showLabel, quitLabel: quitLabel);
+      await _tray.init(
+        labels: TrayLabels.fromL10n(l10n ?? AppLocalizationsEn()),
+      );
     } else {
       final wasHidden = !(await windowManager.isVisible());
       await _tray.dispose();
@@ -1009,6 +1013,7 @@ class _DacxAppState extends State<DacxApp>
               initialFile: widget.initialFile,
               onQuitRequest: _quitFromTray,
               onCompactModeChanged: _onCompactModeChanged,
+              playerRemote: _playerRemote,
             ),
       ),
     );

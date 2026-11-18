@@ -676,7 +676,21 @@ Covered in `test/e2e/audit9_updater_e2e_test.dart`.
 
 ## Finding 27: tray controls
 
-Modes: pending.
+- M27.1: with no media loaded the tray menu enables Play/Pause, Next or Previous, shows a label other than Play, or the tooltip is anything but plain "Dacx"; Show and Quit are disabled.
+- M27.2: while playing, the Play/Pause entry does not read Pause, or Next and Previous are disabled in the middle of a queue.
+- M27.3: while paused, the Play/Pause entry does not flip back to Play, or a pause leaves the spec identical to the playing one.
+- M27.4: a single item with loop off enables Next or Previous, or disables Play/Pause.
+- M27.5: on the last item with loop off Next is enabled, on the first item Previous is enabled, Previous is disabled on the last item, or loop-all fails to enable both at the ends.
+- M27.6: the menu is not exactly Play/Pause, Next, Previous, separator, Show, Quit in that order, or any label differs from the English localization strings.
+- M27.7: the tooltip omits the title, omits a known artist, contains an em dash, or loses the Dacx suffix; an empty or whitespace-only artist is rendered as if known.
+- M27.8: an over-long title, artist, both, or a multi-byte (surrogate pair) title makes the tooltip exceed 127 characters, drops the Dacx suffix, splits a surrogate pair, or is not marked with an ellipsis; a tiny limit overflows or throws.
+- M27.9: equal now-playing state builds an unequal spec (so the native menu would be rebuilt needlessly), or a change to playing state, title, artist, hasMedia, canGoNext or canGoPrevious builds an equal spec.
+- M27.10: tray commands do not reach the real screen: Play/Pause does not toggle the player, Next and Previous do not advance the queue, or a tray command with no attached screen throws.
+- M27.11: the screen does not publish title, artist, playing, hasMedia, canGoNext and canGoPrevious to the remote when media loads, plays, pauses, changes track or the queue and loop mode change.
+- M27.12: after the screen is disposed the remote still invokes its callbacks (a call after dispose), keeps stale now-playing state, or a late detach by an old screen clears the registration of a newer one.
+- M27.13: position or duration ticks notify the remote listeners, or publishing an unchanged state notifies at all.
+- M27.14: on Windows a left click opens the context menu instead of showing and focusing the window, a right click does not open the menu, macOS or Linux click behavior changed (macOS click shows, macOS right click opens the menu, Linux does nothing), or the click handler skips the window show and focus calls.
+- M27.15: Show no longer shows and focuses the window, or Quit no longer calls the quit callback exactly once.
 
 ## Finding 28: fixed-width dialogs
 

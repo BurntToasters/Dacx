@@ -16,6 +16,21 @@
   "settingsMinimizeToTraySubtitle": "Close button hides Dacx instead of quitting. Use Quit from the tray menu to exit.",
   "trayShow": "Show Dacx",
   "trayQuit": "Quit",
+  "trayNext": "Next",
+  "trayPrevious": "Previous",
+  "trayTooltipTrack": "{title} · Dacx",
+  "@trayTooltipTrack": {
+    "description": "System tray tooltip while media is loaded.",
+    "placeholders": { "title": { "type": "String", "example": "Song Title" } }
+  },
+  "trayTooltipTrackArtist": "{title} - {artist} · Dacx",
+  "@trayTooltipTrackArtist": {
+    "description": "System tray tooltip while media with a known artist is loaded.",
+    "placeholders": {
+      "title": { "type": "String", "example": "Song Title" },
+      "artist": { "type": "String", "example": "The Artist" }
+    }
+  },
   "settingsRememberWindow": "Remember window size & position",
   "settingsAllowMultipleWindows": "Allow multiple windows",
   "settingsCheckForUpdatesOnLaunch": "Check for updates on launch",
