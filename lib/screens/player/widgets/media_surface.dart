@@ -97,70 +97,75 @@ class MediaSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: _contentSwitchDuration,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            ...previousChildren,
-            ...(currentChild == null
-                ? const <Widget>[]
-                : <Widget>[currentChild]),
-          ],
-        );
-      },
-      transitionBuilder: (child, animation) {
-        final fade = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
-        final scale = Tween<double>(begin: 0.985, end: 1.0).animate(fade);
-        return FadeTransition(
-          opacity: fade,
-          child: ScaleTransition(scale: scale, child: child),
-        );
-      },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: hasMedia ? onTap : null,
-        onDoubleTap: hasMedia ? onDoubleTap : null,
-        child: MouseRegion(
-          cursor: !isFullscreen || fullscreenChromeVisible
-              ? MouseCursor.defer
-              : SystemMouseCursors.none,
-          onHover: (_) => onHover(),
-          child: Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                onScrollVolume(event.scrollDelta.dy, event.timeStamp);
-              }
-            },
-            child: Stack(
-              children: [
-                Positioned.fill(child: _buildContent()),
-                if (hasMedia && settings.osdEnabled)
-                  Positioned.fill(
-                    child: OsdOverlay(
-                      title: player.osdTitle(),
-                      position: player.position,
-                      duration: player.duration,
-                      visible: player.osdVisible,
-                      transientMessage: PlayerController.stripOsdTimestamp(
-                        player.osdTransientMessage,
-                      ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: hasMedia ? onTap : null,
+      onDoubleTap: hasMedia ? onDoubleTap : null,
+      child: MouseRegion(
+        cursor: !isFullscreen || fullscreenChromeVisible
+            ? MouseCursor.defer
+            : SystemMouseCursors.none,
+        onHover: (_) => onHover(),
+        child: Listener(
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              onScrollVolume(event.scrollDelta.dy, event.timeStamp);
+            }
+          },
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: AnimatedSwitcher(
+                  duration: _contentSwitchDuration,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  layoutBuilder: (currentChild, previousChildren) {
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ...previousChildren,
+                        ...(currentChild == null
+                            ? const <Widget>[]
+                            : <Widget>[currentChild]),
+                      ],
+                    );
+                  },
+                  transitionBuilder: (child, animation) {
+                    final fade = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    );
+                    final scale = Tween<double>(
+                      begin: 0.985,
+                      end: 1.0,
+                    ).animate(fade);
+                    return FadeTransition(
+                      opacity: fade,
+                      child: ScaleTransition(scale: scale, child: child),
+                    );
+                  },
+                  child: _buildContent(),
+                ),
+              ),
+              if (hasMedia && settings.osdEnabled)
+                Positioned.fill(
+                  child: OsdOverlay(
+                    title: player.osdTitle(),
+                    position: player.position,
+                    duration: player.duration,
+                    visible: player.osdVisible,
+                    transientMessage: PlayerController.stripOsdTimestamp(
+                      player.osdTransientMessage,
                     ),
                   ),
-                if (compactMode)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: CompactExitButton(onPressed: onExitCompactMode),
-                  ),
-              ],
-            ),
+                ),
+              if (compactMode)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: CompactExitButton(onPressed: onExitCompactMode),
+                ),
+            ],
           ),
         ),
       ),

@@ -154,7 +154,33 @@ testable off macOS.
 
 ## Finding 8: fullscreen dock hides while in use
 
-Modes: pending.
+Exercised by `test/e2e/audit9_fullscreen_e2e_test.dart` on a real
+`PlayerScreen` with the mocked fullscreen flag. In fullscreen the title bar and
+the dock are overlays (`FullscreenChromeOverlay`) that fade and slide and use
+`IgnorePointer` when hidden.
+
+- M8.1 With playback running and the pointer idle, the controls are visible
+  just before 3 s after the last movement, then hidden after it (overlays report
+  hidden and ignore pointers).
+- M8.2 A mouse pointer resting over the dock keeps the controls visible
+  indefinitely; once it leaves, they hide 3 s after the last movement.
+- M8.3 A pointer held down inside the dock (seek or volume drag, touch so no
+  hover is involved) keeps the controls visible; after release they hide 3 s
+  later.
+- M8.4 While playback is paused the controls never hide; once playback resumes
+  they hide.
+- M8.5 While a dialog route is above the player the controls never hide; after
+  it closes they hide 3 s later.
+- M8.6 While the queue drawer is open the controls never hide; after it closes
+  they hide.
+- M8.7 Moving the mouse over the media area (far from the dock) while the
+  controls are hidden reveals them, and the hide timer restarts.
+- M8.8 Hidden overlays do not take pointer input (ignore-pointer on both) and
+  shown ones do.
+- M8.9 Keyboard shortcuts still work with the controls hidden (play/pause
+  space, Escape leaves fullscreen and shows the controls again).
+- M8.10 The mouse cursor over the media area is hidden while the controls are
+  hidden and shown while they are visible; windowed mode never hides it.
 
 ## Finding 9: scroll volume per event
 
@@ -192,7 +218,34 @@ channels.
 
 ## Finding 11: previous and next always enabled
 
-Modes: pending.
+Covered in `test/e2e/audit9_transport_settings_e2e_test.dart`. `advancePlaylist`
+never restarts the current track and does nothing on an empty queue or at a
+queue edge without wrap, so Previous and Next are enabled exactly when that call
+would move. Wrap only happens in loop-all mode.
+
+- M11.1 Policy: an empty queue disables both buttons in every loop mode (loop
+  all included, since the advance is a no-op).
+- M11.2 Policy: a one-item queue disables both buttons with loop off or single,
+  and enables both with loop all (the advance wraps onto the same item).
+- M11.3 Policy: with loop off or single, a next-less position (last item)
+  disables only Next and a previous-less position (first item) disables only
+  Previous; a middle item enables both. Loop all enables both at every position
+  of a non-empty queue.
+- M11.4 Policy with a real `PlaylistService`: its `hasNext`/`hasPrevious` drive
+  the policy at first, middle and last position, and with shuffle on at the
+  start and end of the shuffle order.
+- M11.5 `TransportControls` in the full and the compact layout: `canGoPrevious`
+  or `canGoNext` false disables only that button and its callback never runs;
+  true enables it and the callback runs once.
+- M11.6 `TransportControls` without `canGoPrevious`/`canGoNext` keeps today's
+  behavior (enabled with media, disabled without) and no media disables both
+  buttons even when `canGoNext` and `canGoPrevious` are true.
+- M11.7 `PlayerBottomDock` with a playlist computes the flags from the queue and
+  loop mode, rebuilds when the queue changes, and without a playlist keeps
+  today's `hasMedia` behavior.
+- M11.8 Volume icon: 0 shows `volume_off`, 1 to 49 `volume_down`, 50 and above
+  `volume_up`, in both layouts; the mute tooltip and the semantics label still
+  follow `volume == 0`.
 
 ## Finding 12: advanced playback per-tick notify
 
@@ -303,11 +356,29 @@ where the value is used and are handled by a later package.
 
 ## Finding 17: content switcher never animates
 
-Modes: pending.
+- M17.1 The media content `AnimatedSwitcher` child is keyed by surface kind:
+  `media-drop-zone`, `media-audio`, `media-audio-with-art` and `media-video`
+  are four different keys, and each stays findable by `find.byKey`.
+- M17.2 Switching from the drop zone to a loaded source cross-fades: part way
+  through the transition both the outgoing and incoming surfaces are in the
+  tree, and after it only the incoming one remains.
+- M17.3 Switching between two loaded surface kinds (audio to video, audio to
+  audio with art) also cross-fades.
+- M17.4 Gesture handling is intact during and after the transition: one tap in
+  the middle of a transition and one after it each toggle play/pause exactly
+  once (no duplicate or missing handler), and a double tap toggles fullscreen.
 
 ## Finding 18: fullscreen chrome relayouts video
 
-Modes: pending.
+- M18.1 In fullscreen the media surface fills the whole window (same size as
+  the scaffold) with the controls shown, and has exactly the same size and
+  position after they hide and after they show again.
+- M18.2 In fullscreen the dock overlay lies inside the media surface rect (an
+  overlay, not a sibling that takes space), anchored to the bottom edge.
+- M18.3 Windowed layout is unchanged: no overlay wrapper exists, the dock is
+  below the surface and the surface is shorter than the window.
+- M18.4 Entering and leaving fullscreen does not remount the media surface
+  (same element before, during and after).
 
 ## Finding 19: mini-player layout
 
@@ -315,15 +386,93 @@ Modes: pending.
 
 ## Finding 20: audio view overflow
 
-Modes: pending.
+Covered in `test/e2e/audit9_audio_empty_e2e_test.dart`.
+
+- M20.1 The audio view never overflows at 1280x720, 800x600, 480x320, 480x190,
+  300x150 or 200x120, with and without album art, with and without artist and
+  album, and with very long title, artist and album text.
+- M20.2 Layout adapts to the available height: tall is stacked (art above
+  text), medium and wide-short is side by side (art left, text right), very
+  short is text only with no art.
+- M20.3 Layout also adapts to width: a narrow area never gets side by side.
+- M20.4 The scroll fallback absorbs content that still does not fit: at
+  200x120 with long text the content scrolls and nothing overflows.
+- M20.5 A non-empty album replaces the static "Audio playback" caption; a
+  missing or empty album keeps the caption.
+- M20.6 The title and artist are always present in every layout mode.
+- M20.7 `media-audio` and `media-audio-with-art` stay on the wrappers in
+  `media_surface.dart` (source scan).
 
 ## Finding 21: more menu
 
-Modes: pending.
+Covered in `test/e2e/audit9_menu_e2e_test.dart`.
+
+- M21.1 With a chapter refresh that never completes, tapping More on a real
+  `PlayerScreen` must show the menu within two pumps; the menu must not wait
+  for the refresh.
+- M21.2 When the chapter refresh completes while the menu is open, the Tracks
+  submenu with the Chapters entry must appear without reopening; before that
+  it must be absent. Completing the refresh after the menu was closed must
+  not throw.
+- M21.3 Two open requests in the same frame must produce exactly one menu.
+  After the menu closes, a new request must open it again (the guard is
+  released on every close path).
+- M21.4 The menu must open next to the anchor rect it was given: below it when
+  there is room, above it when there is not, with its right edge on the
+  anchor's right edge and always on screen. Two different anchors must give
+  two different positions.
+- M21.5 Without an anchor the menu must fall back to the bottom-right corner
+  (right margin 12, bottom margin 64) and stay on screen.
+- M21.6 The sleep timer entry must be a submenu whose items are exactly
+  `SleepTimerController.presetMinutes`, in order, with the "Off" item shown
+  only while a timer is active; no sleep action may be hard-coded (source
+  scan).
+- M21.7 Shortcut hints must be shown for Open URL, Take screenshot and
+  Mini-player using the user's current bindings (default, rebound and
+  unbound), formatted through
+  `PlayerShortcutsService.formatAcceleratorForDisplay`.
+- M21.8 Item labels must use the theme text styles: no `fontSize` literal in
+  the menu sources, and the resolved label size must follow the theme's label
+  style.
+- M21.9 The menu must be keyboard navigable: the first item is focused on
+  open, Enter activates it, Arrow Down moves to the next item, Arrow Right
+  opens a submenu, and Escape closes the menu with no action.
+- M21.10 Every action available before the rework must still be reachable and
+  return the same action id: open URL, audio, subtitle, external audio,
+  external subtitle, chapters, equalizer, advanced playback, screenshot,
+  sleep off and each preset, keyboard shortcuts, queue, add files, mini-player.
+  The existing `advanced-playback-entry` key must stay on the advanced
+  playback item and the item must follow its opt-in gate.
+- M21.11 `dispatchPlayerMoreMenuResult` must map every action id to exactly
+  one callback, including every sleep preset and sleep off, and ignore unknown
+  ids and `null`.
+- M21.12 The shuffle switch must toggle without closing the menu and the
+  mini-player switch must close it and return `compact`.
+- M21.13 On a real `PlayerScreen`, choosing Keyboard shortcuts from the menu
+  must still open that dialog.
 
 ## Finding 22: empty state
 
-Modes: pending.
+Covered in `test/e2e/audit9_audio_empty_e2e_test.dart`.
+
+- M22.1 The empty state never overflows at 1280x720, 800x600, 480x320, 300x300
+  and 200x200, with and without recent files, with the tip shown or dismissed.
+- M22.2 Open file is the only filled primary button; Open folder, Open
+  playlist, Open URL and Reopen last are lighter (text buttons, never filled).
+- M22.3 All existing keys stay on their buttons (`open-folder-empty-button`,
+  `open-playlist-empty-button`, `open-url-empty-button`,
+  `reopen-last-empty-button`, `empty-state-tip-dismiss`) and each fires its
+  own callback.
+- M22.4 Reopen last is shown only when there is at least one recent file.
+- M22.5 The recent list shows at most 5 entries, in order, each row keyed
+  `empty-recent-<index>` with the file name as text and the full path as
+  tooltip; extra entries beyond 5 are not rendered.
+- M22.6 Tapping a recent row calls the open callback with that row's full
+  path and no other callback fires.
+- M22.7 With no recent files the list and its heading are absent.
+- M22.8 The tip is shown until dismissed, the dismiss button fires its
+  callback, and a dismissed tip is gone.
+- M22.9 At 480x320 the primary action is on screen without scrolling.
 
 ## Finding 23: snackbar queueing
 
@@ -359,7 +508,31 @@ Covered in `test/e2e/audit9_feedback_e2e_test.dart`.
 
 ## Finding 25: settings rows at narrow widths
 
-Modes: pending.
+Covered in `test/e2e/audit9_transport_settings_e2e_test.dart`.
+
+- M25.1 `SettingsRow` stacks the control under the title below its width
+  threshold and puts the control beside the title above it (title right edge
+  before control left edge, vertical bands overlapping); the control is never
+  pushed outside the row.
+- M25.2 `SettingsScreen` at the 480 px minimum window, scrolled from top to
+  bottom: no overflow or layout exception, with every wide-control row (speed,
+  loop, screenshot folder, screenshot format, hardware acceleration, theme,
+  update channel, recent files) reachable.
+- M25.3 At 480 px the titles of those rows get usable width: each title is laid
+  out on one line (not wrapped per word) and is wider than 120 px, and its
+  control sits below it.
+- M25.4 At 1280 px the same rows keep the title and the control side by side.
+- M25.5 Every setting keeps its behavior through the new row: loop mode,
+  theme, screenshot format and update channel segments change their setting,
+  the speed and hardware dropdowns change theirs, the screenshot reset button
+  stays disabled with no folder and clears an existing one, and clearing recent
+  files still works at 480 px.
+- M25.6 Accent swatches are reachable by keyboard: tabbing from the start of the
+  accent row reaches a swatch (focus inside a swatch), Enter selects it and
+  Space selects another one, and a focused swatch shows a focus ring.
+- M25.7 Swatch semantics: the label is the localized "Accent color <name>", the
+  current accent exposes `isSelected`, no other swatch does, the swatch is a
+  button, and a pointer tap still selects it.
 
 ## Finding 26: updater notes and cancel
 

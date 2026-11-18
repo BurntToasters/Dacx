@@ -22,9 +22,12 @@ class PlayerWindowController extends ChangeNotifier {
     required this.log,
     required this.onFullscreenRejected,
     required this.onCompactModeChanged,
+    this.shouldHoldChrome,
   });
 
   static const Size compactWindowSize = Size(480, 320);
+  static const Duration fullscreenChromeIdleDelay = Duration(seconds: 3);
+  static const Duration _chromeHoldRecheckDelay = Duration(milliseconds: 250);
 
   final bool Function() isMounted;
   final bool Function() isDisposed;
@@ -32,8 +35,11 @@ class PlayerWindowController extends ChangeNotifier {
   final PlayerWindowLog log;
   final VoidCallback onFullscreenRejected;
   final ValueChanged<bool> onCompactModeChanged;
+  final bool Function()? shouldHoldChrome;
 
   Timer? _fullscreenChromeHideTimer;
+  bool _pointerOverChrome = false;
+  int _pointersDownInChrome = 0;
   bool _fullscreenToggleInFlight = false;
   bool _isFullscreen = false;
   bool _fullscreenChromeVisible = true;
@@ -48,7 +54,6 @@ class PlayerWindowController extends ChangeNotifier {
   bool get isFullscreen => _isFullscreen;
   bool get fullscreenChromeVisible => _fullscreenChromeVisible;
   bool get compactMode => _compactMode;
-  bool get showPlayerChrome => !_isFullscreen || _fullscreenChromeVisible;
 
   void revealFullscreenChrome() {
     if (!_isFullscreen) return;
@@ -59,11 +64,47 @@ class PlayerWindowController extends ChangeNotifier {
     _scheduleFullscreenChromeHide();
   }
 
-  void _scheduleFullscreenChromeHide() {
+  bool get _chromeHeld =>
+      _pointerOverChrome ||
+      _pointersDownInChrome > 0 ||
+      (shouldHoldChrome?.call() ?? false);
+
+  void setPointerOverChrome(bool over) {
+    _pointerOverChrome = over;
+  }
+
+  void pointerDownInChrome() {
+    _pointersDownInChrome++;
+  }
+
+  void pointerUpInChrome() {
+    if (_pointersDownInChrome > 0) _pointersDownInChrome--;
+  }
+
+  void _resetChromeHolds() {
+    _pointerOverChrome = false;
+    _pointersDownInChrome = 0;
+  }
+
+  void _scheduleFullscreenChromeHide({
+    Duration delay = fullscreenChromeIdleDelay,
+    bool afterHold = false,
+  }) {
     _fullscreenChromeHideTimer?.cancel();
     if (!_isFullscreen) return;
-    _fullscreenChromeHideTimer = Timer(const Duration(seconds: 3), () {
+    _fullscreenChromeHideTimer = Timer(delay, () {
       if (!isMounted() || isDisposed() || !_isFullscreen) return;
+      if (_chromeHeld) {
+        _scheduleFullscreenChromeHide(
+          delay: _chromeHoldRecheckDelay,
+          afterHold: true,
+        );
+        return;
+      }
+      if (afterHold) {
+        _scheduleFullscreenChromeHide();
+        return;
+      }
       _fullscreenChromeVisible = false;
       notifyListeners();
     });
@@ -79,6 +120,7 @@ class PlayerWindowController extends ChangeNotifier {
 
   void onLeaveFullScreen() {
     _fullscreenChromeHideTimer?.cancel();
+    _resetChromeHolds();
     if (!isMounted()) {
       _isFullscreen = false;
       _fullscreenChromeVisible = true;
@@ -121,6 +163,7 @@ class PlayerWindowController extends ChangeNotifier {
           _fullscreenChromeVisible = true;
         } else {
           _fullscreenChromeHideTimer?.cancel();
+          _resetChromeHolds();
           _fullscreenChromeVisible = true;
         }
         notifyListeners();
@@ -155,12 +198,14 @@ class PlayerWindowController extends ChangeNotifier {
         if (isMounted()) {
           _isFullscreen = false;
           _fullscreenChromeHideTimer?.cancel();
+          _resetChromeHolds();
           _fullscreenChromeVisible = true;
           notifyListeners();
         }
       } else if (isMounted()) {
         _isFullscreen = false;
         _fullscreenChromeHideTimer?.cancel();
+        _resetChromeHolds();
         _fullscreenChromeVisible = true;
         notifyListeners();
       }

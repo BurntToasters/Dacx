@@ -54,6 +54,7 @@ import 'player/player_window_controller.dart';
 import 'player/source_load_coordinator.dart';
 import 'player/track_chapter_controller.dart';
 import 'player/widgets/drag_overlay.dart';
+import 'player/widgets/fullscreen_chrome_overlay.dart';
 import 'player/widgets/media_surface.dart';
 import 'player/widgets/player_bottom_dock.dart';
 import 'player/widgets/play_queue_drawer.dart';
@@ -107,6 +108,7 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _mediaStackKey = GlobalKey();
   late final PlayerShortcutDispatcher _shortcuts = PlayerShortcutDispatcher(
     settings: _settings,
     isActive: () => mounted && !_isDisposed,
@@ -298,6 +300,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       duration: _snackbarShortDuration,
     ),
     onCompactModeChanged: _onCompactModeChanged,
+    shouldHoldChrome: () =>
+        !_player.isPlaying ||
+        (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) ||
+        !_playerRouteIsCurrent(),
   );
 
   // Resume-position bookkeeping.
@@ -484,6 +490,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           unawaited(packagedProbe.recordPlaying(playing));
         }
         setState(() => _player.isPlaying = playing);
+        if (!playing) _window.revealFullscreenChrome();
         // Save on pause: the periodic saver only runs while playing, so a
         // pause (and any seek after it) would otherwise not be stored.
         if (!playing && !_player.fileOpenInProgress) {
@@ -893,34 +900,93 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         backgroundColor: Colors.transparent,
         endDrawer: _buildPlayQueueDrawer(),
         body: GlassShellBackground(
-          child: Column(
-            children: [
-              if (_window.showPlayerChrome) const CustomTitleBar(),
-              Expanded(
-                child: DropTarget(
-                  onDragEntered: (_) => _onDragEntered(),
-                  onDragExited: (_) => _onDragExited(),
-                  onDragDone: _onDragDone,
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _buildMediaSurface(),
-                            PlayerDragOverlay(visible: _isDragging),
-                          ],
-                        ),
-                      ),
-                      _window.showPlayerChrome
-                          ? _buildBottomDock()
-                          : const SizedBox.shrink(),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          child: _window.isFullscreen
+              ? _buildFullscreenBody()
+              : _buildWindowedBody(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropTarget({required Widget child}) {
+    return DropTarget(
+      onDragEntered: (_) => _onDragEntered(),
+      onDragExited: (_) => _onDragExited(),
+      onDragDone: _onDragDone,
+      child: child,
+    );
+  }
+
+  Widget _buildMediaStack() {
+    return Stack(
+      key: _mediaStackKey,
+      fit: StackFit.expand,
+      children: [
+        _buildMediaSurface(),
+        PlayerDragOverlay(visible: _isDragging),
+      ],
+    );
+  }
+
+  Widget _buildWindowedBody() {
+    return Column(
+      children: [
+        const CustomTitleBar(),
+        Expanded(
+          child: _buildDropTarget(
+            child: Column(
+              children: [
+                Expanded(child: _buildMediaStack()),
+                _buildBottomDock(),
+              ],
+            ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFullscreenBody() {
+    final chromeVisible = _window.fullscreenChromeVisible;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerHover: (_) => _window.revealFullscreenChrome(),
+      onPointerMove: (_) => _window.revealFullscreenChrome(),
+      onPointerDown: (_) => _window.revealFullscreenChrome(),
+      child: _buildDropTarget(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(child: _buildMediaStack()),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: FullscreenChromeOverlay(
+                key: const ValueKey('fullscreen-title-overlay'),
+                edge: FullscreenChromeEdge.top,
+                visible: chromeVisible,
+                onPointerOverChanged: _window.setPointerOverChrome,
+                onPointerDown: _window.pointerDownInChrome,
+                onPointerUp: _window.pointerUpInChrome,
+                child: const CustomTitleBar(),
+              ),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: FullscreenChromeOverlay(
+                key: const ValueKey('fullscreen-dock-overlay'),
+                edge: FullscreenChromeEdge.bottom,
+                visible: chromeVisible,
+                onPointerOverChanged: _window.setPointerOverChrome,
+                onPointerDown: _window.pointerDownInChrome,
+                onPointerUp: _window.pointerUpInChrome,
+                child: _buildBottomDock(),
+              ),
+            ),
+          ],
         ),
       ),
     );
