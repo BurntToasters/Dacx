@@ -81,6 +81,13 @@ void main() {
       );
     });
 
+    test('show_remaining_time key is frozen', () {
+      expect(
+        SettingsService.frozenPreferenceKeys,
+        contains('show_remaining_time'),
+      );
+    });
+
     test('every key is well-formed lower_snake_case', () {
       final pattern = RegExp(r'^[a-z][a-z0-9_]*$');
       for (final key in SettingsService.frozenPreferenceKeys) {

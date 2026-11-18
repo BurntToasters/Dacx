@@ -76,7 +76,12 @@ class PlayerBottomDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([sleepTimer, advancedPlayback, ?playlist]),
+      listenable: Listenable.merge([
+        sleepTimer,
+        advancedPlayback,
+        settings,
+        ?playlist,
+      ]),
       builder: (context, _) {
         final remaining = sleepTimer.remaining;
         final queue = playlist;
@@ -148,8 +153,13 @@ class PlayerBottomDock extends StatelessWidget {
                                 onSeekEnd: onSeekEnd,
                               ),
                             ),
-                            Text(
-                              PlayerController.formatDuration(player.duration),
+                            SeekDurationLabel(
+                              key: const ValueKey('seek-duration-label'),
+                              position: player.position,
+                              duration: player.duration,
+                              showRemaining: settings.showRemainingTime,
+                              onToggle: () => settings.showRemainingTime =
+                                  !settings.showRemainingTime,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],

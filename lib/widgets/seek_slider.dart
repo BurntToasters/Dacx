@@ -14,6 +14,62 @@ class SeekMarker {
   final String label;
 }
 
+class SeekDurationLabel extends StatelessWidget {
+  const SeekDurationLabel({
+    super.key,
+    required this.position,
+    required this.duration,
+    required this.showRemaining,
+    required this.onToggle,
+    this.style,
+  });
+
+  final Duration position;
+  final Duration duration;
+  final bool showRemaining;
+  final VoidCallback onToggle;
+  final TextStyle? style;
+
+  static String format(Duration position, Duration duration, bool remaining) {
+    if (!remaining || duration <= Duration.zero) {
+      return PlayerController.formatDuration(duration);
+    }
+    final left = duration - position;
+    final clamped = left.isNegative ? Duration.zero : left;
+    return '-${PlayerController.formatDuration(clamped)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final message = showRemaining
+        ? l10n.seekDurationToggleShowTotal
+        : l10n.seekDurationToggleShowRemaining;
+    return Semantics(
+      button: true,
+      focusable: true,
+      label: message,
+      excludeSemantics: true,
+      onTap: onToggle,
+      child: Tooltip(
+        message: message,
+        excludeFromSemantics: true,
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Text(
+              format(position, duration, showRemaining),
+              style: style,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class SeekSliderWithHover extends StatefulWidget {
   const SeekSliderWithHover({
     super.key,

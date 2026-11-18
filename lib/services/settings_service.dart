@@ -307,6 +307,7 @@ class SettingsService extends ChangeNotifier {
   static const _kScreenshotFormat = 'screenshot_format';
   static const _kOsdEnabled = 'osd_enabled';
   static const _kSeekPreviewEnabled = 'seek_preview_enabled';
+  static const _kShowRemainingTime = 'show_remaining_time';
   static const _kMultiAudioMix = 'multi_audio_mix';
   static const _kMediaSession = 'media_session_enabled';
   static const _kKeybinds = 'keybinds_v1';
@@ -363,6 +364,7 @@ class SettingsService extends ChangeNotifier {
     _kScreenshotFormat,
     _kOsdEnabled,
     _kSeekPreviewEnabled,
+    _kShowRemainingTime,
     _kMultiAudioMix,
     _kMediaSession,
     _kKeybinds,
@@ -1349,6 +1351,11 @@ class SettingsService extends ChangeNotifier {
   bool get seekPreviewEnabled => _prefs.getBool(_kSeekPreviewEnabled) ?? false;
   set seekPreviewEnabled(bool v) {
     _commitBool(_kSeekPreviewEnabled, seekPreviewEnabled, v);
+  }
+
+  bool get showRemainingTime => _prefs.getBool(_kShowRemainingTime) ?? false;
+  set showRemainingTime(bool v) {
+    _commitBool(_kShowRemainingTime, showRemainingTime, v);
   }
 
   /// Mix all audio tracks into one output via mpv `lavfi-complex`.
