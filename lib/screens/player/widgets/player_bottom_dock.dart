@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../playback/player_controller.dart';
+import '../../../playback/playlist_advance_policy.dart';
 import '../../../playback/player_ui_policies.dart';
 import '../../../playback/sleep_timer_controller.dart';
 import '../../../services/advanced_playback_controller.dart';
+import '../../../services/playlist_service.dart';
 import '../../../services/seek_preview_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../theme/glass_decorations.dart';
@@ -41,6 +43,7 @@ class PlayerBottomDock extends StatelessWidget {
     required this.onToggleQueue,
     required this.onToggleMute,
     required this.onCycleSpeed,
+    this.playlist,
   });
 
   final SleepTimerController sleepTimer;
@@ -68,13 +71,15 @@ class PlayerBottomDock extends StatelessWidget {
   final VoidCallback onToggleQueue;
   final VoidCallback onToggleMute;
   final VoidCallback onCycleSpeed;
+  final PlaylistService? playlist;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([sleepTimer, advancedPlayback]),
+      listenable: Listenable.merge([sleepTimer, advancedPlayback, ?playlist]),
       builder: (context, _) {
         final remaining = sleepTimer.remaining;
+        final queue = playlist;
         return GlassChrome(
           borderOnTop: true,
           child: Column(
@@ -159,6 +164,20 @@ class PlayerBottomDock extends StatelessWidget {
                 isPlaying: player.isPlaying,
                 volume: player.volume,
                 hasMedia: hasMedia,
+                canGoPrevious: queue == null
+                    ? null
+                    : PlaylistAdvancePolicy.canGoPrevious(
+                        queueLength: queue.length,
+                        loopMode: settings.loopMode,
+                        hasPreviousInOrder: queue.hasPrevious,
+                      ),
+                canGoNext: queue == null
+                    ? null
+                    : PlaylistAdvancePolicy.canGoNext(
+                        queueLength: queue.length,
+                        loopMode: settings.loopMode,
+                        hasNextInOrder: queue.hasNext,
+                      ),
                 speed: settings.speed,
                 loopMode: settings.loopMode,
                 recentFiles: settings.recentFiles,

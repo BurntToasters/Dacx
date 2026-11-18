@@ -12,6 +12,8 @@ class TransportControls extends StatelessWidget {
   final bool isPlaying;
   final double volume;
   final bool hasMedia;
+  final bool? canGoPrevious;
+  final bool? canGoNext;
   final double speed;
   final LoopMode loopMode;
   final List<String> recentFiles;
@@ -52,6 +54,8 @@ class TransportControls extends StatelessWidget {
     required this.onSettingsPressed,
     this.onPrevious,
     this.onNext,
+    this.canGoPrevious,
+    this.canGoNext,
     this.onToggleQueue,
     this.onMoreActions,
     this.onToggleMute,
@@ -275,7 +279,7 @@ class TransportControls extends StatelessWidget {
     return IconButton(
       icon: const Icon(Icons.skip_previous),
       tooltip: l10n.tooltipPreviousTrack,
-      onPressed: hasMedia ? onPrevious : null,
+      onPressed: hasMedia && (canGoPrevious ?? true) ? onPrevious : null,
       iconSize: 22,
       visualDensity: compact ? VisualDensity.compact : null,
     );
@@ -285,7 +289,7 @@ class TransportControls extends StatelessWidget {
     return IconButton(
       icon: const Icon(Icons.skip_next),
       tooltip: l10n.tooltipNextTrack,
-      onPressed: hasMedia ? onNext : null,
+      onPressed: hasMedia && (canGoNext ?? true) ? onNext : null,
       iconSize: 22,
       visualDensity: compact ? VisualDensity.compact : null,
     );
@@ -355,6 +359,12 @@ class TransportControls extends StatelessWidget {
     );
   }
 
+  IconData get _volumeIcon {
+    if (volume <= 0) return Icons.volume_off;
+    if (volume < 50) return Icons.volume_down;
+    return Icons.volume_up;
+  }
+
   Widget _muteButton(AppLocalizations l10n) {
     return Semantics(
       label: volume == 0
@@ -362,7 +372,7 @@ class TransportControls extends StatelessWidget {
           : l10n.volumePercent(volume.round()),
       button: onToggleMute != null,
       child: IconButton(
-        icon: Icon(volume == 0 ? Icons.volume_off : Icons.volume_up, size: 20),
+        icon: Icon(_volumeIcon, size: 20),
         tooltip: volume == 0 ? l10n.tooltipUnmute : l10n.tooltipMute,
         onPressed: onToggleMute,
         visualDensity: VisualDensity.compact,

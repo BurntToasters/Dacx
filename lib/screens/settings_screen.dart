@@ -19,6 +19,7 @@ import '../widgets/app_snackbar.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/debug_log_panel.dart';
 import '../widgets/manual_update_check.dart';
+import '../widgets/settings_row.dart';
 import '../widgets/update_progress_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -370,9 +371,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _speedTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsPlaybackSpeed),
-      trailing: DropdownButton<double>(
+      control: DropdownButton<double>(
         value: PlaybackSpeedPolicy.nearestPreset(_s.speed),
         underline: const SizedBox.shrink(),
         items: [
@@ -418,9 +419,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _loopModeTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsLoopMode),
-      trailing: SegmentedButton<LoopMode>(
+      control: SegmentedButton<LoopMode>(
         segments: LoopMode.values
             .map(
               (m) =>
@@ -442,15 +443,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _screenshotDirTile() {
     final l10n = AppLocalizations.of(context);
     final dir = _s.screenshotDir;
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsScreenshotDir),
       subtitle: Text(
         dir ?? l10n.settingsScreenshotDirSubtitle,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+      control: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           TextButton(
             onPressed: () async {
@@ -494,9 +495,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _screenshotFormatTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsScreenshotFormat),
-      trailing: SegmentedButton<String>(
+      control: SegmentedButton<String>(
         segments: [
           ButtonSegment(
             value: 'png',
@@ -525,7 +526,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         HardwareAccelerationService.shouldEnableHardwareAcceleration(_s.hwDec);
     final hwReason = HardwareAccelerationService.debugStatusReason(_s.hwDec);
 
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsHardwareAcceleration),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,7 +551,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ],
       ),
-      trailing: DropdownButton<String>(
+      control: DropdownButton<String>(
         value: _s.hwDec,
         underline: const SizedBox.shrink(),
         items: [
@@ -584,9 +585,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _themeModeTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsTheme),
-      trailing: SegmentedButton<ThemeMode>(
+      control: SegmentedButton<ThemeMode>(
         segments: [
           ButtonSegment(
             value: ThemeMode.dark,
@@ -615,48 +616,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _accentColorTile(ColorScheme colorScheme) {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsAccentColor),
-      trailing: Wrap(
+      control: Wrap(
         spacing: 6,
-        children: AccentColor.values.map((ac) {
-          final isSelected = ac == _s.accentColor;
-          return Tooltip(
-            message: _accentColorName(l10n, ac),
-            child: Semantics(
-              label: l10n.semanticsAccentColor(_accentColorName(l10n, ac)),
-              button: true,
-              selected: isSelected,
-              child: GestureDetector(
-                onTap: () => setState(() {
+        runSpacing: 6,
+        children: AccentColor.values
+            .map(
+              (ac) => _AccentSwatch(
+                key: Key('accent-swatch-${ac.name}'),
+                accent: ac,
+                name: _accentColorName(l10n, ac),
+                semanticsLabel: l10n.semanticsAccentColor(
+                  _accentColorName(l10n, ac),
+                ),
+                selected: ac == _s.accentColor,
+                colorScheme: colorScheme,
+                onSelected: () => setState(() {
                   _s.accentColor = ac;
                   _log(
                     'accent_color_changed',
                     detailsBuilder: () => {'value': ac.name},
                   );
                 }),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: ac.color,
-                    shape: BoxShape.circle,
-                    border: isSelected
-                        ? Border.all(color: colorScheme.onSurface, width: 2.5)
-                        : null,
-                  ),
-                  child: isSelected
-                      ? Icon(
-                          Icons.check,
-                          size: 16,
-                          color: colorScheme.onSurface,
-                        )
-                      : null,
-                ),
               ),
-            ),
-          );
-        }).toList(),
+            )
+            .toList(),
       ),
     );
   }
@@ -881,10 +866,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _recentFilesTile() {
     final l10n = AppLocalizations.of(context);
     final count = _s.recentFiles.length;
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsRecentFiles),
       subtitle: Text(l10n.settingsRecentFilesCount(count)),
-      trailing: TextButton(
+      control: TextButton(
         onPressed: count > 0
             ? () => setState(() {
                 _s.clearRecentFiles();
@@ -900,10 +885,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _updateChannelTile() {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
+    return SettingsRow(
       title: Text(l10n.settingsUpdateChannel),
       subtitle: Text(l10n.settingsUpdateChannelSubtitle),
-      trailing: SegmentedButton<UpdateChannel>(
+      control: SegmentedButton<UpdateChannel>(
         segments: [
           ButtonSegment(
             value: UpdateChannel.auto,
@@ -937,9 +922,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ListTile(
+        SettingsRow(
           title: Text(l10n.settingsCheckForUpdates),
-          trailing: _checkingUpdate
+          control: _checkingUpdate
               ? const SizedBox(
                   width: 24,
                   height: 24,
@@ -1299,6 +1284,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _s.debugModeEnabled
           ? l10n.snackDebugModeEnabled
           : l10n.snackDebugModeDisabled,
+    );
+  }
+}
+
+class _AccentSwatch extends StatefulWidget {
+  final AccentColor accent;
+  final String name;
+  final String semanticsLabel;
+  final bool selected;
+  final ColorScheme colorScheme;
+  final VoidCallback onSelected;
+
+  const _AccentSwatch({
+    super.key,
+    required this.accent,
+    required this.name,
+    required this.semanticsLabel,
+    required this.selected,
+    required this.colorScheme,
+    required this.onSelected,
+  });
+
+  @override
+  State<_AccentSwatch> createState() => _AccentSwatchState();
+}
+
+class _AccentSwatchState extends State<_AccentSwatch> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = widget.colorScheme.onSurface;
+    return Tooltip(
+      message: widget.name,
+      child: Semantics(
+        label: widget.semanticsLabel,
+        button: true,
+        selected: widget.selected,
+        child: FocusableActionDetector(
+          mouseCursor: SystemMouseCursors.click,
+          onShowFocusHighlight: (value) => setState(() => _focused = value),
+          actions: {
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (_) {
+                widget.onSelected();
+                return null;
+              },
+            ),
+          },
+          child: GestureDetector(
+            onTap: widget.onSelected,
+            child: DecoratedBox(
+              key: _focused
+                  ? Key('accent-swatch-ring-${widget.accent.name}')
+                  : null,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: _focused
+                    ? Border.all(color: onSurface, width: 2)
+                    : null,
+              ),
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: widget.accent.color,
+                      shape: BoxShape.circle,
+                      border: widget.selected
+                          ? Border.all(color: onSurface, width: 2.5)
+                          : null,
+                    ),
+                    child: widget.selected
+                        ? Icon(Icons.check, size: 16, color: onSurface)
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
