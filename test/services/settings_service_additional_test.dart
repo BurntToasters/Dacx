@@ -240,14 +240,24 @@ void main() {
       },
     );
 
-    test('screenshotDir getter rejects non-existent stored path', () async {
+    test('screenshotDir getter rejects unsafe stored path', () async {
+      SharedPreferences.setMockInitialValues({
+        'screenshot_dir': '../definitely/missing/path',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final service = SettingsService(prefs);
+
+      expect(service.screenshotDir, isNull);
+    });
+
+    test('screenshotDir getter does not check the filesystem', () async {
       SharedPreferences.setMockInitialValues({
         'screenshot_dir': '/definitely/missing/path',
       });
       final prefs = await SharedPreferences.getInstance();
       final service = SettingsService(prefs);
 
-      expect(service.screenshotDir, isNull);
+      expect(service.screenshotDir, '/definitely/missing/path');
     });
 
     test(

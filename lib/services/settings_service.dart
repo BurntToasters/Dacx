@@ -11,24 +11,24 @@ import '../models/update_channel.dart';
 import '../playback/advanced_playback_models.dart';
 import '../playback/bookmark_retention_policy.dart';
 import '../playback/playback_mix_policy.dart';
+import 'app_exit_hooks.dart';
 import 'bookmark_service.dart';
 import 'instance_mode_service.dart';
 import 'path_probe.dart';
 import 'resume_position_store.dart';
 
 enum AccentColor {
-  blueGrey(Colors.blueGrey, 'Blue Grey'),
-  blue(Colors.blue, 'Blue'),
-  teal(Colors.teal, 'Teal'),
-  purple(Colors.purple, 'Purple'),
-  red(Colors.red, 'Red'),
-  orange(Colors.orange, 'Orange'),
-  green(Colors.green, 'Green'),
-  pink(Colors.pink, 'Pink');
+  blueGrey(Colors.blueGrey),
+  blue(Colors.blue),
+  teal(Colors.teal),
+  purple(Colors.purple),
+  red(Colors.red),
+  orange(Colors.orange),
+  green(Colors.green),
+  pink(Colors.pink);
 
   final Color color;
-  final String label;
-  const AccentColor(this.color, this.label);
+  const AccentColor(this.color);
 }
 
 enum LoopMode {
@@ -50,6 +50,7 @@ class SettingsService extends ChangeNotifier {
     : _resumeStore = resumeStore ?? PrefsResumePositionStore(_prefs) {
     _runMigrationsIfNeeded();
     _migrateResumePositionsToStore();
+    AppExitHooks.add(flushPendingWrites);
   }
 
   final ResumePositionStore _resumeStore;
@@ -84,6 +85,10 @@ class SettingsService extends ChangeNotifier {
 
   @override
   void dispose() {
+    AppExitHooks.remove(flushPendingWrites);
+    _pendingWriteTimer?.cancel();
+    _pendingWriteTimer = null;
+    unawaited(_writePending());
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
     unawaited(_persistResumePositions());
@@ -96,6 +101,87 @@ class SettingsService extends ChangeNotifier {
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
     return _persistResumePositions();
+  }
+
+  final Map<String, Object> _pendingWrites = {};
+  Timer? _pendingWriteTimer;
+
+  void _deferWrite(String key, Object value) {
+    _pendingWrites[key] = value;
+    _pendingWriteTimer?.cancel();
+    _pendingWriteTimer = Timer(_resumePersistDebounce, () {
+      _pendingWriteTimer = null;
+      unawaited(_writePending());
+    });
+  }
+
+  Future<void> _writePending() async {
+    if (_pendingWrites.isEmpty) return;
+    final batch = Map<String, Object>.of(_pendingWrites);
+    _pendingWrites.clear();
+    final writes = <Future<bool>>[];
+    batch.forEach((key, value) {
+      switch (value) {
+        case final double v:
+          writes.add(_prefs.setDouble(key, v));
+        case final int v:
+          writes.add(_prefs.setInt(key, v));
+        case final String v:
+          writes.add(_prefs.setString(key, v));
+        case final bool v:
+          writes.add(_prefs.setBool(key, v));
+      }
+    });
+    try {
+      await Future.wait(writes);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dacx: deferred settings write failed: $e');
+      }
+    }
+  }
+
+  Future<void> flushPendingWrites() async {
+    _pendingWriteTimer?.cancel();
+    _pendingWriteTimer = null;
+    final pending = _writePending();
+    final resume = _resumePersistTimer != null
+        ? flushResumePositions()
+        : Future<void>.value();
+    await Future.wait([pending, resume]);
+  }
+
+  double? _readDouble(String key) => _pendingWrites.containsKey(key)
+      ? _pendingWrites[key] as double?
+      : _prefs.getDouble(key);
+
+  int? _readInt(String key) => _pendingWrites.containsKey(key)
+      ? _pendingWrites[key] as int?
+      : _prefs.getInt(key);
+
+  String? _readString(String key) => _pendingWrites.containsKey(key)
+      ? _pendingWrites[key] as String?
+      : _prefs.getString(key);
+
+  bool _commitBool(String key, bool current, bool value) {
+    if (current == value) return false;
+    _prefs.setBool(key, value);
+    notifyListeners();
+    return true;
+  }
+
+  bool _commitString(String key, String current, String value) {
+    if (current == value) return false;
+    _prefs.setString(key, value);
+    notifyListeners();
+    return true;
+  }
+
+  bool _commitDeferred(String key, Object current, Object value) {
+    if (current == value) return false;
+    _deferWrite(key, value);
+    notifyListeners();
+    return true;
   }
 
   List<double>? _eqBandsCache;
@@ -200,6 +286,7 @@ class SettingsService extends ChangeNotifier {
   static const _kWindowHeight = 'window_height';
   static const _kWindowX = 'window_x';
   static const _kWindowY = 'window_y';
+  static const _kWindowMaximized = 'window_maximized';
   static const _kRecentFiles = 'recent_files';
   static const _kFileBookmarks = 'file_bookmarks_v1';
   static const _kLastOpenDirectory = 'last_open_directory';
@@ -256,6 +343,7 @@ class SettingsService extends ChangeNotifier {
     _kWindowHeight,
     _kWindowX,
     _kWindowY,
+    _kWindowMaximized,
     _kRecentFiles,
     _kFileBookmarks,
     _kLastOpenDirectory,
@@ -335,9 +423,11 @@ class SettingsService extends ChangeNotifier {
       _prefs.getBool(_kAdvancedPlaybackToolsEnabled) ?? false;
 
   set advancedPlaybackToolsEnabled(bool value) {
-    if (advancedPlaybackToolsEnabled == value) return;
-    _prefs.setBool(_kAdvancedPlaybackToolsEnabled, value);
-    notifyListeners();
+    _commitBool(
+      _kAdvancedPlaybackToolsEnabled,
+      advancedPlaybackToolsEnabled,
+      value,
+    );
   }
 
   PlaybackAdjustment playbackAdjustmentFor(String source) {
@@ -393,6 +483,11 @@ class SettingsService extends ChangeNotifier {
                 ) *
                 playbackDelayStepMs)
             .toInt();
+    final currentAdjustment = playbackAdjustmentFor(normalized);
+    if (currentAdjustment.audioMs == audio &&
+        currentAdjustment.subtitleMs == subtitle) {
+      return;
+    }
     final map = _readPlaybackAdjustmentMap();
     if (audio == 0 && subtitle == 0) {
       map.remove(normalized);
@@ -509,6 +604,14 @@ class SettingsService extends ChangeNotifier {
         !_isSafeMarkerLabel(marker.label)) {
       return;
     }
+    final existing = playbackMarkersFor(normalized)
+        .where((value) => value.id == marker.id)
+        .firstOrNull;
+    if (existing != null &&
+        existing.positionMs == marker.positionMs &&
+        existing.label == marker.label) {
+      return;
+    }
     final map = _readPlaybackMarkerMap();
     final entry =
         map[normalized] as Map<String, dynamic>? ??
@@ -541,6 +644,9 @@ class SettingsService extends ChangeNotifier {
     final current = markers.where((marker) => marker.id == id).firstOrNull;
     if (current == null) return;
     final next = current.copyWith(label: label, positionMs: positionMs);
+    if (next.label == current.label && next.positionMs == current.positionMs) {
+      return;
+    }
     removePlaybackMarker(source, id, notify: false);
     addPlaybackMarker(source, next);
   }
@@ -551,6 +657,10 @@ class SettingsService extends ChangeNotifier {
     final map = _readPlaybackMarkerMap();
     final entry = map[normalized];
     if (entry is! Map || entry['markers'] is! List) return;
+    final hasMarker = (entry['markers'] as List).any(
+      (value) => value is Map && value['id'] == id,
+    );
+    if (!hasMarker) return;
     final markers = (entry['markers'] as List).where((value) {
       return value is! Map || value['id'] != id;
     }).toList();
@@ -637,18 +747,14 @@ class SettingsService extends ChangeNotifier {
   }
 
   int get subtitleFontSize =>
-      (_prefs.getInt(_kSubtitleFontSize) ?? subtitleFontSizeDefault).clamp(
-        24,
-        72,
-      );
+      (_readInt(_kSubtitleFontSize) ?? subtitleFontSizeDefault).clamp(24, 72);
 
   set subtitleFontSize(int value) {
-    _prefs.setInt(_kSubtitleFontSize, value.clamp(24, 72));
-    notifyListeners();
+    _commitDeferred(_kSubtitleFontSize, subtitleFontSize, value.clamp(24, 72));
   }
 
   int get subtitlePosition {
-    final value = _prefs.getInt(_kSubtitlePosition);
+    final value = _readInt(_kSubtitlePosition);
     if (value == null || value < 0 || value > 100 || value % 5 != 0) {
       return subtitlePositionDefault;
     }
@@ -656,12 +762,15 @@ class SettingsService extends ChangeNotifier {
   }
 
   set subtitlePosition(int value) {
-    _prefs.setInt(_kSubtitlePosition, (value / 5).round().clamp(0, 20) * 5);
-    notifyListeners();
+    _commitDeferred(
+      _kSubtitlePosition,
+      subtitlePosition,
+      (value / 5).round().clamp(0, 20) * 5,
+    );
   }
 
   double get subtitleOutlineSize {
-    final value = _prefs.getDouble(_kSubtitleOutlineSize);
+    final value = _readDouble(_kSubtitleOutlineSize);
     if (value == null || !value.isFinite || value < 0 || value > 4) {
       return subtitleOutlineSizeDefault;
     }
@@ -673,33 +782,40 @@ class SettingsService extends ChangeNotifier {
   }
 
   set subtitleOutlineSize(double value) {
-    _prefs.setDouble(
+    if (!value.isFinite) return;
+    _commitDeferred(
       _kSubtitleOutlineSize,
+      subtitleOutlineSize,
       ((value * 4).round().clamp(0, 16) / 4),
     );
-    notifyListeners();
   }
 
   String get subtitleTextColor => _safeColorPreference(
-    _prefs.getString(_kSubtitleTextColor),
+    _readString(_kSubtitleTextColor),
     subtitleTextColorDefault,
   );
 
   set subtitleTextColor(String value) {
     if (!_isHexColor(value)) return;
-    _prefs.setString(_kSubtitleTextColor, value.toUpperCase());
-    notifyListeners();
+    _commitDeferred(
+      _kSubtitleTextColor,
+      subtitleTextColor,
+      value.toUpperCase(),
+    );
   }
 
   String get subtitleOutlineColor => _safeColorPreference(
-    _prefs.getString(_kSubtitleOutlineColor),
+    _readString(_kSubtitleOutlineColor),
     subtitleOutlineColorDefault,
   );
 
   set subtitleOutlineColor(String value) {
     if (!_isHexColor(value)) return;
-    _prefs.setString(_kSubtitleOutlineColor, value.toUpperCase());
-    notifyListeners();
+    _commitDeferred(
+      _kSubtitleOutlineColor,
+      subtitleOutlineColor,
+      value.toUpperCase(),
+    );
   }
 
   static bool _isHexColor(String value) =>
@@ -712,13 +828,10 @@ class SettingsService extends ChangeNotifier {
     return value.toUpperCase();
   }
 
-  double get volume => _prefs.getDouble(_kVolume) ?? 100.0;
+  double get volume => _readDouble(_kVolume) ?? 100.0;
   set volume(double v) {
-    final clamped = v.clamp(0.0, 100.0);
-    final current = _prefs.getDouble(_kVolume);
-    if (current == clamped) return;
-    _prefs.setDouble(_kVolume, clamped);
-    notifyListeners();
+    if (v.isNaN) return;
+    _commitDeferred(_kVolume, volume, v.clamp(0.0, 100.0));
   }
 
   double get speed {
@@ -727,7 +840,10 @@ class SettingsService extends ChangeNotifier {
   }
 
   set speed(double v) {
-    _prefs.setDouble(_kSpeed, v.clamp(0.25, 4.0));
+    if (v.isNaN) return;
+    final clamped = v.clamp(0.25, 4.0);
+    if (speed == clamped) return;
+    _prefs.setDouble(_kSpeed, clamped);
     notifyListeners();
   }
 
@@ -748,19 +864,16 @@ class SettingsService extends ChangeNotifier {
   }
 
   set updateChannel(UpdateChannel c) {
-    _prefs.setString(_kUpdateChannel, c.name);
-    notifyListeners();
+    _commitString(_kUpdateChannel, updateChannel.name, c.name);
   }
 
   set loopMode(LoopMode m) {
-    _prefs.setString(_kLoopMode, m.name);
-    notifyListeners();
+    _commitString(_kLoopMode, loopMode.name, m.name);
   }
 
   bool get autoPlay => _prefs.getBool(_kAutoPlay) ?? true;
   set autoPlay(bool v) {
-    _prefs.setBool(_kAutoPlay, v);
-    notifyListeners();
+    _commitBool(_kAutoPlay, autoPlay, v);
   }
 
   ThemeMode get themeMode {
@@ -773,6 +886,7 @@ class SettingsService extends ChangeNotifier {
   }
 
   set themeMode(ThemeMode m) {
+    if (themeMode == m) return;
     _prefs.setString(_kTheme, switch (m) {
       ThemeMode.light => 'light',
       ThemeMode.system => 'system',
@@ -790,51 +904,64 @@ class SettingsService extends ChangeNotifier {
   }
 
   set accentColor(AccentColor c) {
-    _prefs.setString(_kAccent, c.name);
-    notifyListeners();
+    _commitString(_kAccent, accentColor.name, c.name);
   }
 
   bool get alwaysOnTop => _prefs.getBool(_kAlwaysOnTop) ?? false;
   set alwaysOnTop(bool v) {
-    _prefs.setBool(_kAlwaysOnTop, v);
-    notifyListeners();
+    _commitBool(_kAlwaysOnTop, alwaysOnTop, v);
   }
 
   /// When true, closing the window hides to the system tray instead of quitting.
   bool get minimizeToTray => _prefs.getBool(_kMinimizeToTray) ?? false;
   set minimizeToTray(bool v) {
-    _prefs.setBool(_kMinimizeToTray, v);
-    notifyListeners();
+    _commitBool(_kMinimizeToTray, minimizeToTray, v);
   }
 
   bool get rememberWindow => _prefs.getBool(_kRememberWindow) ?? true;
   set rememberWindow(bool v) {
-    _prefs.setBool(_kRememberWindow, v);
-    notifyListeners();
+    _commitBool(_kRememberWindow, rememberWindow, v);
   }
 
+  static const double windowMinWidth = 480;
+  static const double windowMinHeight = 320;
+
   Size? get windowSize {
-    final w = _prefs.getDouble(_kWindowWidth);
-    final h = _prefs.getDouble(_kWindowHeight);
-    if (w != null && h != null) return Size(w, h);
-    return null;
+    final w = _readDouble(_kWindowWidth);
+    final h = _readDouble(_kWindowHeight);
+    if (w == null || h == null) return null;
+    if (!w.isFinite || !h.isFinite) return null;
+    if (w < windowMinWidth || h < windowMinHeight) return null;
+    return Size(w, h);
   }
 
   void saveWindowSize(Size size) {
-    _prefs.setDouble(_kWindowWidth, size.width);
-    _prefs.setDouble(_kWindowHeight, size.height);
+    if (!size.width.isFinite || !size.height.isFinite) return;
+    if (_readDouble(_kWindowWidth) != size.width) {
+      _deferWrite(_kWindowWidth, size.width);
+    }
+    if (_readDouble(_kWindowHeight) != size.height) {
+      _deferWrite(_kWindowHeight, size.height);
+    }
   }
 
   Offset? get windowPosition {
-    final x = _prefs.getDouble(_kWindowX);
-    final y = _prefs.getDouble(_kWindowY);
+    final x = _readDouble(_kWindowX);
+    final y = _readDouble(_kWindowY);
     if (x != null && y != null) return Offset(x, y);
     return null;
   }
 
   void saveWindowPosition(Offset pos) {
-    _prefs.setDouble(_kWindowX, pos.dx);
-    _prefs.setDouble(_kWindowY, pos.dy);
+    if (!pos.dx.isFinite || !pos.dy.isFinite) return;
+    if (_readDouble(_kWindowX) != pos.dx) _deferWrite(_kWindowX, pos.dx);
+    if (_readDouble(_kWindowY) != pos.dy) _deferWrite(_kWindowY, pos.dy);
+  }
+
+  bool get windowMaximized => _prefs.getBool(_kWindowMaximized) ?? false;
+  set windowMaximized(bool value) {
+    if (windowMaximized == value) return;
+    _prefs.setBool(_kWindowMaximized, value);
   }
 
   List<String> get recentFiles {
@@ -849,24 +976,19 @@ class SettingsService extends ChangeNotifier {
   set lastOpenDirectory(String? value) {
     final normalized = value?.trim() ?? '';
     if (normalized.isEmpty || !_isSafeDirectoryPath(normalized)) {
-      _prefs.remove(_kLastOpenDirectory);
+      if (_prefs.containsKey(_kLastOpenDirectory)) {
+        _prefs.remove(_kLastOpenDirectory);
+      }
       return;
     }
+    if (_prefs.getString(_kLastOpenDirectory) == normalized) return;
     _prefs.setString(_kLastOpenDirectory, normalized);
   }
 
   bool _isSafeDirectoryPath(String value) {
     if (value.contains('\u0000')) return false;
     final segments = value.replaceAll('\\', '/').split('/');
-    if (segments.any((s) => s == '..')) return false;
-    try {
-      return Directory(value).existsSync();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Dacx: directory path check failed: $e');
-      }
-      return false;
-    }
+    return !segments.any((s) => s == '..');
   }
 
   /// Looser variant of [_isSafeDirectoryPath] for individual file paths
@@ -895,11 +1017,13 @@ class SettingsService extends ChangeNotifier {
   void addRecentFile(String path) {
     final normalizedPath = path.trim();
     if (!_isSafeFilePath(normalizedPath)) return;
-    final files = List<String>.from(recentFiles)..remove(normalizedPath);
+    final current = recentFiles;
+    final files = List<String>.from(current)..remove(normalizedPath);
     files.insert(0, normalizedPath);
     if (files.length > maxRecentFiles) {
       files.removeRange(maxRecentFiles, files.length);
     }
+    if (listEquals(files, current)) return;
     _prefs.setString(_kRecentFiles, jsonEncode(files));
     _pruneBookmarksToList(files);
     notifyListeners();
@@ -945,6 +1069,7 @@ class SettingsService extends ChangeNotifier {
     final normalized = path.trim();
     if (!_isSafeFilePath(normalized) || bookmark.isEmpty) return;
     final map = _readBookmarkMap();
+    if (map[normalized] == bookmark) return;
     map[normalized] = bookmark;
     _writeBookmarkMap(map);
   }
@@ -963,11 +1088,18 @@ class SettingsService extends ChangeNotifier {
     return BookmarkRetentionPolicy.coveringKey(path, map.keys);
   }
 
-  void _pruneBookmarksToList(List<String> keep) {
+  bool _pruneBookmarksToList(List<String> keep) {
     final map = _readBookmarkMap();
-    if (map.isEmpty) return;
-    map.removeWhere((k, _) => !BookmarkRetentionPolicy.shouldKeepKey(k, keep));
+    if (map.isEmpty) return false;
+    final pinned = screenshotDir;
+    final retained = pinned == null ? keep : [...keep, pinned];
+    final before = map.length;
+    map.removeWhere(
+      (k, _) => !BookmarkRetentionPolicy.shouldKeepKey(k, retained),
+    );
+    if (map.length == before) return false;
     _writeBookmarkMap(map);
+    return true;
   }
 
   /// Drops Recents entries whose target is gone. Existence checks run off the
@@ -1017,19 +1149,21 @@ class SettingsService extends ChangeNotifier {
   }
 
   void clearRecentFiles() {
-    _prefs.remove(_kRecentFiles);
-    _prefs.remove(_kFileBookmarks);
+    final hadRecents = _prefs.containsKey(_kRecentFiles);
+    if (hadRecents) _prefs.remove(_kRecentFiles);
+    final prunedBookmarks = _pruneBookmarksToList(const <String>[]);
+    if (!hadRecents && !prunedBookmarks) return;
     notifyListeners();
   }
 
   bool get updateCheckEnabled => _prefs.getBool(_kUpdateCheck) ?? true;
   set updateCheckEnabled(bool v) {
-    _prefs.setBool(_kUpdateCheck, v);
-    notifyListeners();
+    _commitBool(_kUpdateCheck, updateCheckEnabled, v);
   }
 
   int get lastUpdateCheck => _prefs.getInt(_kLastUpdateCheck) ?? 0;
   set lastUpdateCheck(int epoch) {
+    if (lastUpdateCheck == epoch) return;
     _prefs.setInt(_kLastUpdateCheck, epoch);
   }
 
@@ -1048,48 +1182,57 @@ class SettingsService extends ChangeNotifier {
   }
 
   set hwDec(String v) {
-    _prefs.setString(_kHwDec, v);
-    notifyListeners();
+    _commitString(_kHwDec, hwDec, v);
   }
 
   /// Minimum UI translucency when blur is on (Flutter shell alpha).
   static const double windowOpacityMin = 0.55;
 
   double get windowOpacity {
-    final stored = _prefs.getDouble(_kWindowOpacity);
+    final stored = _readDouble(_kWindowOpacity);
     if (stored == null) return 1.0;
     return stored.clamp(windowOpacityMin, 1.0);
   }
 
   set windowOpacity(double value) {
-    _prefs.setDouble(_kWindowOpacity, value.clamp(windowOpacityMin, 1.0));
-    notifyListeners();
+    if (value.isNaN) return;
+    _commitDeferred(
+      _kWindowOpacity,
+      windowOpacity,
+      value.clamp(windowOpacityMin, 1.0),
+    );
   }
 
   bool get windowBlurEnabled => _prefs.getBool(_kWindowBlurEnabled) ?? false;
 
   set windowBlurEnabled(bool value) {
-    _prefs.setBool(_kWindowBlurEnabled, value);
-    notifyListeners();
+    _commitBool(_kWindowBlurEnabled, windowBlurEnabled, value);
   }
 
   double get windowBlurStrength {
-    final stored = _prefs.getDouble(_kWindowBlurStrength);
+    final stored = _readDouble(_kWindowBlurStrength);
     if (stored == null) return 0.55;
     return stored.clamp(0.0, 1.0);
   }
 
   set windowBlurStrength(double value) {
-    _prefs.setDouble(_kWindowBlurStrength, value.clamp(0.0, 1.0));
-    notifyListeners();
+    if (value.isNaN) return;
+    _commitDeferred(
+      _kWindowBlurStrength,
+      windowBlurStrength,
+      value.clamp(0.0, 1.0),
+    );
   }
 
   bool get experimentalFeaturesEnabled =>
       _prefs.getBool(_kExperimentalFeaturesEnabled) ?? false;
 
   set experimentalFeaturesEnabled(bool value) {
-    _prefs.setBool(_kExperimentalFeaturesEnabled, value);
-    notifyListeners();
+    _commitBool(
+      _kExperimentalFeaturesEnabled,
+      _prefs.getBool(_kExperimentalFeaturesEnabled) ?? false,
+      value,
+    );
   }
 
   bool get linuxCompositorBlurExperimental {
@@ -1098,34 +1241,34 @@ class SettingsService extends ChangeNotifier {
   }
 
   set linuxCompositorBlurExperimental(bool value) {
-    _prefs.setBool(_kLinuxCompositorBlurExperimental, value);
-    notifyListeners();
+    _commitBool(
+      _kLinuxCompositorBlurExperimental,
+      _prefs.getBool(_kLinuxCompositorBlurExperimental) ?? false,
+      value,
+    );
   }
 
   bool get debugModeEnabled => _prefs.getBool(_kDebugModeEnabled) ?? false;
 
   set debugModeEnabled(bool value) {
-    _prefs.setBool(_kDebugModeEnabled, value);
-    notifyListeners();
+    _commitBool(_kDebugModeEnabled, debugModeEnabled, value);
   }
 
   bool get eqEnabled => _prefs.getBool(_kEqEnabled) ?? false;
   set eqEnabled(bool v) {
-    _prefs.setBool(_kEqEnabled, v);
-    notifyListeners();
+    _commitBool(_kEqEnabled, eqEnabled, v);
   }
 
-  String get eqPreset => _prefs.getString(_kEqPreset) ?? 'flat';
+  String get eqPreset => _readString(_kEqPreset) ?? 'flat';
   set eqPreset(String v) {
-    _prefs.setString(_kEqPreset, v);
-    notifyListeners();
+    _commitDeferred(_kEqPreset, eqPreset, v);
   }
 
   /// 10 gain values in dB (-12..+12), one per band.
   List<double> get eqBands {
     final cached = _eqBandsCache;
     if (cached != null) return List<double>.unmodifiable(cached);
-    final raw = _prefs.getString(_kEqBands);
+    final raw = _readString(_kEqBands);
     List<double> result;
     if (raw == null) {
       result = List<double>.filled(eqBandCount, 0);
@@ -1160,8 +1303,9 @@ class SettingsService extends ChangeNotifier {
       eqBandCount,
       (i) => i < values.length ? values[i].clamp(-12.0, 12.0).toDouble() : 0.0,
     );
+    if (listEquals(eqBands, clamped)) return;
     _eqBandsCache = clamped;
-    _prefs.setString(_kEqBands, jsonEncode(clamped));
+    _deferWrite(_kEqBands, jsonEncode(clamped));
     notifyListeners();
   }
 
@@ -1174,11 +1318,15 @@ class SettingsService extends ChangeNotifier {
 
   set screenshotDir(String? value) {
     final n = value?.trim() ?? '';
+    final previous = _prefs.getString(_kScreenshotDir);
     if (n.isEmpty || !_isSafeDirectoryPath(n)) {
+      if (previous == null) return;
       _prefs.remove(_kScreenshotDir);
     } else {
+      if (previous == n) return;
       _prefs.setString(_kScreenshotDir, n);
     }
+    _pruneBookmarksToList(_readStoredRecentFiles());
     notifyListeners();
   }
 
@@ -1190,21 +1338,17 @@ class SettingsService extends ChangeNotifier {
 
   set screenshotFormat(String v) {
     if (v != 'png' && v != 'jpg') return;
-    _prefs.setString(_kScreenshotFormat, v);
-    notifyListeners();
+    _commitString(_kScreenshotFormat, screenshotFormat, v);
   }
 
   bool get osdEnabled => _prefs.getBool(_kOsdEnabled) ?? true;
   set osdEnabled(bool v) {
-    _prefs.setBool(_kOsdEnabled, v);
-    notifyListeners();
+    _commitBool(_kOsdEnabled, osdEnabled, v);
   }
 
   bool get seekPreviewEnabled => _prefs.getBool(_kSeekPreviewEnabled) ?? false;
   set seekPreviewEnabled(bool v) {
-    if (seekPreviewEnabled == v) return;
-    _prefs.setBool(_kSeekPreviewEnabled, v);
-    notifyListeners();
+    _commitBool(_kSeekPreviewEnabled, seekPreviewEnabled, v);
   }
 
   /// Mix all audio tracks into one output via mpv `lavfi-complex`.
@@ -1221,14 +1365,12 @@ class SettingsService extends ChangeNotifier {
 
   set multiAudioMix(bool v) {
     if (!PlaybackMixPolicy.userFacingEnabled) return;
-    _prefs.setBool(_kMultiAudioMix, v);
-    notifyListeners();
+    _commitBool(_kMultiAudioMix, _prefs.getBool(_kMultiAudioMix) ?? false, v);
   }
 
   bool get mediaSessionEnabled => _prefs.getBool(_kMediaSession) ?? true;
   set mediaSessionEnabled(bool v) {
-    _prefs.setBool(_kMediaSession, v);
-    notifyListeners();
+    _commitBool(_kMediaSession, mediaSessionEnabled, v);
   }
 
   /// User-defined keybinds: action name -> list of accelerator strings.
@@ -1266,6 +1408,14 @@ class SettingsService extends ChangeNotifier {
   }
 
   set keybinds(Map<String, List<String>> value) {
+    final current = keybinds;
+    if (current.length == value.length &&
+        value.entries.every((entry) {
+          final existing = current[entry.key];
+          return existing != null && listEquals(existing, entry.value);
+        })) {
+      return;
+    }
     _keybindsCache = Map<String, List<String>>.unmodifiable(
       value.map((k, v) => MapEntry(k, List<String>.unmodifiable(v))),
     );
@@ -1274,6 +1424,7 @@ class SettingsService extends ChangeNotifier {
   }
 
   void resetKeybinds() {
+    if (keybinds.isEmpty && !_prefs.containsKey(_kKeybinds)) return;
     _keybindsCache = const {};
     _prefs.remove(_kKeybinds);
     notifyListeners();
@@ -1281,26 +1432,24 @@ class SettingsService extends ChangeNotifier {
 
   bool get resumePlaybackEnabled => _prefs.getBool(_kResumeEnabled) ?? true;
   set resumePlaybackEnabled(bool v) {
-    _prefs.setBool(_kResumeEnabled, v);
-    notifyListeners();
+    _commitBool(_kResumeEnabled, resumePlaybackEnabled, v);
   }
 
   bool get playlistShuffle => _prefs.getBool(_kPlaylistShuffle) ?? false;
   set playlistShuffle(bool v) {
-    _prefs.setBool(_kPlaylistShuffle, v);
-    notifyListeners();
+    _commitBool(_kPlaylistShuffle, playlistShuffle, v);
   }
 
   bool get emptyStateTipDismissed =>
       _prefs.getBool(_kEmptyStateTipDismissed) ?? false;
   set emptyStateTipDismissed(bool v) {
-    _prefs.setBool(_kEmptyStateTipDismissed, v);
-    notifyListeners();
+    _commitBool(_kEmptyStateTipDismissed, emptyStateTipDismissed, v);
   }
 
   bool get allowMultipleInstances =>
       _prefs.getBool(_kAllowMultipleInstances) ?? false;
   set allowMultipleInstances(bool v) {
+    if (allowMultipleInstances == v) return;
     _prefs.setBool(_kAllowMultipleInstances, v);
     unawaited(InstanceModeService.setAllowMultipleInstances(v));
     notifyListeners();
@@ -1428,6 +1577,9 @@ class SettingsService extends ChangeNotifier {
 
   /// Clears all stored preferences and reverts to defaults.
   Future<void> resetAll() async {
+    _pendingWriteTimer?.cancel();
+    _pendingWriteTimer = null;
+    _pendingWrites.clear();
     _resumePersistTimer?.cancel();
     _resumePersistTimer = null;
     _resumeAccessCounter = 0;

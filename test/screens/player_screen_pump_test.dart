@@ -531,6 +531,7 @@ void main() {
 
     expect(find.byIcon(Icons.volume_up), findsOneWidget);
     expect(services.settings.volume, 100);
+    await services.settings.flushPendingWrites();
   });
 
   testWidgets('arrow up shortcut increases volume', (tester) async {
@@ -557,6 +558,7 @@ void main() {
     await tester.pump();
 
     expect(services.settings.volume, 55);
+    await services.settings.flushPendingWrites();
   });
 
   testWidgets('arrow down shortcut decreases volume', (tester) async {
@@ -583,6 +585,7 @@ void main() {
     await tester.pump();
 
     expect(services.settings.volume, 45);
+    await services.settings.flushPendingWrites();
   });
 
   testWidgets('arrow left shortcut seeks backward when duration is known', (
@@ -2587,6 +2590,7 @@ void main() {
     await tester.pump();
 
     expect(services.settings.volume, 50.0);
+    await services.settings.flushPendingWrites();
     await mediaCommands.close();
   });
 

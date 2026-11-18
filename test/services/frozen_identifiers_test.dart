@@ -74,6 +74,13 @@ void main() {
       expect(frozen.length, frozen.toSet().length);
     });
 
+    test('window_maximized key is frozen', () {
+      expect(
+        SettingsService.frozenPreferenceKeys,
+        contains('window_maximized'),
+      );
+    });
+
     test('every key is well-formed lower_snake_case', () {
       final pattern = RegExp(r'^[a-z][a-z0-9_]*$');
       for (final key in SettingsService.frozenPreferenceKeys) {
