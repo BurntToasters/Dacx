@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../playback/player_controller.dart';
 import '../services/seek_preview_service.dart';
 
 class SeekMarker {
@@ -51,13 +52,6 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
   static const double _previewWidth = 200;
   static const double _previewHeight = 112;
 
-  String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
   void _maybeRequestPreview(double fraction, double maxMs) {
     final svc = widget.previewService;
     if (!widget.previewEnabled || svc == null || maxMs <= 0) return;
@@ -74,8 +68,8 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
   Widget build(BuildContext context) {
     final maxMs = widget.duration.inMilliseconds.toDouble();
     final showPreview = widget.previewEnabled && _previewBytes != null;
-    final positionLabel = _fmt(widget.position);
-    final durationLabel = _fmt(widget.duration);
+    final positionLabel = PlayerController.formatDuration(widget.position);
+    final durationLabel = PlayerController.formatDuration(widget.duration);
     return MergeSemantics(
       child: Semantics(
         slider: true,
@@ -112,8 +106,10 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                         container: true,
                         label: AppLocalizations.of(context)
                             .seekLoopRangeSemantics(
-                              _fmt(widget.rangeStart!),
-                              _fmt(widget.rangeEnd!),
+                              PlayerController.formatDuration(
+                                widget.rangeStart!,
+                              ),
+                              PlayerController.formatDuration(widget.rangeEnd!),
                             ),
                         child: Container(
                           height: 4,
@@ -245,7 +241,7 @@ class _SeekSliderWithHoverState extends State<SeekSliderWithHover> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              _fmt(
+                              PlayerController.formatDuration(
                                 Duration(
                                   milliseconds: (maxMs * _hoverFraction!)
                                       .toInt(),

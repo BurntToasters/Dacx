@@ -22,11 +22,12 @@ abstract final class PlaybackSpeedPolicy {
   }
 
   static String formatLabel(double speed) {
-    final nearest = nearestPreset(speed);
-    if (nearest == nearest.roundToDouble()) {
-      return '${nearest.toInt()}×';
+    final value = speed.isFinite ? speed : nearestPreset(speed);
+    var text = value.toStringAsFixed(2);
+    if (text.contains('.')) {
+      text = text.replaceFirst(RegExp(r'\.?0+$'), '');
     }
-    return '$nearest×';
+    return '$text×';
   }
 
   static double nearestPreset(double current) =>

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../playback/advanced_playback_models.dart';
+import '../playback/player_controller.dart';
 import '../services/advanced_playback_controller.dart';
 import '../services/settings_service.dart';
+import 'dialog_sizing.dart';
 
 class AdvancedPlaybackDialog extends StatefulWidget {
   const AdvancedPlaybackDialog({
@@ -45,7 +47,7 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
           key: const ValueKey('advanced-playback-dialog'),
           title: Text(l10n.advancedDialogTitle),
           content: SizedBox(
-            width: 520,
+            width: dialogWidth(context, 520),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,11 +133,11 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
       AdvancedLoopStage.active => 'advanced-clear-loop',
     };
     final range = stage == AdvancedLoopStage.active
-        ? '${_format(_controller.a!)} – ${_format(_controller.b!)}'
+        ? '${PlayerController.formatDuration(_controller.a!)} – ${PlayerController.formatDuration(_controller.b!)}'
         : switch (stage) {
             AdvancedLoopStage.clear => l10n.advancedLoopNone,
             AdvancedLoopStage.aSet => l10n.advancedLoopPointA(
-              _format(_controller.a!),
+              PlayerController.formatDuration(_controller.a!),
             ),
             AdvancedLoopStage.active => '',
           };
@@ -227,7 +229,9 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
               leading: const Icon(Icons.bookmark_outline),
               title: Text(marker.label, overflow: TextOverflow.ellipsis),
               subtitle: Text(
-                _format(Duration(milliseconds: marker.positionMs)),
+                PlayerController.formatDuration(
+                  Duration(milliseconds: marker.positionMs),
+                ),
               ),
               onTap: () => _controller.seekMarker(marker),
               trailing: Wrap(
@@ -452,13 +456,6 @@ class _AdvancedPlaybackDialogState extends State<AdvancedPlaybackDialog> {
       AdvancedPlaybackError.applyLoop => l10n.advancedErrorApplyLoop,
       AdvancedPlaybackError.clearLoop => l10n.advancedErrorClearLoop,
     };
-  }
-
-  static String _format(Duration value) {
-    final h = value.inHours;
-    final m = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 }
 

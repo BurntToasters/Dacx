@@ -23,6 +23,14 @@ abstract final class PlayerPathUtils {
     'aif',
     'wv',
     'mpc',
+    'm4b',
+    'oga',
+    'mka',
+    'ac3',
+    'eac3',
+    'dts',
+    'amr',
+    'weba',
   };
 
   static const videoExtensions = {
@@ -42,6 +50,8 @@ abstract final class PlayerPathUtils {
     'vob',
     'ogv',
     'm3u8',
+    '3gp',
+    'f4v',
   };
 
   static const supportedExtensions = {...audioExtensions, ...videoExtensions};

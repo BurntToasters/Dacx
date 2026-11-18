@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import 'dialog_sizing.dart';
 
 class MediaInfoField {
   const MediaInfoField({required this.label, required this.value});
@@ -21,7 +22,7 @@ class MediaInfoDialog extends StatelessWidget {
     return AlertDialog(
       title: Text(l10n.dialogMediaInfoTitle),
       content: SizedBox(
-        width: width,
+        width: dialogWidth(context, width),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

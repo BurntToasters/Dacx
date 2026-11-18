@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../playback/player_controller.dart';
+
 /// Lightweight on-screen display overlay for the player.
 ///
 /// Renders the title and current/total time at the top of the surface
@@ -69,13 +71,6 @@ class _OsdOverlayState extends State<OsdOverlay> {
     super.dispose();
   }
 
-  String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
   @override
   Widget build(BuildContext context) {
     final showHeader = widget.visible && widget.title.isNotEmpty;
@@ -119,7 +114,7 @@ class _OsdOverlayState extends State<OsdOverlay> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      '${_fmt(widget.position)} / ${_fmt(widget.duration)}',
+                      '${PlayerController.formatDuration(widget.position)} / ${PlayerController.formatDuration(widget.duration)}',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.92),
                         fontFeatures: const [FontFeature.tabularFigures()],
