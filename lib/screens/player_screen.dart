@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -61,7 +59,6 @@ import '../playback/screenshot_saver.dart';
 import '../playback/source_load_post_open_policy.dart';
 import '../playback/source_load_pre_open_policy.dart';
 import '../playback/source_load_open_policy.dart';
-import '../playback/osd_policy.dart';
 import '../playback/playlist_advance_policy.dart';
 import '../playback/track_cycle_policy.dart';
 import '../playback/source_load_validation_policy.dart';
@@ -78,28 +75,20 @@ import '../widgets/equalizer_dialog.dart';
 import '../widgets/keybinds_dialog.dart';
 import '../widgets/manual_update_check.dart';
 import '../widgets/media_info_dialog.dart';
-import '../widgets/open_url_dialog.dart';
 import '../widgets/osd_overlay.dart';
-import '../widgets/queue_item_tile.dart';
 import '../widgets/update_progress_dialog.dart';
 import '../widgets/seek_slider.dart';
 import '../widgets/track_pickers.dart';
 import '../widgets/advanced_playback_dialog.dart';
 import '../widgets/transport_controls.dart';
+import 'player/player_file_pickers.dart';
+import 'player/player_messenger.dart';
+import 'player/widgets/play_queue_drawer.dart';
 import 'settings_screen.dart';
 
-final List<String> _enqueueAllowedExtensions = List<String>.unmodifiable(
-  <String>{
-    ...PlayerPathUtils.supportedExtensions,
-    ...M3uPlaylist.extensions,
-  }.toList()..sort(),
-);
-const _filePickerWindowsOptions = WindowsOptions(lockParentWindow: true);
-const _filePickerLinuxOptions = LinuxOptions(lockParentWindow: true);
 const _resumeSaveInterval = Duration(seconds: 5);
 const _seekStep = Duration(seconds: 5);
 const _seekStepBack = Duration(seconds: -5);
-const _osdHideDuration = Duration(seconds: 3);
 const _updateSnackbarDuration = Duration(seconds: 10);
 const _snackbarShortDuration = Duration(seconds: 2);
 const _settingsFwdTransition = Duration(milliseconds: 340);
@@ -188,7 +177,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _fullscreenChromeVisible = true;
 
   // Tracks / chapters / OSD state
-  Timer? _osdHideTimer;
+  late final PlayerFilePickers _pickers = PlayerFilePickers(
+    settings: _settings,
+    restoreFocus: _restoreShortcutFocus,
+  );
+  late final PlayerMessenger _messenger = PlayerMessenger(
+    player: _player,
+    osdEnabled: () => _settings.osdEnabled,
+    isMounted: () => mounted,
+    update: setState,
+    osdMessageProbe: widget.osdMessageProbe,
+  );
   late final MediaSessionService _mediaSession;
   late final PlaylistService _playlist;
   late final OpenFileBridge _openFileBridge;
@@ -233,17 +232,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
-  String _loadUserMessageText(SourceLoadUserMessageKind kind) {
-    final l10n = AppLocalizations.of(context);
-    return switch (kind) {
-      SourceLoadUserMessageKind.invalidFilePath => l10n.snackInvalidFilePath,
-      SourceLoadUserMessageKind.invalidStreamUrl => l10n.snackInvalidStreamUrl,
-      SourceLoadUserMessageKind.fileNotFound => l10n.snackFileNotFound,
-      SourceLoadUserMessageKind.permissionDenied =>
-        l10n.snackFileLoadPermissionDenied,
-      SourceLoadUserMessageKind.openFailed => l10n.snackFileLoadFailed,
-    };
-  }
+  String _loadUserMessageText(SourceLoadUserMessageKind kind) =>
+      PlayerMessenger.loadUserMessageText(AppLocalizations.of(context), kind);
 
   void _handleLoadValidationFailure({
     required SourceLoadValidationFailure failure,
@@ -712,7 +702,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       const MethodChannel(InstanceModeService.windowMethodChannelName)
           .setMethodCallHandler(null);
     }
-    _osdHideTimer?.cancel();
+    _messenger.dispose();
     _fullscreenChromeHideTimer?.cancel();
     _resumeSaveTimer?.cancel();
     _updateCheckTimer?.cancel();
@@ -1305,28 +1295,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // ── File handling ─────────────────────────────────────────
 
-  Future<String?> _existingLastOpenDirectory() async {
-    final stored = _settings.lastOpenDirectory;
-    if (stored == null) return null;
-    try {
-      return await PathProbe.directoryExists(stored) ? stored : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _openFile() async {
     _log('file_picker_open_requested');
     try {
-      final initialDirectory = await _existingLastOpenDirectory();
-      final file = await _pickWithFocusRestore(
-        () => FilePicker.pickFile(
-          type: FileType.any,
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
-      );
+      final file = await _pickers.pickMediaFile();
 
       if (file == null) {
         _log('file_picker_cancelled');
@@ -1380,14 +1352,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _openFolder({bool playNow = true}) async {
     _log('folder_picker_open_requested');
     try {
-      final initialDirectory = await _existingLastOpenDirectory();
-      final folder = await _pickWithFocusRestore(
-        () => FilePicker.getDirectoryPath(
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
-      );
+      final folder = await _pickers.pickFolder();
       if (folder == null || folder.trim().isEmpty) {
         _log('folder_picker_cancelled');
         return;
@@ -1455,7 +1420,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _openUrl() async {
     final l10n = AppLocalizations.of(context);
-    final url = await OpenUrlDialog.show(context);
+    final url = await _pickers.promptForUrl(context);
     if (!mounted) return;
     final trimmed = url?.trim() ?? '';
     if (trimmed.isEmpty) return;
@@ -1508,17 +1473,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _openPlaylistPicker({bool playNow = true}) async {
     _log('playlist_picker_open_requested');
     try {
-      final initialDirectory = await _existingLastOpenDirectory();
-      final file = await _pickWithFocusRestore(
-        () => FilePicker.pickFile(
-          type: FileType.custom,
-          allowedExtensions: M3uPlaylist.extensions.toList(),
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
-      );
-      final path = FilePickerPath.fromPlatformFilePath(file?.path);
+      final path = await _pickers.pickPlaylistFile();
       if (path == null) return;
       await _captureBookmarkFor(path);
       final parent = p.dirname(path);
@@ -1567,23 +1522,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final l10n = AppLocalizations.of(context);
     try {
       final content = M3uPlaylist.encode(_playlist.items);
-      final initialDirectory = await _existingLastOpenDirectory();
-      final saved = await _pickWithFocusRestore(
-        () => FilePicker.saveFile(
-          dialogTitle: l10n.buttonSavePlaylist,
-          fileName: 'playlist.m3u',
-          type: FileType.custom,
-          allowedExtensions: const ['m3u'],
-          mimeType: 'audio/x-mpegurl',
-          bytes: Uint8List.fromList(utf8.encode(content)),
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
+      final path = await _pickers.pickPlaylistSavePath(
+        dialogTitle: l10n.buttonSavePlaylist,
+        content: content,
       );
-      final path = FilePickerPath.fromSaveUri(saved);
       if (path == null) return;
-      _rememberLastOpenDirectory(path);
+      _pickers.rememberLastOpenDirectory(path);
       if (!mounted) return;
       showAppSnackBar(context, l10n.snackPlaylistExportSaved);
       _log(
@@ -1640,7 +1584,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         }
         return;
       }
-      _rememberLastOpenDirectory(playlistPath);
+      _pickers.rememberLastOpenDirectory(playlistPath);
       _rememberRecentAndJumpList(playlistPath);
       _enqueueSources(sources, playNow: playNow);
       _log(
@@ -2049,7 +1993,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _rememberRecentAndJumpList(normalizedValue);
       }
       if (followUp.shouldRememberOpenDirectory) {
-        _rememberLastOpenDirectory(normalizedValue);
+        _pickers.rememberLastOpenDirectory(normalizedValue);
       }
       _log(
         followUp.recentPersistLogEvent,
@@ -2291,12 +2235,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
-  void _rememberLastOpenDirectory(String filePath) {
-    final dir = p.dirname(filePath).trim();
-    if (dir.isEmpty || dir == '.') return;
-    _settings.lastOpenDirectory = dir;
-  }
-
   // ── Navigation ────────────────────────────────────────────
 
   void _openSettings() {
@@ -2403,14 +2341,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void onWindowFocus() {
     _restoreShortcutFocus(refocusNativeWindow: false);
-  }
-
-  Future<T> _pickWithFocusRestore<T>(Future<T> Function() pick) async {
-    try {
-      return await pick();
-    } finally {
-      _restoreShortcutFocus();
-    }
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -3297,179 +3227,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Widget _buildPlayQueueDrawer() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context);
-
-    return Drawer(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      child: FocusScope(
-        child: GlassDrawerBody(
-          child: SafeArea(
-            child: ListenableBuilder(
-              listenable: _playlist,
-              builder: (context, _) {
-                final items = _playlist.items;
-                return Column(
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-                      child: Row(
-                        children: [
-                          Icon(Icons.queue_music, color: colorScheme.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              l10n.dialogPlayQueueTitle,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.info_outline),
-                            tooltip: l10n.tooltipMediaInfo,
-                            onPressed: _currentFile == null
-                                ? null
-                                : () => unawaited(_showMediaInfoDialog()),
-                          ),
-                          if (items.isNotEmpty)
-                            IconButton(
-                              icon: Icon(
-                                _playlist.shuffle
-                                    ? Icons.shuffle_on
-                                    : Icons.shuffle,
-                              ),
-                              tooltip: l10n.tooltipShuffle,
-                              onPressed: () {
-                                _setShuffle(!_playlist.shuffle);
-                              },
-                            ),
-                          if (items.isNotEmpty)
-                            IconButton(
-                              icon: const Icon(Icons.clear_all),
-                              tooltip: l10n.actionClear,
-                              onPressed: () => unawaited(_confirmClearQueue()),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    // List
-                    Expanded(
-                      child: items.isEmpty
-                          ? Center(
-                              child: Text(
-                                l10n.dialogPlayQueueEmpty,
-                                style: TextStyle(
-                                  color: colorScheme.onSurface.withValues(
-                                    alpha: 0.54,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Semantics(
-                              label: l10n.queueReorderSemantic,
-                              child: ReorderableListView.builder(
-                                buildDefaultDragHandles: false,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                itemCount: items.length,
-                                onReorderItem: (oldIndex, newIndex) {
-                                  _playlist.moveItem(oldIndex, newIndex);
-                                },
-                                itemBuilder: (context, index) {
-                                  final isCurrent = index == _playlist.index;
-                                  final source = items[index];
-                                  final name = source.displayName;
-
-                                  return QueueItemTile(
-                                    key: ValueKey(
-                                      'queue-$index-${source.value}',
-                                    ),
-                                    name: name,
-                                    isCurrent: isCurrent,
-                                    isUrl: source.isUrl,
-                                    playLabel: l10n.actionPlay,
-                                    removeLabel: l10n.actionRemove,
-                                    reorderLabel: l10n.queueReorderSemantic,
-                                    reorderIndex: index,
-                                    colorScheme: colorScheme,
-                                    onActivate: () {
-                                      _playlist.jumpTo(index);
-                                      unawaited(
-                                        _loadSource(
-                                          source,
-                                          syncPlaylist: false,
-                                          origin: SourceOrigin.queue,
-                                        ),
-                                      );
-                                    },
-                                    onRemove: () {
-                                      unawaited(_removeQueueItem(index));
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                    ),
-                    const Divider(height: 1),
-                    // Actions at bottom
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          FilledButton.tonalIcon(
-                            onPressed: _pickFilesToEnqueue,
-                            icon: const Icon(Icons.add),
-                            label: Text(l10n.dialogPlayQueueAddFiles),
-                          ),
-                          FilledButton.tonalIcon(
-                            key: const Key('queue-add-folder-button'),
-                            onPressed: () => unawaited(
-                              _openFolder(playNow: _playlist.isEmpty),
-                            ),
-                            icon: const Icon(Icons.create_new_folder),
-                            label: Text(l10n.buttonOpenFolder),
-                          ),
-                          FilledButton.tonalIcon(
-                            key: const Key('queue-open-playlist-button'),
-                            onPressed: () => unawaited(
-                              _openPlaylistPicker(playNow: _playlist.isEmpty),
-                            ),
-                            icon: const Icon(Icons.queue_music),
-                            label: Text(l10n.buttonOpenPlaylist),
-                          ),
-                          if (items.isNotEmpty)
-                            FilledButton.tonalIcon(
-                              key: const Key('queue-save-playlist-button'),
-                              onPressed: () =>
-                                  unawaited(_exportPlaylistQueue()),
-                              icon: const Icon(Icons.save_alt),
-                              label: Text(l10n.buttonSavePlaylist),
-                            ),
-                          if (items.isNotEmpty)
-                            FilledButton.tonalIcon(
-                              key: const Key('queue-remove-missing-button'),
-                              onPressed: () =>
-                                  unawaited(_removeMissingQueueItems()),
-                              icon: const Icon(Icons.cleaning_services),
-                              label: Text(l10n.actionRemoveMissing),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
+    return PlayQueueDrawer(
+      playlist: _playlist,
+      hasCurrentFile: () => _currentFile != null,
+      onShowMediaInfo: () => unawaited(_showMediaInfoDialog()),
+      onSetShuffle: _setShuffle,
+      onClearQueue: () => unawaited(_confirmClearQueue()),
+      onActivateItem: (source) => unawaited(
+        _loadSource(source, syncPlaylist: false, origin: SourceOrigin.queue),
       ),
+      onRemoveItem: (index) => unawaited(_removeQueueItem(index)),
+      onAddFiles: _pickFilesToEnqueue,
+      onAddFolder: (playNow) => unawaited(_openFolder(playNow: playNow)),
+      onOpenPlaylist: (playNow) =>
+          unawaited(_openPlaylistPicker(playNow: playNow)),
+      onSavePlaylist: () => unawaited(_exportPlaylistQueue()),
+      onRemoveMissing: () => unawaited(_removeMissingQueueItems()),
     );
   }
 
@@ -3791,33 +3564,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   // ── OSD ────────────────────────────────────────────────────
 
-  void _pulseOsd() {
-    if (!OsdPolicy.shouldShow(
-      osdEnabled: _settings.osdEnabled,
-      mounted: mounted,
-    )) {
-      return;
-    }
-    if (!_player.osdVisible) setState(() => _player.osdVisible = true);
-    _osdHideTimer?.cancel();
-    _osdHideTimer = Timer(_osdHideDuration, () {
-      if (mounted) setState(() => _player.osdVisible = false);
-    });
-  }
+  void _pulseOsd() => _messenger.pulseOsd();
 
-  void _showOsdMessage(String msg) {
-    widget.osdMessageProbe?.value = msg;
-    if (!OsdPolicy.shouldShow(
-      osdEnabled: _settings.osdEnabled,
-      mounted: mounted,
-    )) {
-      return;
-    }
-    setState(
-      () => _player.osdTransientMessage = OsdPolicy.formatTransientMessage(msg),
-    );
-    _pulseOsd();
-  }
+  void _showOsdMessage(String msg) => _messenger.showOsdMessage(msg);
 
   // ── Tracks: audio / subtitle cycling ──────────────────────
 
@@ -4518,26 +4267,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _confirmClearQueue() async {
     if (_playlist.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final dialogL10n = AppLocalizations.of(ctx);
-        return AlertDialog(
-          title: Text(dialogL10n.dialogClearQueueTitle),
-          content: Text(dialogL10n.dialogClearQueueBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(dialogL10n.actionCancel),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(dialogL10n.actionClear),
-            ),
-          ],
-        );
-      },
-    );
+    final confirmed = await showClearQueueConfirmation(context);
     if (confirmed != true || !mounted) return;
     final wasPlaying = _currentFile != null;
     _playlist.clear();
@@ -5178,17 +4908,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _pickExternalAudio() async {
     final l10n = AppLocalizations.of(context);
     try {
-      final initialDirectory = await _existingLastOpenDirectory();
-      final file = await _pickWithFocusRestore(
-        () => FilePicker.pickFile(
-          type: FileType.custom,
-          allowedExtensions: PlayerPathUtils.audioExtensions.toList()..sort(),
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
-      );
-      final path = FilePickerPath.fromPlatformFilePath(file?.path);
+      final path = await _pickers.pickExternalAudioFile();
       if (path == null) return;
       await _captureBookmarkFor(path);
       final ok = await _playerService.addExternalAudio(
@@ -5221,25 +4941,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _pickExternalSubtitle() async {
     final l10n = AppLocalizations.of(context);
     try {
-      final initialDirectory = await _existingLastOpenDirectory();
-      final file = await _pickWithFocusRestore(
-        () => FilePicker.pickFile(
-          type: FileType.custom,
-          allowedExtensions: const [
-            'srt',
-            'ass',
-            'ssa',
-            'vtt',
-            'sub',
-            'idx',
-            'sup',
-          ],
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
-      );
-      final path = FilePickerPath.fromPlatformFilePath(file?.path);
+      final path = await _pickers.pickExternalSubtitleFile();
       if (path == null) return;
       await _captureBookmarkFor(path);
       final ok = await _playerService.addExternalSubtitle(
@@ -5323,20 +5025,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _pickFilesToEnqueue() async {
     try {
-      final initialDirectory = await _existingLastOpenDirectory();
-      final files = await _pickWithFocusRestore(
-        () => FilePicker.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: _enqueueAllowedExtensions,
-          windowsOptions: _filePickerWindowsOptions,
-          linuxOptions: _filePickerLinuxOptions,
-          initialDirectory: initialDirectory,
-        ),
-      );
-      final paths = files
-          .map((file) => FilePickerPath.fromPlatformFilePath(file.path))
-          .whereType<String>()
-          .toList(growable: false);
+      final paths = await _pickers.pickFilesToEnqueue();
       if (paths.isEmpty) return;
       final sources = <PlayableSource>[];
       for (final path in paths) {
@@ -5356,7 +5045,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           sources.add(PlayableSource.file(path));
         }
       }
-      _rememberLastOpenDirectory(paths.first);
+      _pickers.rememberLastOpenDirectory(paths.first);
       if (sources.isEmpty) {
         if (mounted) {
           showAppSnackBar(
