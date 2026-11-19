@@ -13,16 +13,16 @@ import 'player_log.dart';
 const _settingsFwdTransition = Duration(milliseconds: 340);
 const _settingsRevTransition = Duration(milliseconds: 280);
 
-void openPlayerSettings({
+Future<void> openPlayerSettings({
   required BuildContext context,
   required SettingsService settings,
   required DebugLogService debugLog,
   required UpdateService updateService,
   required PlayerDebugLog log,
 }) {
-  if (!context.mounted) return;
+  if (!context.mounted) return Future<void>.value();
   log('open_settings_requested', category: DebugLogCategory.ui);
-  Navigator.of(context).push(
+  return Navigator.of(context).push(
     PageRouteBuilder<void>(
       transitionDuration: _settingsFwdTransition,
       reverseTransitionDuration: _settingsRevTransition,

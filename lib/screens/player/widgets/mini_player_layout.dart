@@ -30,6 +30,8 @@ class MiniPlayerLayout extends StatefulWidget {
     required this.onSeekChange,
     required this.onSeekEnd,
     required this.onDragWindow,
+    this.revealRequests,
+    this.onHiddenWithFocus,
   });
 
   final Widget surface;
@@ -49,6 +51,8 @@ class MiniPlayerLayout extends StatefulWidget {
   final ValueChanged<double> onSeekChange;
   final ValueChanged<double> onSeekEnd;
   final VoidCallback onDragWindow;
+  final Listenable? revealRequests;
+  final VoidCallback? onHiddenWithFocus;
 
   @override
   State<MiniPlayerLayout> createState() => _MiniPlayerLayoutState();
@@ -58,16 +62,29 @@ class _MiniPlayerLayoutState extends State<MiniPlayerLayout> {
   Timer? _hideTimer;
   bool _visible = true;
   int _pointersDown = 0;
+  final FocusNode _overlayFocus = FocusNode(debugLabel: 'mini-player-overlay');
 
   @override
   void initState() {
     super.initState();
+    widget.revealRequests?.addListener(_reveal);
     _scheduleHide();
   }
 
   @override
+  void didUpdateWidget(MiniPlayerLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.revealRequests != widget.revealRequests) {
+      oldWidget.revealRequests?.removeListener(_reveal);
+      widget.revealRequests?.addListener(_reveal);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.revealRequests?.removeListener(_reveal);
     _hideTimer?.cancel();
+    _overlayFocus.dispose();
     super.dispose();
   }
 
@@ -80,8 +97,14 @@ class _MiniPlayerLayoutState extends State<MiniPlayerLayout> {
     _hideTimer?.cancel();
     _hideTimer = Timer(miniOverlayIdleDelay, () {
       if (!mounted || _pointersDown > 0 || !_visible) return;
-      setState(() => _visible = false);
+      _hideOverlay();
     });
+  }
+
+  void _hideOverlay() {
+    final hadFocus = _overlayFocus.hasFocus;
+    setState(() => _visible = false);
+    if (hadFocus) widget.onHiddenWithFocus?.call();
   }
 
   void _controlPointerDown() {
@@ -115,15 +138,23 @@ class _MiniPlayerLayoutState extends State<MiniPlayerLayout> {
               ),
             ),
             Positioned.fill(
-              child: IgnorePointer(
-                key: const Key('mini-player-overlay-ignore'),
-                ignoring: !_visible,
-                child: AnimatedOpacity(
-                  key: const Key('mini-player-overlay-opacity'),
-                  opacity: _visible ? 1 : 0,
-                  duration: _overlayFadeDuration,
-                  curve: Curves.easeOutCubic,
-                  child: _buildOverlay(context),
+              child: Focus(
+                focusNode: _overlayFocus,
+                canRequestFocus: false,
+                skipTraversal: true,
+                child: ExcludeFocus(
+                  excluding: !_visible,
+                  child: IgnorePointer(
+                    key: const Key('mini-player-overlay-ignore'),
+                    ignoring: !_visible,
+                    child: AnimatedOpacity(
+                      key: const Key('mini-player-overlay-opacity'),
+                      opacity: _visible ? 1 : 0,
+                      duration: _overlayFadeDuration,
+                      curve: Curves.easeOutCubic,
+                      child: _buildOverlay(context),
+                    ),
+                  ),
                 ),
               ),
             ),

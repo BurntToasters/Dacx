@@ -123,6 +123,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     onShowHelp: () =>
         unawaited(showKeybindsDialog(context: context, settings: _settings)),
     onAction: (action) => _shortcutActions.handle(action),
+    onTraversalKey: _onTraversalKey,
   );
   late final IPlayerService _playerService;
   late final AdvancedPlaybackController _advancedPlayback;
@@ -144,6 +145,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _isDisposed = false;
   PlayerRemoteCommands? _remoteCommands;
   final _scrollVolume = ScrollVolumeAccumulator();
+  final ValueNotifier<int> _miniRevealRequests = ValueNotifier<int>(0);
+  bool _settingsOpen = false;
 
   // Tracks / chapters / OSD state
   late final PlayerFilePickers _pickers = PlayerFilePickers(
@@ -833,6 +836,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _window.releaseCompactGeometryHold();
     AppExitHooks.remove(_saveStateBeforeExit);
     _shortcuts.dispose();
+    _miniRevealRequests.dispose();
     windowManager.removeListener(this);
     _menuBridge.dispose();
     _messenger.dispose();
@@ -884,13 +888,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _openSettings() {
-    if (!_playerRouteIsCurrent()) return;
-    openPlayerSettings(
-      context: context,
-      settings: _settings,
-      debugLog: widget.debugLog,
-      updateService: _updateService,
-      log: _log,
+    if (_settingsOpen) return;
+    _settingsOpen = true;
+    unawaited(
+      openPlayerSettings(
+        context: context,
+        settings: _settings,
+        debugLog: widget.debugLog,
+        updateService: _updateService,
+        log: _log,
+      ).whenComplete(() {
+        _settingsOpen = false;
+      }),
     );
   }
 
@@ -927,6 +936,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   // ── Keyboard shortcuts ────────────────────────────────────
+
+  void _onTraversalKey() {
+    if (_window.compactMode) {
+      _miniRevealRequests.value++;
+      return;
+    }
+    _window.revealFullscreenChrome();
+  }
+
+  void _restoreFocusAfterHide() {
+    _shortcuts.restoreFocus(refocusNativeWindow: false);
+  }
 
   bool _playerRouteIsCurrent() {
     if (!mounted) return false;
@@ -1061,6 +1082,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         builder: (context, _) {
           return MiniPlayerLayout(
             key: const ValueKey('mini-player-layout'),
+            revealRequests: _miniRevealRequests,
+            onHiddenWithFocus: _restoreFocusAfterHide,
             surface: _buildMediaStack(),
             title: _miniPlayerTitle(),
             artist: _player.isAudioFile ? _media.displayArtist : null,
@@ -1172,6 +1195,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                 onPointerOverChanged: _window.setPointerOverChrome,
                 onPointerDown: _window.pointerDownInChrome,
                 onPointerUp: _window.pointerUpInChrome,
+                onHiddenWithFocus: _restoreFocusAfterHide,
                 child: const CustomTitleBar(),
               ),
             ),
@@ -1186,6 +1210,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                 onPointerOverChanged: _window.setPointerOverChrome,
                 onPointerDown: _window.pointerDownInChrome,
                 onPointerUp: _window.pointerUpInChrome,
+                onHiddenWithFocus: _restoreFocusAfterHide,
                 child: _buildBottomDock(),
               ),
             ),

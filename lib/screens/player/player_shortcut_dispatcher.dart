@@ -17,6 +17,7 @@ class PlayerShortcutDispatcher {
     required this.onEscape,
     required this.onShowHelp,
     required this.onAction,
+    this.onTraversalKey,
   });
 
   final SettingsService settings;
@@ -27,6 +28,7 @@ class PlayerShortcutDispatcher {
   final KeyEventResult Function() onEscape;
   final VoidCallback onShowHelp;
   final KeyEventResult Function(PlayerShortcutAction action) onAction;
+  final VoidCallback? onTraversalKey;
 
   final FocusNode focusNode = FocusNode(
     debugLabel: 'player-shortcuts',
@@ -74,6 +76,10 @@ class PlayerShortcutDispatcher {
   }
 
   KeyEventResult handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+      onTraversalKey?.call();
+      return KeyEventResult.ignored;
+    }
     final hk = HardwareKeyboard.instance;
     final pressed = LogicalKeyboardKey.expandSynonyms(hk.logicalKeysPressed);
     final controlPressed =
