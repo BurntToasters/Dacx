@@ -226,6 +226,13 @@ Tick items as you go before a stable cut. Fix failures as they surface rather th
 - [ ] System media overlay (Windows and macOS): play a tagged track, then an untagged one; artist and album clear
 - [ ] Empty state at 480×320: no overflow; Reopen Last and recent list hidden on a fresh profile, shown after opening a file
 - [ ] Audio view in a 480×320 window and the mini-player: no overflow; album name shown when tagged
+- [ ] Playlist titles: open an `.m3u` with `#EXTINF` lines and a `.pls` with `TitleN` entries; the play queue shows those titles. Save the queue as a playlist, reopen it, and the titles are still there
+- [ ] Windows taskbar paused state: play a file, pause; the taskbar progress bar stays visible at the current position in the paused (yellow) state. Stop, or let the file end, and the bar clears
+- [ ] Windows media overlay: play a video file; the overlay shows it as video, not music
+- [ ] Mini-player then fullscreen: in the mini-player, press `F`; Dacx goes to fullscreen with the normal layout. Press Escape; the window returns to windowed at the size it had before the mini-player
+- [ ] Mini-player and Always on top: in the mini-player, change Always on top in Settings; the window stays pinned on top
+- [ ] Fullscreen Tab: in fullscreen, press Tab; the hidden controls appear and can be reached with the keyboard
+- [ ] Settings while a dialog is open: open Media Info, then press `Ctrl/Cmd+,`; Settings opens over the dialog
 
 ## Trust smoke
 

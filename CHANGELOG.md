@@ -1,15 +1,15 @@
-<!-- > [!NOTE]
-> 🅱️ This is a Beta build. -->
+> [!NOTE]
+> 🅱️ This is a Beta build.
 
 # ⬇️ Downloads
 
 | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/windows.png" /> Windows | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/mac.png" /> macOS | <img height="20" src="https://raw.githubusercontent.com/BurntToasters/bcls/main/media/linux.png" /> Linux |
 | :--- | :--- | :--- |
-| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-Windows-x64.msi) | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-Linux-x86_64.AppImage) |
-| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-macOS.zip)** | **DEB (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-Linux-amd64.deb) |
-| | | **RPM (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-Linux-x86_64.rpm) |
-| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-Linux-x86_64.flatpak) |
-| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0/Dacx-Linux-x86_64.tar.gz) |
+| **MSI:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-Windows-x64.msi) | **[Universal DMG](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-macOS.dmg)** | **AppImage:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-Linux-x86_64.AppImage) |
+| | **[Universal ZIP](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-macOS.zip)** | **DEB (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-Linux-amd64.deb) |
+| | | **RPM (Deprecated):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-Linux-x86_64.rpm) |
+| | | **Flatpak:** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-Linux-x86_64.flatpak) |
+| | | **TAR (Generic Linux):** [x64](https://github.com/BurntToasters/Dacx/releases/download/v1.1.0-beta.1/Dacx-Linux-x86_64.tar.gz) |
 
 > [!IMPORTANT]
 > The `.asc` files are my normal GPG signatures which you can verify using my GPG Public Key: https://tuxedo.rosie.run/GPG/BurntToasters_0xF2FBC20F_public.asc.
@@ -18,22 +18,25 @@
 
 ### ℹ️ Enjoying Dacx? Consider [❤️ Supporting Me! ❤️](https://rosie.run/support)
 
-## Changes in `v1.1.0:`
-- **NEW - Fullscreen controls:** In fullscreen, the title bar and controls now slide in over the video, so the video no longer resizes. They stay visible while you hover or drag on them, while a menu or the queue is open, and while playback is paused. Otherwise they hide after 3 seconds, and the cursor hides with them.
-- **NEW - Mini-player:** The mini-player has its own compact layout with no title bar. Drag anywhere to move the window. Hover to show the title, previous / play-pause / next, and a seek bar. Audio shows its cover art, and video windows keep the video's aspect ratio. Double-click to leave the mini-player.
+## Changes in `v1.1.0-beta.1:`
+- **NEW - Fullscreen controls:** In fullscreen, the title bar and controls now slide in over the video, so the video no longer resizes. They stay visible while you hover or drag on them, while a menu or the queue is open, and while playback is paused. Otherwise they hide after 3 seconds, and the cursor hides with them. Press Tab to show them; hidden controls cannot be reached with the keyboard.
+- **NEW - Mini-player:** The mini-player has its own compact layout with no title bar. Drag anywhere to move the window. Hover to show the title, previous / play-pause / next, and a seek bar. Audio shows its cover art, and video windows keep the video's aspect ratio. Double-click to leave the mini-player. Pressing F or choosing Fullscreen leaves the mini-player first, and changing Always on top in Settings no longer unpins it.
 - **NEW - More menu:** The ⋯ menu opens instantly next to its button. Sleep timer and track options are in submenus, and items show their keyboard shortcuts.
-- **NEW - Shortcuts:** `Q` toggles the play queue, `Shift+S` stops, `Ctrl/Cmd+,` opens Settings, `I` shows media info, and `Shift+Left/Right` seeks 30 seconds. You can rebind all of them.
+- **NEW - Shortcuts:** `Q` toggles the play queue, `Shift+S` stops, `Ctrl/Cmd+,` opens Settings, `I` shows media info, and `Shift+Left/Right` seeks 30 seconds. You can rebind all of them. Settings also opens while a dialog is showing.
 - **NEW - Remaining time:** Click the duration next to the seek bar to switch between total and remaining time. The choice is remembered.
 - **NEW - Tray controls:** The tray menu now has Play/Pause, Next and Previous. The tray tooltip shows what is playing. On Windows, left-clicking the tray icon restores the window.
 - **NEW - Updates:** Before an update installs, Dacx shows what's new in that release and links to the full release notes. You can cancel a Windows update download.
 - **NEW - Network paths:** Files on network shares (`\\server\share`) now open when you pick them in a dialog, drop them, or reopen them from Recents or the queue. Network paths from the command line, Open With, playlist files and media controls are still refused.
 - **NEW - Formats:** Folder scans, drops and pickers now accept `m4b`, `oga`, `mka`, `ac3`, `eac3`, `dts`, `amr`, `weba`, `3gp` and `f4v` files.
+- **NEW - Playlist titles:** The play queue shows the titles stored in `.m3u` (`#EXTINF`) and `.pls` (`TitleN`) playlists. Saving the queue as a playlist keeps them.
+- **NEW - Windows taskbar:** The taskbar progress bar stays visible while paused and shows the paused state. It clears when playback stops or ends.
 - **Update - Empty state:** Open File is now the main action. Reopen Last only appears when there is a recent file, and your most recent files are listed for one-click opening.
 - **Update - Audio view:** The now-playing view adapts to small windows and the mini-player instead of overflowing. It shows the album name when the file has one.
 - **Update - Transport:** Previous and Next are disabled when there is nothing to go to. The volume icon shows muted, low and high levels.
 - **Update - Settings:** Wide controls move under their label in narrow windows. You can reach and select accent colors with the keyboard.
 - **Update - Playback speed:** The speed chip and on-screen message show the exact rate instead of the nearest preset.
 - **Update - Messages:** A new message now replaces the one on screen instead of waiting in a queue. Loading a folder or playlist with missing files shows one summary instead of one message per file.
+- **Update - Windows media controls:** Video files show as video, not music, in the Windows media overlay.
 - **Fix - Add files to queue:** The picker now shows audio files on Windows and Linux, opens in your last folder, and reports errors.
 - **Fix - Track title:** The audio view and Media Info show the title and artist even when system media controls are turned off. They no longer keep the previous file's title.
 - **Fix - System media controls:** Windows and macOS media overlays no longer keep the previous track's artist or album when the new track has none.
@@ -47,7 +50,7 @@
 - **Fix - Performance:** Volume, equalizer, subtitle and appearance sliders and window moves now save settings after you stop changing them, instead of rewriting the settings file on every step. Playback position updates no longer rebuild the controls on every tick, and changing a setting no longer rebuilds the whole app.
 - **Fix - Dialogs:** Advanced playback and Media Info dialogs now fit small windows.
 - **Codebase:** The player screen is split from one 5,400-line file into focused controllers and widgets. Light and dark themes share one builder, and unused code is removed.
-- **Testing:** Audit 9 adds documented failure modes and E2E tests for every change above, each writing a JSON report under `test-results/e2e/<os>/`.
+- **Testing:** Audit 9 adds documented failure modes and E2E tests for every change above, each writing a JSON report under `test-results/e2e/<os>/`. A real-window test now drives the mini-player and fullscreen on Windows, macOS and Linux and writes `window-modes.json`.
 
 ## Changes in `v1.0.2:`
 - **PKG:** Updated Dependency & Packages.
