@@ -863,3 +863,159 @@ Modes:
 - M38.5: two concurrent deletes of the same flag file make one of them fail or log a `PathNotFoundException`.
 - M38.6: `resetAll` while a slow `true` write is in flight leaves the flag file on disk.
 - M38.7: `syncInstanceModeFlag` completes while an earlier write is still pending, so the file changes after it returns.
+
+## Finding 39: mini-player entry geometry save
+
+`PlayerWindowController.toggleCompactMode` resizes the window before it calls
+`onCompactModeChanged(true)`, so the app shell's 180 ms geometry-save debounce
+can store the mini-player size as the normal window size. Exercised by
+`test/e2e/audit9_window_modes_e2e_test.dart`.
+
+Modes:
+
+- M39.1: entering the mini-player makes a window call (`setMinimumSize`, `setSize`, `setAspectRatio`, `setAlwaysOnTop`) before `onCompactGeometryHold(true)` is called.
+- M39.2: leaving the mini-player calls `onCompactGeometryHold(false)` before the pre-mini size and position are restored.
+- M39.3: a failed enter (a window call throws) leaves the hold on, so geometry is never saved again.
+- M39.4: a failed exit releases the hold although the window still has the mini-player size.
+- M39.5: `PlayerScreen` does not forward the hold to `widget.onCompactModeChanged`, so the app shell saves geometry during the enter resize.
+- M39.6: the mini-player OSD message is shown on the hold instead of on the real mode change, or shown twice for one toggle.
+
+## Finding 40: always-on-top setting while in the mini-player
+
+`PlayerWindowController.applyAlwaysOnTop` always calls
+`windowManager.setAlwaysOnTop`, so changing the setting while in the
+mini-player unpins it. Exercised by
+`test/e2e/audit9_window_modes_e2e_test.dart`.
+
+Modes:
+
+- M40.1: changing always-on-top to off while the mini-player is active calls `setAlwaysOnTop(false)`.
+- M40.2: changing always-on-top while a mini-player toggle is in flight makes a window call.
+- M40.3: leaving the mini-player after the setting changed while in it does not apply the current setting value.
+- M40.4: changing always-on-top in the normal layout no longer calls `setAlwaysOnTop` with the new value.
+
+## Finding 41: fullscreen while in the mini-player
+
+`toggleFullscreen` and `onEnterFullScreen` ignore the mini-player flag, so
+fullscreen can show the mini-player layout and a double-click then resizes a
+fullscreen window. Exercised by `test/e2e/audit9_window_modes_e2e_test.dart`.
+
+Modes:
+
+- M41.1: `toggleFullscreen` while in the mini-player calls `setFullScreen(true)` while `compactMode` is still true.
+- M41.2: `toggleFullscreen` while in the mini-player does not restore the pre-mini size, constraints and always-on-top before fullscreen.
+- M41.3: if leaving the mini-player fails, `toggleFullscreen` still enters fullscreen.
+- M41.4: an OS-initiated fullscreen (`onEnterFullScreen`) while in the mini-player leaves `compactMode` true.
+- M41.5: after an OS-initiated fullscreen from the mini-player, the mini-player minimum size, aspect ratio or always-on-top stays applied, or the geometry hold stays on.
+- M41.6: when that fullscreen ends, the window keeps the mini-player size instead of the pre-mini size and position (or maximized state).
+- M41.7: in fullscreen the player shows the mini-player layout, or a double-click calls the mini-player toggle instead of leaving fullscreen.
+
+## Finding 42: hidden overlays in the focus order
+
+`FullscreenChromeOverlay` and the mini-player overlay hide their controls with
+`IgnorePointer` and opacity only, so Tab reaches invisible buttons and Space or
+Enter activates them. Exercised by `test/e2e/audit9_focus_e2e_test.dart`.
+
+Modes:
+
+- M42.1: with the fullscreen controls hidden, a focusable control inside the title or dock overlay can take focus.
+- M42.2: with the mini-player overlay hidden, `mini-player-prev`, `mini-player-play-pause`, `mini-player-next` or `mini-player-seek` can take focus.
+- M42.3: Tab in fullscreen with hidden controls does not reveal them.
+- M42.4: Tab in the mini-player with a hidden overlay does not reveal it.
+- M42.5: the Tab handler consumes the key, so normal focus traversal stops working.
+- M42.6: after the controls hide while focus is inside them, player shortcuts (`Space`, arrows) no longer reach the player.
+- M42.7: with controls visible, the overlay buttons are no longer focusable.
+
+## Finding 43: Settings blocked by a dialog
+
+`_openSettings` returns when the player route is not current, so Settings does
+not open while a dialog covers the player. Exercised by
+`test/e2e/audit9_focus_e2e_test.dart`.
+
+Modes:
+
+- M43.1: requesting Settings while a dialog is open over the player does not push the Settings route.
+- M43.2: two Settings requests in the same frame push two Settings routes.
+- M43.3: Settings cannot be opened again after it is closed.
+- M43.4: `openPlayerSettings` does not return a future that completes when the Settings route is popped.
+
+## Finding 44: duplicated minimum window sizes
+
+The minimum sizes 480×320 and 240×135 are written separately in `main.dart`,
+`player_window_controller.dart` and `settings_service.dart`. Exercised by
+`test/e2e/audit9_window_modes_e2e_test.dart`.
+
+Modes:
+
+- M44.1: `WindowMetrics.normalMinimumSize`, `compactMinimumSize` or `compactWindowSize` differ from 480×320, 240×135 and 480×320.
+- M44.2: `PlayerWindowController.normalMinimumSize`, `compactMinimumSize` or `compactWindowSize` differ from the `WindowMetrics` values.
+- M44.3: `SettingsService.windowMinWidth` or `windowMinHeight` differ from `WindowMetrics.normalMinimumSize`.
+- M44.4: a `Size(480, 320)` or `Size(240, 135)` literal, or a bare `480` or `320` minimum, remains in `lib/main.dart`, `lib/services/settings_service.dart` or `lib/screens/player/player_window_controller.dart`.
+
+## Finding 45: playlist titles ignored
+
+`M3uPlaylist` drops `#EXTINF` and PLS `TitleN` titles, so the queue shows file
+names. Exercised by `test/e2e/audit9_playlist_titles_e2e_test.dart`.
+
+Modes:
+
+- M45.1: an `#EXTINF:123,Artist - Song` line before an entry does not set that entry's `title` to `Artist - Song`.
+- M45.2: an `#EXTINF` title applies to a later entry than the next one, or to more than one entry.
+- M45.3: an `#EXTINF` title before a rejected entry is applied to the following accepted entry.
+- M45.4: an `#EXTINF` line with attributes (`#EXTINF:-1 tvg-name="a,b",Title`) takes a comma inside quotes as the separator.
+- M45.5: an `#EXTINF` line with no comma or an empty title sets a non-null title.
+- M45.6: a PLS `TitleN` is paired with a different `FileN`, or a `TitleN` without a matching `FileN` creates an entry.
+- M45.7: a title keeps control characters, bidi-override characters (U+202A to U+202E, U+2066 to U+2069) or runs of whitespace, or is longer than 200 characters.
+- M45.8: two sources with the same type and value but different titles are not equal or have different hash codes.
+- M45.9: `queueLabel` is not `title` when a title exists, or not `displayName` when it does not.
+- M45.10: `encode` drops titles, or a titled playlist written and parsed again loses or changes its titles.
+- M45.11: `encode` of a playlist without titles changes its existing output.
+- M45.12: the queue drawer shows the file name although the entry has a title.
+
+## Finding 46: Windows taskbar progress on pause
+
+`MediaSessionCoordinator` clears the taskbar progress on pause, and the native
+handler has no paused state. Exercised by
+`test/e2e/audit9_windows_shell_e2e_test.dart`.
+
+Modes:
+
+- M46.1: pausing with media loaded sends a clear instead of a paused progress at the current position.
+- M46.2: `setTaskbarProgress(p, paused: true)` does not send a map with `progress` and `paused: true`.
+- M46.3: `setTaskbarProgress(p)` without `paused` sends `paused: true`.
+- M46.4: stop, end of file or no media loaded leaves a paused or normal bar instead of clearing it.
+- M46.5: resuming after pause does not send a normal (not paused) progress.
+- M46.6: progress values outside 0..1 are sent unclamped, or a zero or unknown duration sends a progress.
+- M46.7: on a non-Windows platform the taskbar channel is called.
+
+## Finding 47: Windows media type and unused rate field
+
+`MediaSessionService.updateMetadata` sends no media type, the native side
+always reports Music, and `last_rate_` is written but never read. Exercised by
+`test/e2e/audit9_windows_shell_e2e_test.dart`.
+
+Modes:
+
+- M47.1: metadata for a video file does not carry `mediaType: 'video'`.
+- M47.2: metadata for an audio file does not carry `mediaType: 'music'`.
+- M47.3: a position-only or playback-state update sends a `mediaType` that differs from the current file's type.
+- M47.4: switching from a video to an audio file keeps `mediaType: 'video'`.
+- M47.5: `last_rate_` still exists in `windows/runner/media_session.cpp` or `media_session.h`.
+- M47.6: the native update handler does not read `mediaType` or never sets `MediaPlaybackType::Video`.
+
+## Finding 48: no real-window test
+
+The mini-player, always-on-top, restore and fullscreen are only tested against
+a fake window manager. Exercised by `integration_test/window_modes_e2e_test.dart`,
+which writes `window-modes.json` (schema `dacx.e2e.window-modes.v1`) beside
+`DACX_E2E_REPORT` instead of an audit 9 report.
+
+Modes:
+
+- M48.1: after `Ctrl+Shift+M` the `mini-player-layout` key is absent.
+- M48.2: on Windows, the mini-player window is not 480×320 or not always on top.
+- M48.3: after leaving the mini-player, the window size differs from the size before entering it, or always-on-top stays on although the setting is off.
+- M48.4: after `F`, the window is not fullscreen (Windows) or the `fullscreen-title-overlay` and `fullscreen-dock-overlay` keys are absent.
+- M48.5: after `Escape`, the window is still fullscreen (Windows) or the overlay keys remain.
+- M48.6: `Ctrl+Shift+M` then `F` shows the mini-player layout in fullscreen or leaves mini-player mode on.
+- M48.7: the report is missing, has a different schema, or claims `passed` when a hard assertion failed.
