@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
@@ -44,8 +43,11 @@ import 'player/player_menu_bridge.dart';
 import 'player/player_messenger.dart';
 import 'player/player_more_menu_controller.dart';
 import 'player/player_open_actions.dart';
+import 'player/player_remote_binding.dart';
 import 'player/player_screenshot_action.dart';
+import 'player/player_seeding.dart';
 import 'player/player_settings_route.dart';
+import 'player/player_stream_bindings.dart';
 import 'player/player_transport_controller.dart';
 import 'player/player_update_notice.dart';
 import 'player/player_settings_applier.dart';
@@ -60,6 +62,7 @@ import 'player/widgets/media_surface.dart';
 import 'player/widgets/mini_player_layout.dart';
 import 'player/widgets/player_bottom_dock.dart';
 import 'player/widgets/play_queue_drawer.dart';
+import 'player/widgets/route_current_probe.dart';
 
 const _resumeSaveInterval = Duration(seconds: 5);
 const _snackbarShortDuration = Duration(seconds: 2);
@@ -143,7 +146,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _isDragging = false;
 
   bool _isDisposed = false;
-  PlayerRemoteCommands? _remoteCommands;
   final _scrollVolume = ScrollVolumeAccumulator();
   final ValueNotifier<int> _miniRevealRequests = ValueNotifier<int>(0);
   bool _settingsOpen = false;
@@ -183,6 +185,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       applyResume: false,
       origin: SourceOrigin.queue,
     ),
+    refreshMetadata: (source) => _media.refreshMetadata(source),
   );
   late final PlayerMediaInfoPresenter _mediaInfo = PlayerMediaInfoPresenter(
     player: _player,
@@ -314,7 +317,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     onCompactGeometryHold: _onCompactGeometryHold,
     shouldHoldChrome: () =>
         !_player.isPlaying || _endDrawerOpen || !_playerRouteIsCurrent(),
-    videoAspectRatio: _currentVideoAspectRatio,
+    videoAspectRatio: () => _mediaInfo.currentVideoAspectRatio(),
   );
 
   bool _endDrawerOpen = false;
@@ -342,6 +345,43 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     l10n: () => AppLocalizations.of(context),
     showOsd: _showOsdMessage,
     showMessage: (message) => showAppSnackBar(context, message),
+  );
+
+  late final PlayerStreamBindings _streams = PlayerStreamBindings(
+    playerService: _playerService,
+    isActive: () => mounted && !_isDisposed,
+    debugLogEnabled: () => widget.debugLog.isEnabled,
+    log: _log,
+    update: setState,
+    settings: _settings,
+    player: _player,
+    advancedPlayback: _advancedPlayback,
+    media: _media,
+    window: _window,
+    sourceLoad: _sourceLoad,
+    playback: _playback,
+    trackController: _tracks,
+    packagedE2eProbe: () => _packagedE2eProbe,
+    showPlaybackError: _showPlaybackError,
+  );
+  late final PlayerSeeding _seeding = PlayerSeeding(
+    isActive: () => mounted && !_isDisposed,
+    update: setState,
+    player: _player,
+    playlist: _playlist,
+    sourceLoad: _sourceLoad,
+    advancedPlayback: _advancedPlayback,
+  );
+  late final PlayerRemoteBinding _remote = PlayerRemoteBinding(
+    remote: () => widget.playerRemote,
+    playlist: _playlist,
+    settings: _settings,
+    player: _player,
+    media: _media,
+    sourceLoad: _sourceLoad,
+    transport: _transport,
+    isDisposed: () => _isDisposed,
+    miniPlayerTitle: _miniPlayerTitle,
   );
 
   void _log(
@@ -439,7 +479,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     _media.init();
     _playlist = PlaylistService()..setShuffle(_settings.playlistShuffle);
-    _attachRemote();
+    _remote.attach();
     _player.volume = _settings.volume;
     _settingsApplier.captureInitialState();
     _log(
@@ -469,146 +509,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _transport.applySpeed(_settings.speed);
     _transport.applyLoopMode(_settings.loopMode);
     _transport.applyHwDec(_settings.hwDec);
+    _streams.attach();
 
-    final streamSubs = <StreamSubscription>[
-      _playerService.positionStream.listen((pos) {
-        if (!mounted || _isDisposed) return;
-        _advancedPlayback.setPosition(pos);
-        final update = _player.onPosition(pos);
-        if (update == PositionUiUpdate.skip) return;
-        if (update == PositionUiUpdate.notify) {
-          setState(() {});
-        }
-        _media.onPosition(pos);
-      }),
-      _playerService.durationStream.listen((dur) {
-        if (!mounted || _isDisposed) return;
-        unawaited(_window.syncCompactAspectRatio());
-        final packagedProbe = _packagedE2eProbe;
-        if (packagedProbe != null) {
-          unawaited(packagedProbe.recordDuration(dur));
-        }
-        _advancedPlayback.setDuration(dur);
-        setState(() => _player.duration = dur);
-        _media.onDuration(dur);
-        if (dur.inMilliseconds > 0 && widget.debugLog.isEnabled) {
-          _log(
-            'duration_updated',
-            detailsBuilder: () => {'duration_ms': dur.inMilliseconds},
-          );
-        }
-      }),
-      _playerService.playingStream.listen((playing) {
-        if (!mounted || _isDisposed) return;
-        final packagedProbe = _packagedE2eProbe;
-        if (packagedProbe != null) {
-          unawaited(packagedProbe.recordPlaying(playing));
-        }
-        setState(() => _player.isPlaying = playing);
-        if (playing) {
-          _window.onChromeHoldsChanged();
-        } else {
-          _window.revealFullscreenChrome();
-        }
-        // Save on pause: the periodic saver only runs while playing, so a
-        // pause (and any seek after it) would otherwise not be stored.
-        if (!playing && !_player.fileOpenInProgress) {
-          _sourceLoad.persistResumePosition();
-        }
-        _media.onPlayingChanged(playing);
-        if (widget.debugLog.isEnabled) {
-          _log(
-            'playing_state_changed',
-            detailsBuilder: () => {'playing': playing},
-          );
-        }
-      }),
-      _playerService.volumeStream.listen((vol) {
-        if (!mounted || _isDisposed) return;
-        setState(() => _player.volume = vol);
-        _media.updateVolume(vol);
-        if (widget.debugLog.isEnabled) {
-          _log(
-            'volume_stream_updated',
-            detailsBuilder: () => {'volume': vol.toStringAsFixed(2)},
-          );
-        }
-      }),
-      _playerService.videoWidthStream.listen((w) {
-        if (!mounted || _isDisposed) return;
-        final videoOutputChanged = _player.onVideoWidth(w);
-        unawaited(_window.syncCompactAspectRatio());
-        if (videoOutputChanged) {
-          setState(() {});
-          _media.syncIdleInhibit();
-          if (widget.debugLog.isEnabled) {
-            _log(
-              'video_output_changed',
-              detailsBuilder: () => {
-                'has_video_output': _player.hasVideoOutput,
-                'width': w,
-              },
-            );
-          }
-        }
-      }),
-      _playerService.tracksStream.listen((tracks) {
-        if (!mounted || _isDisposed) return;
-        _onAlbumArtTracks(tracks);
-        unawaited(_window.syncCompactAspectRatio());
-        if (_sourceLoad.stopInProgress || _player.fileOpenInProgress) return;
-        _tracks.cacheTracksForCurrentLoad(
-          tracks,
-          refreshChapters: true,
-          gen: _playback.loadGeneration,
-        );
-      }),
-      _playerService.errorStream.listen((event) {
-        if (!mounted || _isDisposed) return;
-        _packagedE2eProbe?.recordError(event);
-        _log(
-          'player_operation_failed',
-          message: event.toString(),
-          severity: DebugSeverity.warn,
-        );
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        if (messenger != null) {
-          final l10n = AppLocalizations.of(context);
-          messenger.showAppSnackBar(
-            l10n.snackPlaybackOperationFailed(event.error.toString()),
-            duration: const Duration(seconds: 4),
-          );
-        }
-      }),
-      _playerService.completedStream.listen((completed) {
-        if (!mounted || _isDisposed || !completed) return;
-        if (_sourceLoad.stopInProgress || _playback.loadQueue.isBusy) return;
-        if (_player.currentSource == null) return;
-        _media.onPlaybackCompleted();
-        setState(() => _player.position = Duration.zero);
-        if (widget.debugLog.isEnabled) {
-          _log('playback_completed');
-        }
-        // File ran to end → drop saved resume position.
-        final source = _player.currentSource;
-        if (source != null && source.isFile) {
-          _settings.saveResumePosition(source.value, null);
-        }
-        // Try to advance the playlist for queue-driven loop modes.
-        if (PlaylistAdvancePolicy.shouldAdvanceOnCompleted(
-          _settings.loopMode,
-        )) {
-          unawaited(_sourceLoad.advancePlaylist(1));
-        }
-      }),
-      _playerService.trackStream.listen((track) {
-        if (!mounted || _isDisposed) return;
-        _player.currentTrackSelection = track;
-      }),
-    ];
-    for (final sub in streamSubs) {
-      _subscriptions.add(sub);
-    }
     unawaited(_initializePackagedE2eProbe());
     _media.attachCommands(
       _subscriptions,
@@ -662,154 +564,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       );
     }
 
-    final seededSource = widget.initialLoadedSource;
-    if (seededSource != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _isDisposed) return;
-        setState(
-          () => _player.beginSourceLoad(
-            seededSource,
-            seededSource.extension ?? '',
-          ),
-        );
-        unawaited(_advancedPlayback.setSource(seededSource));
-      });
-    }
-
-    final seededPlaylist = widget.initialPlaylistSources;
-    if (seededPlaylist != null && seededPlaylist.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _isDisposed) return;
-        _playlist.replaceSources(seededPlaylist);
-      });
-    }
-
-    final seededChapters = widget.initialChapters;
-    if (seededChapters != null && seededChapters.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _isDisposed) return;
-        setState(() => _player.chapters = seededChapters);
-      });
-    }
-
-    final seededDropPaths = widget.initialDropPaths;
-    if (seededDropPaths != null && seededDropPaths.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _isDisposed) return;
-        _sourceLoad.applyDroppedPaths(
-          seededDropPaths,
-          origin: SourceOrigin.dragDrop,
-        );
-      });
-    }
-
-    final pendingLoad = widget.initialPendingLoad;
-    if (pendingLoad != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _isDisposed) return;
-        unawaited(_sourceLoad.loadSource(pendingLoad));
-      });
-    }
-  }
-
-  void _attachRemote() {
-    final remote = widget.playerRemote;
-    if (remote == null) return;
-    final commands = PlayerRemoteCommands(
-      playPause: _onControlPlayPause,
-      next: () => _sourceLoad.advancePlaylist(1),
-      previous: () => _sourceLoad.advancePlaylist(-1),
+    _seeding.schedule(
+      loadedSource: widget.initialLoadedSource,
+      playlistSources: widget.initialPlaylistSources,
+      chapters: widget.initialChapters,
+      dropPaths: widget.initialDropPaths,
+      pendingLoad: widget.initialPendingLoad,
     );
-    _remoteCommands = commands;
-    remote.attach(commands);
-    _playlist.addListener(_syncRemote);
-    _settings.addListener(_syncRemote);
-  }
-
-  void _detachRemote() {
-    final commands = _remoteCommands;
-    if (commands == null) return;
-    _remoteCommands = null;
-    _playlist.removeListener(_syncRemote);
-    _settings.removeListener(_syncRemote);
-    widget.playerRemote?.detach(commands);
-  }
-
-  NowPlayingState _remoteSnapshot() {
-    if (_currentFile == null) return NowPlayingState.idle;
-    final title = _miniPlayerTitle();
-    final artist = _player.isAudioFile ? _media.displayArtist : null;
-    return NowPlayingState(
-      title: title.isEmpty ? null : title,
-      artist: artist,
-      isPlaying: _player.isPlaying,
-      hasMedia: true,
-      canGoNext: PlaylistAdvancePolicy.canGoNext(
-        queueLength: _playlist.length,
-        loopMode: _settings.loopMode,
-        hasNextInOrder: _playlist.hasNext,
-      ),
-      canGoPrevious: PlaylistAdvancePolicy.canGoPrevious(
-        queueLength: _playlist.length,
-        loopMode: _settings.loopMode,
-        hasPreviousInOrder: _playlist.hasPrevious,
-      ),
-    );
-  }
-
-  void _syncRemote() {
-    if (_isDisposed) return;
-    widget.playerRemote?.update(_remoteSnapshot());
-  }
-
-  void _syncRemoteAfterBuild() {
-    final remote = widget.playerRemote;
-    if (remote == null || _remoteCommands == null) return;
-    if (_remoteSnapshot() == remote.value) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncRemote());
-  }
-
-  void _onAlbumArtTracks(Tracks tracks) {
-    final artChange = _player.onTracksStream(tracks);
-    if (artChange.uiChanged) {
-      setState(() {});
-      _log(
-        'album_art_track_changed',
-        detailsBuilder: () => {
-          'has_album_art_track': artChange.hasAlbumArt,
-          'track_id': artChange.trackId,
-        },
-      );
-    }
-
-    if (!_player.isAudioFile || !artChange.uiChanged) return;
-
-    final albumArtTrack = PlayerController.firstEmbeddedAlbumArtTrack(tracks);
-    if (albumArtTrack != null) {
-      final gen = _playback.loadGeneration;
-      unawaited(
-        _playerService
-            .setVideoTrack(albumArtTrack)
-            .then((_) async {
-              // Let the album-art track settle before exporting for OS chrome.
-              await Future<void>.delayed(const Duration(milliseconds: 120));
-              if (!mounted || _isDisposed || !_playback.isLoadCurrent(gen)) {
-                return;
-              }
-              final source = _player.currentSource;
-              if (source != null && _settings.mediaSessionEnabled) {
-                unawaited(_media.refreshMetadata(source));
-              }
-            })
-            .catchError((Object e) {
-              _log(
-                'album_art_track_select_failed',
-                message: e.toString(),
-                severity: DebugSeverity.warn,
-              );
-            }),
-      );
-    }
   }
 
   Future<void> _initializePackagedE2eProbe() async {
@@ -832,7 +593,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
-    _detachRemote();
+    _remote.detach();
     _window.releaseCompactGeometryHold();
     AppExitHooks.remove(_saveStateBeforeExit);
     _shortcuts.dispose();
@@ -847,6 +608,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _log('player_dispose');
     _settings.removeListener(_settingsApplier.onSettingsChanged);
     _openFileBridge.dispose();
+    _streams.dispose();
     _subscriptions.cancelAll();
     _sleepTimer.dispose();
     _advancedPlayback.dispose();
@@ -980,6 +742,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     widget.onCompactModeChanged?.call(hold);
   }
 
+  void _showPlaybackError(PlayerErrorEvent event) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger != null) {
+      final l10n = AppLocalizations.of(context);
+      messenger.showAppSnackBar(
+        l10n.snackPlaybackOperationFailed(event.error.toString()),
+        duration: const Duration(seconds: 4),
+      );
+    }
+  }
+
   void _onCompactModeChanged(bool compact) {
     final l10n = AppLocalizations.of(context);
     _showOsdMessage(compact ? l10n.osdMiniPlayerOn : l10n.osdMiniPlayerOff);
@@ -1008,7 +781,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    _syncRemoteAfterBuild();
+    _remote.syncAfterBuild();
     return Focus(
       focusNode: _shortcuts.focusNode,
       autofocus: true,
@@ -1051,7 +824,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           top: 0,
           width: 0,
           height: 0,
-          child: _RouteCurrentProbe(onChanged: _window.onChromeHoldsChanged),
+          child: RouteCurrentProbe(onChanged: _window.onChromeHoldsChanged),
         ),
       ],
     );
@@ -1102,12 +875,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
               hasNextInOrder: _playlist.hasNext,
             ),
             onExit: () => unawaited(_window.toggleCompactMode()),
-            onPlayPause: _onControlPlayPause,
+            onPlayPause: _transport.onControlPlayPause,
             onPrevious: () => unawaited(_sourceLoad.advancePlaylist(-1)),
             onNext: () => unawaited(_sourceLoad.advancePlaylist(1)),
-            onSeekStart: _onSeekStart,
-            onSeekChange: _onSeekChange,
-            onSeekEnd: _onSeekEnd,
+            onSeekStart: _transport.onSeekStart,
+            onSeekChange: _transport.onSeekChange,
+            onSeekEnd: _transport.onSeekEnd,
             onDragWindow: _window.startWindowDrag,
           );
         },
@@ -1119,57 +892,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final shown = _media.displayTitle;
     if (shown != null && shown.isNotEmpty) return shown;
     return _player.osdTitle();
-  }
-
-  Future<double?> _currentVideoAspectRatio() async {
-    if (_player.isAudioFile || !_player.hasVideoOutput) return null;
-    final width = double.tryParse(
-      await _playerService.getProperty('dwidth') ?? '',
-    );
-    final height = double.tryParse(
-      await _playerService.getProperty('dheight') ?? '',
-    );
-    if (width == null || height == null || width <= 0 || height <= 0) {
-      return null;
-    }
-    return width / height;
-  }
-
-  void _onSeekStart() => _player.isSeeking = true;
-
-  void _onSeekChange(double value) {
-    setState(() {
-      _player.position = Duration(milliseconds: value.toInt());
-    });
-  }
-
-  void _onSeekEnd(double value) {
-    _player.isSeeking = false;
-    unawaited(
-      _playerService.seek(Duration(milliseconds: value.toInt())).catchError((
-        Object e,
-      ) {
-        _log(
-          'seek_slider_failed',
-          message: e.toString(),
-          severity: DebugSeverity.warn,
-        );
-      }),
-    );
-  }
-
-  Future<void> _onControlPlayPause() async {
-    _log('control_play_pause_pressed', category: DebugLogCategory.ui);
-    try {
-      await _playerService.playPause();
-    } catch (e) {
-      _log(
-        'control_play_pause_failed',
-        category: DebugLogCategory.ui,
-        message: e.toString(),
-        severity: DebugSeverity.warn,
-      );
-    }
   }
 
   Widget _buildFullscreenBody() {
@@ -1229,10 +951,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       seekPreviewService: _seekPreviewService,
       hasMedia: _currentFile != null,
       playlist: _playlist,
-      onSeekStart: _onSeekStart,
-      onSeekChange: _onSeekChange,
-      onSeekEnd: _onSeekEnd,
-      onPlayPause: _onControlPlayPause,
+      onSeekStart: _transport.onSeekStart,
+      onSeekChange: _transport.onSeekChange,
+      onSeekEnd: _transport.onSeekEnd,
+      onPlayPause: _transport.onControlPlayPause,
       onStop: () async {
         _log('control_stop_pressed', category: DebugLogCategory.ui);
         await _sourceLoad.stopPlaybackAndResetUi();
@@ -1372,25 +1094,4 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void _pulseOsd() => _messenger.pulseOsd();
 
   void _showOsdMessage(String msg) => _messenger.showOsdMessage(msg);
-}
-
-class _RouteCurrentProbe extends StatefulWidget {
-  const _RouteCurrentProbe({required this.onChanged});
-
-  final VoidCallback onChanged;
-
-  @override
-  State<_RouteCurrentProbe> createState() => _RouteCurrentProbeState();
-}
-
-class _RouteCurrentProbeState extends State<_RouteCurrentProbe> {
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    ModalRoute.isCurrentOf(context);
-    widget.onChanged();
-  }
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
 }

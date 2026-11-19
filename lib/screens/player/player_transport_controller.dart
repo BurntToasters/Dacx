@@ -202,6 +202,43 @@ class PlayerTransportController {
     );
   }
 
+  void onSeekStart() => player.isSeeking = true;
+
+  void onSeekChange(double value) {
+    update(() {
+      player.position = Duration(milliseconds: value.toInt());
+    });
+  }
+
+  void onSeekEnd(double value) {
+    player.isSeeking = false;
+    unawaited(
+      playerService.seek(Duration(milliseconds: value.toInt())).catchError((
+        Object e,
+      ) {
+        log(
+          'seek_slider_failed',
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+      }),
+    );
+  }
+
+  Future<void> onControlPlayPause() async {
+    log('control_play_pause_pressed', category: DebugLogCategory.ui);
+    try {
+      await playerService.playPause();
+    } catch (e) {
+      log(
+        'control_play_pause_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+  }
+
   void adjustVolume(double delta) {
     final newVol = VolumePolicy.adjustVolume(
       current: player.volume,

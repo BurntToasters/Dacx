@@ -55,6 +55,7 @@ class TrackChapterController {
     required this.syncIdleInhibit,
     required this.captureBookmark,
     required this.reloadSourceForMixChange,
+    required this.refreshMetadata,
   });
 
   final SettingsService settings;
@@ -73,9 +74,55 @@ class TrackChapterController {
   final VoidCallback syncIdleInhibit;
   final Future<void> Function(String path) captureBookmark;
   final Future<void> Function(PlayableSource source) reloadSourceForMixChange;
+  final Future<void> Function(PlayableSource source) refreshMetadata;
 
   final _mixLoadState = PlaybackMixLoadState();
   bool _mixReloadInFlight = false;
+
+  void onAlbumArtTracks(Tracks tracks) {
+    final artChange = player.onTracksStream(tracks);
+    if (artChange.uiChanged) {
+      update(() {});
+      log(
+        'album_art_track_changed',
+        detailsBuilder: () => {
+          'has_album_art_track': artChange.hasAlbumArt,
+          'track_id': artChange.trackId,
+        },
+      );
+    }
+
+    if (!player.isAudioFile || !artChange.uiChanged) return;
+
+    final albumArtTrack = PlayerController.firstEmbeddedAlbumArtTrack(tracks);
+    if (albumArtTrack != null) {
+      final gen = playback.loadGeneration;
+      unawaited(
+        playerService
+            .setVideoTrack(albumArtTrack)
+            .then((_) async {
+              // Let the album-art track settle before exporting for OS chrome.
+              await Future<void>.delayed(const Duration(milliseconds: 120));
+              if (!isMounted() ||
+                  isDisposed() ||
+                  !playback.isLoadCurrent(gen)) {
+                return;
+              }
+              final source = player.currentSource;
+              if (source != null && settings.mediaSessionEnabled) {
+                unawaited(refreshMetadata(source));
+              }
+            })
+            .catchError((Object e) {
+              log(
+                'album_art_track_select_failed',
+                message: e.toString(),
+                severity: DebugSeverity.warn,
+              );
+            }),
+      );
+    }
+  }
 
   void resetMixLoadState() => _mixLoadState.reset();
 

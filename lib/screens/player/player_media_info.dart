@@ -22,6 +22,20 @@ class PlayerMediaInfoPresenter {
   final MediaSessionCoordinator media;
   final TrackChapterController trackController;
 
+  Future<double?> currentVideoAspectRatio() async {
+    if (player.isAudioFile || !player.hasVideoOutput) return null;
+    final width = double.tryParse(
+      await playerService.getProperty('dwidth') ?? '',
+    );
+    final height = double.tryParse(
+      await playerService.getProperty('dheight') ?? '',
+    );
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return width / height;
+  }
+
   Future<void> show(BuildContext context) async {
     final source = player.currentSource;
     if (source == null) return;
