@@ -30,6 +30,7 @@ import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 import 'services/trusted_http.dart';
 import 'services/update_service.dart';
+import 'services/window_metrics.dart';
 import 'theme/window_visual_inputs.dart';
 import 'theme/window_visuals.dart';
 import 'widgets/missing_playback_runtime_app.dart';
@@ -191,7 +192,7 @@ void main(List<String> args) async {
 
   final windowOptions = WindowOptions(
     size: savedSize ?? const Size(960, 600),
-    minimumSize: const Size(480, 320),
+    minimumSize: WindowMetrics.normalMinimumSize,
     center: savedPos == null,
     title: 'Dacx',
     backgroundColor: Colors.transparent,

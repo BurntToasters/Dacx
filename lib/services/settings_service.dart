@@ -16,6 +16,7 @@ import 'bookmark_service.dart';
 import 'instance_mode_service.dart';
 import 'path_probe.dart';
 import 'resume_position_store.dart';
+import 'window_metrics.dart';
 
 enum AccentColor {
   blueGrey(Colors.blueGrey),
@@ -925,8 +926,8 @@ class SettingsService extends ChangeNotifier {
     _commitBool(_kRememberWindow, rememberWindow, v);
   }
 
-  static const double windowMinWidth = 480;
-  static const double windowMinHeight = 320;
+  static final double windowMinWidth = WindowMetrics.normalMinimumSize.width;
+  static final double windowMinHeight = WindowMetrics.normalMinimumSize.height;
 
   Size? get windowSize {
     final w = _readDouble(_kWindowWidth);

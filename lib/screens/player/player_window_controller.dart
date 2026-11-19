@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../services/debug_log_service.dart';
+import '../../services/window_metrics.dart';
 
 typedef PlayerWindowLog = void Function(
   String event, {
@@ -22,13 +23,14 @@ class PlayerWindowController extends ChangeNotifier {
     required this.log,
     required this.onFullscreenRejected,
     required this.onCompactModeChanged,
+    required this.onCompactGeometryHold,
     this.shouldHoldChrome,
     this.videoAspectRatio,
   });
 
-  static const Size compactWindowSize = Size(480, 320);
-  static const Size compactMinimumSize = Size(240, 135);
-  static const Size normalMinimumSize = Size(480, 320);
+  static const Size compactWindowSize = WindowMetrics.compactWindowSize;
+  static const Size compactMinimumSize = WindowMetrics.compactMinimumSize;
+  static const Size normalMinimumSize = WindowMetrics.normalMinimumSize;
 
   @visibleForTesting
   static bool? debugLinuxOverride;
@@ -40,6 +42,7 @@ class PlayerWindowController extends ChangeNotifier {
   final PlayerWindowLog log;
   final VoidCallback onFullscreenRejected;
   final ValueChanged<bool> onCompactModeChanged;
+  final ValueChanged<bool> onCompactGeometryHold;
   final bool Function()? shouldHoldChrome;
   final Future<double?> Function()? videoAspectRatio;
 
@@ -54,6 +57,8 @@ class PlayerWindowController extends ChangeNotifier {
   // Compact mini-player mode (PiP-style on desktop).
   bool _compactMode = false;
   bool _compactToggleInFlight = false;
+  bool _compactGeometryHeld = false;
+  bool _restoreCompactAfterFullscreen = false;
   Size? _preCompactSize;
   Offset? _preCompactPos;
   bool _preCompactMaximized = false;
@@ -119,10 +124,16 @@ class PlayerWindowController extends ChangeNotifier {
 
   void onEnterFullScreen() {
     if (!isMounted()) return;
+    final leavingCompact = _compactMode;
+    if (leavingCompact) {
+      _compactMode = false;
+      _restoreCompactAfterFullscreen = true;
+    }
     _isFullscreen = true;
     _fullscreenChromeVisible = true;
     notifyListeners();
     _scheduleFullscreenChromeHide();
+    if (leavingCompact) unawaited(_releaseCompactForFullscreen());
   }
 
   void onLeaveFullScreen() {
@@ -136,6 +147,10 @@ class PlayerWindowController extends ChangeNotifier {
     _isFullscreen = false;
     _fullscreenChromeVisible = true;
     notifyListeners();
+    if (_restoreCompactAfterFullscreen) {
+      _restoreCompactAfterFullscreen = false;
+      unawaited(_restoreCompactBoundsAfterFullscreen());
+    }
   }
 
   Future<void> exitFullscreenIfActuallyFullscreen() async {
@@ -160,6 +175,7 @@ class PlayerWindowController extends ChangeNotifier {
     if (_fullscreenToggleInFlight) return;
     _fullscreenToggleInFlight = true;
     try {
+      if (_compactMode && !await _exitCompactMode()) return;
       final enabled = await windowManager.isFullScreen();
       await windowManager.setFullScreen(!enabled);
       // Verify state actually changed (Wayland / tiling WMs may reject).
@@ -231,81 +247,141 @@ class PlayerWindowController extends ChangeNotifier {
   Future<void> toggleCompactMode() async {
     if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) return;
     if (_compactToggleInFlight) return;
+    if (_compactMode) {
+      await _exitCompactMode();
+    } else {
+      await _enterCompactMode();
+    }
+  }
+
+  void releaseCompactGeometryHold() => _setCompactGeometryHold(false);
+
+  void _setCompactGeometryHold(bool held) {
+    if (_compactGeometryHeld == held) return;
+    _compactGeometryHeld = held;
+    onCompactGeometryHold(held);
+  }
+
+  Future<void> _enterCompactMode() async {
     _compactToggleInFlight = true;
+    _setCompactGeometryHold(true);
     try {
-      if (_compactMode) {
-        // Restore window state.
-        try {
-          await windowManager.setAspectRatio(0);
-          await windowManager.setMinimumSize(normalMinimumSize);
-          if (_preCompactMaximized) {
-            await windowManager.maximize();
-          } else {
-            if (_preCompactSize != null) {
-              await windowManager.setSize(_preCompactSize!);
-            }
-            if (_preCompactPos != null) {
-              await windowManager.setPosition(_preCompactPos!);
-            }
+      try {
+        final size = await windowManager.getSize();
+        final position = await windowManager.getPosition();
+        final maximized = await windowManager.isMaximized();
+        if (await windowManager.isFullScreen()) {
+          await windowManager.setFullScreen(false);
+          if (isMounted()) {
+            _isFullscreen = false;
           }
-          await windowManager.setAlwaysOnTop(alwaysOnTop());
-        } catch (e) {
-          log(
-            'compact_mode_restore_failed',
-            category: DebugLogCategory.ui,
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-          await _reapplyCompactConstraints();
-          return;
         }
-        _compactAspect = null;
-        if (!isMounted() || isDisposed()) return;
-        _compactMode = false;
-        notifyListeners();
-        onCompactModeChanged(false);
-      } else {
-        try {
-          final size = await windowManager.getSize();
-          final position = await windowManager.getPosition();
-          final maximized = await windowManager.isMaximized();
-          if (await windowManager.isFullScreen()) {
-            await windowManager.setFullScreen(false);
-            if (isMounted()) {
-              _isFullscreen = false;
-            }
-          }
-          if (maximized) {
-            await windowManager.unmaximize();
-          }
-          final aspect = await _currentVideoAspect();
-          await windowManager.setMinimumSize(compactMinimumSize);
-          await windowManager.setSize(_compactSizeFor(aspect));
-          await windowManager.setAlwaysOnTop(true);
-          if (aspect != null) {
-            await windowManager.setAspectRatio(aspect);
-            _compactAspect = aspect;
-          }
-          _preCompactSize = size;
-          _preCompactPos = position;
-          _preCompactMaximized = maximized;
-        } catch (e) {
-          log(
-            'compact_mode_enter_failed',
-            category: DebugLogCategory.ui,
-            message: e.toString(),
-            severity: DebugSeverity.warn,
-          );
-          await _releaseCompactConstraints();
-          return;
+        if (maximized) {
+          await windowManager.unmaximize();
         }
-        if (!isMounted() || isDisposed()) return;
-        _compactMode = true;
-        notifyListeners();
-        onCompactModeChanged(true);
+        final aspect = await _currentVideoAspect();
+        await windowManager.setMinimumSize(compactMinimumSize);
+        await windowManager.setSize(_compactSizeFor(aspect));
+        await windowManager.setAlwaysOnTop(true);
+        if (aspect != null) {
+          await windowManager.setAspectRatio(aspect);
+          _compactAspect = aspect;
+        }
+        _preCompactSize = size;
+        _preCompactPos = position;
+        _preCompactMaximized = maximized;
+      } catch (e) {
+        log(
+          'compact_mode_enter_failed',
+          category: DebugLogCategory.ui,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+        await _releaseCompactConstraints();
+        _setCompactGeometryHold(false);
+        return;
       }
+      if (!isMounted() || isDisposed()) return;
+      _compactMode = true;
+      notifyListeners();
+      onCompactModeChanged(true);
     } finally {
       _compactToggleInFlight = false;
+    }
+  }
+
+  Future<bool> _exitCompactMode() async {
+    if (_compactToggleInFlight) return false;
+    _compactToggleInFlight = true;
+    try {
+      try {
+        // Restore window state.
+        await windowManager.setAspectRatio(0);
+        await windowManager.setMinimumSize(normalMinimumSize);
+        await _restorePreCompactBounds();
+        await windowManager.setAlwaysOnTop(alwaysOnTop());
+      } catch (e) {
+        log(
+          'compact_mode_restore_failed',
+          category: DebugLogCategory.ui,
+          message: e.toString(),
+          severity: DebugSeverity.warn,
+        );
+        await _reapplyCompactConstraints();
+        return false;
+      }
+      _compactAspect = null;
+      if (!isMounted() || isDisposed()) return true;
+      _compactMode = false;
+      notifyListeners();
+      onCompactModeChanged(false);
+      _setCompactGeometryHold(false);
+      return true;
+    } finally {
+      _compactToggleInFlight = false;
+    }
+  }
+
+  Future<void> _restorePreCompactBounds() async {
+    if (_preCompactMaximized) {
+      await windowManager.maximize();
+      return;
+    }
+    final size = _preCompactSize;
+    if (size != null) {
+      await windowManager.setSize(size);
+    }
+    final position = _preCompactPos;
+    if (position != null) {
+      await windowManager.setPosition(position);
+    }
+  }
+
+  Future<void> _releaseCompactForFullscreen() async {
+    await _releaseCompactConstraints();
+    try {
+      await windowManager.setAlwaysOnTop(alwaysOnTop());
+    } catch (e) {
+      log(
+        'compact_mode_fullscreen_release_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
+    }
+    _setCompactGeometryHold(false);
+  }
+
+  Future<void> _restoreCompactBoundsAfterFullscreen() async {
+    try {
+      await _restorePreCompactBounds();
+    } catch (e) {
+      log(
+        'compact_mode_fullscreen_restore_failed',
+        category: DebugLogCategory.ui,
+        message: e.toString(),
+        severity: DebugSeverity.warn,
+      );
     }
   }
 
@@ -419,6 +495,7 @@ class PlayerWindowController extends ChangeNotifier {
   }
 
   void applyAlwaysOnTop(bool value) {
+    if (_compactMode || _compactToggleInFlight) return;
     unawaited(
       windowManager.setAlwaysOnTop(value).catchError((Object e) {
         log(

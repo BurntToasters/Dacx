@@ -308,6 +308,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       duration: _snackbarShortDuration,
     ),
     onCompactModeChanged: _onCompactModeChanged,
+    onCompactGeometryHold: _onCompactGeometryHold,
     shouldHoldChrome: () =>
         !_player.isPlaying || _endDrawerOpen || !_playerRouteIsCurrent(),
     videoAspectRatio: _currentVideoAspectRatio,
@@ -580,6 +581,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (!mounted || _isDisposed || !completed) return;
         if (_sourceLoad.stopInProgress || _playback.loadQueue.isBusy) return;
         if (_player.currentSource == null) return;
+        _media.onPlaybackCompleted();
         setState(() => _player.position = Duration.zero);
         if (widget.debugLog.isEnabled) {
           _log('playback_completed');
@@ -828,9 +830,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void dispose() {
     _isDisposed = true;
     _detachRemote();
-    if (_window.compactMode) {
-      widget.onCompactModeChanged?.call(false);
-    }
+    _window.releaseCompactGeometryHold();
     AppExitHooks.remove(_saveStateBeforeExit);
     _shortcuts.dispose();
     windowManager.removeListener(this);
@@ -955,8 +955,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     setState(() {});
   }
 
+  void _onCompactGeometryHold(bool hold) {
+    widget.onCompactModeChanged?.call(hold);
+  }
+
   void _onCompactModeChanged(bool compact) {
-    widget.onCompactModeChanged?.call(compact);
     final l10n = AppLocalizations.of(context);
     _showOsdMessage(compact ? l10n.osdMiniPlayerOn : l10n.osdMiniPlayerOff);
   }
@@ -1308,6 +1311,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       },
       onDoubleTap: () {
         _log('media_surface_double_tap', category: DebugLogCategory.ui);
+        if (_window.isFullscreen) {
+          unawaited(_window.toggleFullscreen());
+          return;
+        }
         if (_window.compactMode) {
           unawaited(_window.toggleCompactMode());
           return;

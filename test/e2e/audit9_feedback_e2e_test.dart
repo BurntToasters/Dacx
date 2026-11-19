@@ -442,25 +442,25 @@ void main() {
       await _pressMiniPlayerShortcut(tester);
       await _settle(tester);
       expect(find.byType(CompactExitButton), findsNothing);
-      expect(reported, isEmpty);
+      expect(reported, [true, false]);
 
       win.failSetBounds = null;
       await _pressMiniPlayerShortcut(tester);
       await _settle(tester);
       expect(find.byType(CompactExitButton), findsOneWidget);
-      expect(reported, [true]);
+      expect(reported, [true, false, true]);
 
       win.failSetBounds = (_) => true;
       await _pressMiniPlayerShortcut(tester);
       await _settle(tester);
       expect(find.byType(CompactExitButton), findsOneWidget);
-      expect(reported, [true]);
+      expect(reported, [true, false, true]);
 
       win.failSetBounds = null;
       await _pressMiniPlayerShortcut(tester);
       await _settle(tester);
       expect(find.byType(CompactExitButton), findsNothing);
-      expect(reported, [true, false]);
+      expect(reported, [true, false, true, false]);
       report.pass('M3.11');
     });
 
