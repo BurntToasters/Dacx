@@ -166,6 +166,7 @@ class MediaSessionService {
     Duration? duration,
     String? artUri,
     String? trackIdentity,
+    bool? isAudio,
   }) async {
     if (!_enabled || !_platformAvailable) return;
     _lastTitle = title;
@@ -181,14 +182,18 @@ class MediaSessionService {
       );
       return;
     }
-    await _safeInvoke('update', {
+    final args = <String, Object?>{
       'title': title,
       'artist': artist,
       'album': album,
       'durationMs': _lastDuration.inMilliseconds,
       'artUri': artUri,
       'replace': true,
-    });
+    };
+    if (isAudio != null) {
+      args['mediaType'] = isAudio ? 'music' : 'video';
+    }
+    await _safeInvoke('update', args);
   }
 
   Future<void> updatePosition(

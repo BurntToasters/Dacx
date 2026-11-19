@@ -65,6 +65,7 @@ class MediaSessionCoordinator {
   int _artExportGen = 0;
   String? _lastArtUri;
   DateTime? _lastTaskbarProgressAt;
+  bool _playbackEnded = false;
 
   String? get displayTitle => _displayTitle;
   String? get displayArtist => _displayArtist;
@@ -104,6 +105,13 @@ class MediaSessionCoordinator {
   void resetArtForNewLoad() {
     _artExportGen++;
     _lastArtUri = null;
+    _playbackEnded = false;
+  }
+
+  void onPlaybackCompleted() {
+    _playbackEnded = true;
+    _lastTaskbarProgressAt = null;
+    unawaited(WindowsShellService.clearTaskbarProgress());
   }
 
   void onPosition(Duration pos) {
@@ -124,8 +132,12 @@ class MediaSessionCoordinator {
 
   void onPlayingChanged(bool playing) {
     syncIdleInhibit();
-    if (!playing) {
-      unawaited(WindowsShellService.clearTaskbarProgress());
+    if (playing) {
+      _playbackEnded = false;
+      _lastTaskbarProgressAt = null;
+      _maybeUpdateTaskbarProgress(player.position);
+    } else {
+      _pushPausedTaskbarProgress(player.position);
     }
     if (settings.mediaSessionEnabled) {
       _maybeUpdatePosition(player.position);
@@ -160,6 +172,7 @@ class MediaSessionCoordinator {
 
   void clearSession() {
     unawaited(mediaSession.clear());
+    unawaited(WindowsShellService.clearTaskbarProgress());
   }
 
   void syncIdleInhibit() {
@@ -224,6 +237,7 @@ class MediaSessionCoordinator {
       duration: duration ?? player.duration,
       artUri: artUri,
       trackIdentity: '${source.value}#${playback.loadGeneration}',
+      isAudio: player.isAudioFile,
     );
   }
 
@@ -347,9 +361,33 @@ class MediaSessionCoordinator {
       return;
     }
     _lastTaskbarProgressAt = now;
-    final progress = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
-    unawaited(WindowsShellService.setTaskbarProgress(progress));
+    unawaited(
+      WindowsShellService.setTaskbarProgress(_taskbarFraction(pos, dur)),
+    );
   }
+
+  void _pushPausedTaskbarProgress(Duration pos) {
+    if (!Platform.isWindows) return;
+    final dur = player.duration;
+    if (_playbackEnded || player.currentSource == null || _isAtEnd(pos, dur)) {
+      _lastTaskbarProgressAt = null;
+      unawaited(WindowsShellService.clearTaskbarProgress());
+      return;
+    }
+    if (dur.inMilliseconds <= 0) return;
+    unawaited(
+      WindowsShellService.setTaskbarProgress(
+        _taskbarFraction(pos, dur),
+        paused: true,
+      ),
+    );
+  }
+
+  static double _taskbarFraction(Duration pos, Duration dur) =>
+      (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+
+  static bool _isAtEnd(Duration pos, Duration dur) =>
+      dur.inMilliseconds > 0 && pos.inMilliseconds >= dur.inMilliseconds - 500;
 
   Future<void> syncJumpList() async {
     if (!Platform.isWindows) return;

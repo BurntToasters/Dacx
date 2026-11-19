@@ -230,21 +230,49 @@ class MediaSession {
     std::string album = GetString(m, "album");
     const bool replace = GetOr<bool>(m, "replace", false);
     bool changedDisplay = false;
+    const std::string mediaType = GetString(m, "mediaType");
+    MediaPlaybackType wanted = updater_.Type();
+    if (mediaType == "video") {
+      wanted = MediaPlaybackType::Video;
+    } else if (mediaType == "music") {
+      wanted = MediaPlaybackType::Music;
+    } else if (wanted != MediaPlaybackType::Video &&
+               wanted != MediaPlaybackType::Music) {
+      wanted = MediaPlaybackType::Music;
+    }
+    if (updater_.Type() != wanted) {
+      updater_.Type(wanted);
+      changedDisplay = true;
+    }
+    const bool video = updater_.Type() == MediaPlaybackType::Video;
     if (replace) {
-      updater_.MusicProperties().Title(Utf8ToWide(title));
-      updater_.MusicProperties().Artist(Utf8ToWide(artist));
-      updater_.MusicProperties().AlbumTitle(Utf8ToWide(album));
+      if (video) {
+        updater_.VideoProperties().Title(Utf8ToWide(title));
+        updater_.VideoProperties().Subtitle(Utf8ToWide(artist));
+      } else {
+        updater_.MusicProperties().Title(Utf8ToWide(title));
+        updater_.MusicProperties().Artist(Utf8ToWide(artist));
+        updater_.MusicProperties().AlbumTitle(Utf8ToWide(album));
+      }
       changedDisplay = true;
     } else {
       if (!title.empty()) {
-        updater_.MusicProperties().Title(Utf8ToWide(title));
+        if (video) {
+          updater_.VideoProperties().Title(Utf8ToWide(title));
+        } else {
+          updater_.MusicProperties().Title(Utf8ToWide(title));
+        }
         changedDisplay = true;
       }
       if (!artist.empty()) {
-        updater_.MusicProperties().Artist(Utf8ToWide(artist));
+        if (video) {
+          updater_.VideoProperties().Subtitle(Utf8ToWide(artist));
+        } else {
+          updater_.MusicProperties().Artist(Utf8ToWide(artist));
+        }
         changedDisplay = true;
       }
-      if (!album.empty()) {
+      if (!video && !album.empty()) {
         updater_.MusicProperties().AlbumTitle(Utf8ToWide(album));
         changedDisplay = true;
       }
@@ -293,17 +321,6 @@ class MediaSession {
       if (auto p = std::get_if<bool>(&pi->second)) playing = *p;
       smtc_.PlaybackStatus(playing ? MediaPlaybackStatus::Playing
                                    : MediaPlaybackStatus::Paused);
-    }
-
-    // SMTC has no public PlaybackRate property; accept rate from Dart so
-    // updates stay coherent with MPRIS/macOS and future WinRT surfaces.
-    auto rateIt = m.find(EncodableValue("rate"));
-    if (rateIt != m.end()) {
-      if (auto pr = std::get_if<double>(&rateIt->second)) {
-        if (*pr > 0) last_rate_ = *pr;
-      } else if (auto rateInt = std::get_if<int32_t>(&rateIt->second)) {
-        if (*rateInt > 0) last_rate_ = static_cast<double>(*rateInt);
-      }
     }
 
     auto durIt = m.find(EncodableValue("durationMs"));
@@ -436,7 +453,6 @@ class MediaSession {
   std::atomic<bool> enabled_{false};
   int64_t last_duration_ms_{0};
   int64_t last_position_ms_{0};
-  double last_rate_{1.0};
   HWND hwnd_{nullptr};
   HWND command_hwnd_{nullptr};
   std::vector<EncodableMap> pending_commands_;

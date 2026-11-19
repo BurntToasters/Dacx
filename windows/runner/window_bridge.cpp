@@ -174,7 +174,7 @@ bool EnsureTaskbar() {
   return true;
 }
 
-void SetTaskbarProgress(HWND hwnd, double progress) {
+void SetTaskbarProgress(HWND hwnd, double progress, bool paused) {
   if (hwnd == nullptr || !EnsureTaskbar()) return;
   if (progress < 0.0) {
     g_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
@@ -185,7 +185,7 @@ void SetTaskbarProgress(HWND hwnd, double progress) {
   if (clamped < 0.0) clamped = 0.0;
   if (clamped > 1.0) clamped = 1.0;
   const ULONGLONG completed = static_cast<ULONGLONG>(clamped * total);
-  g_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
+  g_taskbar->SetProgressState(hwnd, paused ? TBPF_PAUSED : TBPF_NORMAL);
   g_taskbar->SetProgressValue(hwnd, completed, total);
 }
 
@@ -349,14 +349,33 @@ void RegisterWindowMethodsChannel(flutter::BinaryMessenger* messenger,
         }
         if (method == "setTaskbarProgress") {
           double progress = -1.0;
-          if (const auto* value =
-                  std::get_if<double>(call.arguments())) {
+          bool paused = false;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto progressIt =
+                map->find(flutter::EncodableValue("progress"));
+            if (progressIt != map->end()) {
+              if (const auto* value = std::get_if<double>(&progressIt->second)) {
+                progress = *value;
+              } else if (const auto* intValue =
+                             std::get_if<int32_t>(&progressIt->second)) {
+                progress = static_cast<double>(*intValue);
+              }
+            }
+            const auto pausedIt = map->find(flutter::EncodableValue("paused"));
+            if (pausedIt != map->end()) {
+              if (const auto* value = std::get_if<bool>(&pausedIt->second)) {
+                paused = *value;
+              }
+            }
+          } else if (const auto* value =
+                         std::get_if<double>(call.arguments())) {
             progress = *value;
           } else if (const auto* intValue =
                          std::get_if<int32_t>(call.arguments())) {
             progress = static_cast<double>(*intValue);
           }
-          SetTaskbarProgress(window->GetHandle(), progress);
+          SetTaskbarProgress(window->GetHandle(), progress, paused);
           result->Success(flutter::EncodableValue(true));
           return;
         }

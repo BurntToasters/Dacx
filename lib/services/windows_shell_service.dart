@@ -56,17 +56,27 @@ abstract final class WindowsShellService {
     }
   }
 
-  /// [progress] in `0..1` while playing; pass a negative value to clear.
-  static Future<void> setTaskbarProgress(double progress) async {
+  /// [progress] in `0..1`; [paused] shows the paused state. Use
+  /// [clearTaskbarProgress] to clear.
+  static Future<void> setTaskbarProgress(
+    double progress, {
+    bool paused = false,
+  }) {
+    final clamped = progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0).toDouble();
+    return _invokeTaskbarProgress({'progress': clamped, 'paused': paused});
+  }
+
+  static Future<void> clearTaskbarProgress() =>
+      _invokeTaskbarProgress({'progress': -1.0, 'paused': false});
+
+  static Future<void> _invokeTaskbarProgress(Map<String, Object> args) async {
     if (!Platform.isWindows) return;
     try {
-      await _channel.invokeMethod<bool>(setTaskbarProgressMethod, progress);
+      await _channel.invokeMethod<bool>(setTaskbarProgressMethod, args);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Dacx: setTaskbarProgress failed: $e');
       }
     }
   }
-
-  static Future<void> clearTaskbarProgress() => setTaskbarProgress(-1);
 }
