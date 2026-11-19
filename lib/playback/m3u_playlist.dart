@@ -83,6 +83,8 @@ abstract final class M3uPlaylist {
       if (value.isEmpty) continue;
       if (source.isUrl && !PlayableSource.isSupportedUrl(value)) continue;
       if (source.isFile && PlayerPathUtils.isUnsafeOpenPath(value)) continue;
+      final title = source.title;
+      if (title != null) buf.writeln('#EXTINF:-1,$title');
       buf.writeln(value);
     }
     return buf.toString();
@@ -96,39 +98,82 @@ abstract final class M3uPlaylist {
     await file.writeAsString(encode(sources), flush: true);
   }
 
+  static final _extInfRe = RegExp(r'^#EXTINF:', caseSensitive: false);
+
   static List<PlayableSource> _parseM3u(String content, {String? baseDir}) {
     final out = <PlayableSource>[];
+    String? pendingTitle;
     for (final rawLine in const LineSplitter().convert(content)) {
       final line = rawLine.trim();
-      if (line.isEmpty || line.startsWith('#')) continue;
-      final source = _entryToSource(line, baseDir: baseDir);
+      if (line.isEmpty) continue;
+      if (line.startsWith('#')) {
+        if (_extInfRe.hasMatch(line)) pendingTitle = _extInfTitle(line);
+        continue;
+      }
+      final source = _entryToSource(
+        line,
+        baseDir: baseDir,
+        title: pendingTitle,
+      );
+      pendingTitle = null;
       if (source != null) out.add(source);
     }
     return out;
+  }
+
+  static String? _extInfTitle(String line) {
+    var inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      final ch = line[i];
+      if (ch == '"') {
+        inQuotes = !inQuotes;
+      } else if (ch == ',' && !inQuotes) {
+        return line.substring(i + 1);
+      }
+    }
+    return null;
   }
 
   static List<PlayableSource> _parsePls(String content, {String? baseDir}) {
     final out = <PlayableSource>[];
     final fileRe = RegExp(r'^File(\d+)=(.+)$', caseSensitive: false);
+    final titleRe = RegExp(r'^Title(\d+)=(.*)$', caseSensitive: false);
     final byIndex = <int, String>{};
+    final titleByIndex = <int, String>{};
     for (final rawLine in const LineSplitter().convert(content)) {
       final line = rawLine.trim();
       final match = fileRe.firstMatch(line);
-      if (match == null) continue;
-      final index = int.tryParse(match.group(1)!);
-      final value = match.group(2)?.trim();
+      if (match != null) {
+        final index = int.tryParse(match.group(1)!);
+        final value = match.group(2)?.trim();
+        if (index == null || value == null || value.isEmpty) continue;
+        byIndex[index] = value;
+        continue;
+      }
+      final titleMatch = titleRe.firstMatch(line);
+      if (titleMatch == null) continue;
+      final index = int.tryParse(titleMatch.group(1)!);
+      final value = titleMatch.group(2)?.trim();
       if (index == null || value == null || value.isEmpty) continue;
-      byIndex[index] = value;
+      titleByIndex[index] = value;
     }
     final keys = byIndex.keys.toList()..sort();
     for (final key in keys) {
-      final source = _entryToSource(byIndex[key]!, baseDir: baseDir);
+      final source = _entryToSource(
+        byIndex[key]!,
+        baseDir: baseDir,
+        title: titleByIndex[key],
+      );
       if (source != null) out.add(source);
     }
     return out;
   }
 
-  static PlayableSource? _entryToSource(String entry, {String? baseDir}) {
+  static PlayableSource? _entryToSource(
+    String entry, {
+    String? baseDir,
+    String? title,
+  }) {
     final trimmed = entry.trim();
     if (trimmed.isEmpty) return null;
     final uri = Uri.tryParse(trimmed);
@@ -136,7 +181,7 @@ abstract final class M3uPlaylist {
       if (!PlayableSource.isSupportedUrl(trimmed)) {
         return null;
       }
-      return PlayableSource.url(trimmed);
+      return PlayableSource.url(trimmed, title: title);
     }
     var path = trimmed;
     // file:/// URIs → local path
@@ -150,6 +195,6 @@ abstract final class M3uPlaylist {
       path = p.normalize(p.join(baseDir, path));
     }
     if (PlayerPathUtils.isUnsafeOpenPath(path)) return null;
-    return PlayableSource.file(path);
+    return PlayableSource.file(path, title: title);
   }
 }

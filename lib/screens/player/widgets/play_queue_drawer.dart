@@ -144,7 +144,7 @@ class PlayQueueDrawer extends StatelessWidget {
                                 itemBuilder: (context, index) {
                                   final isCurrent = index == playlist.index;
                                   final source = items[index];
-                                  final name = source.displayName;
+                                  final name = source.queueLabel;
 
                                   return QueueItemTile(
                                     key: ValueKey(

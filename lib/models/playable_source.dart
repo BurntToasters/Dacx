@@ -3,19 +3,49 @@ import 'package:path/path.dart' as p;
 enum PlayableSourceType { file, url }
 
 class PlayableSource {
-  const PlayableSource._(this.type, this.value);
+  const PlayableSource._(this.type, this.value, this.title);
 
-  factory PlayableSource.file(String path) =>
-      PlayableSource._(PlayableSourceType.file, path.trim());
+  factory PlayableSource.file(String path, {String? title}) => PlayableSource._(
+    PlayableSourceType.file,
+    path.trim(),
+    _cleanTitle(title),
+  );
 
-  factory PlayableSource.url(String url) =>
-      PlayableSource._(PlayableSourceType.url, url.trim());
+  factory PlayableSource.url(String url, {String? title}) =>
+      PlayableSource._(PlayableSourceType.url, url.trim(), _cleanTitle(title));
+
+  static const _maxTitleLength = 200;
+  static final _whitespaceRuns = RegExp(r'\s+');
+
+  static bool _isStrippedTitleRune(int rune) =>
+      rune <= 0x1F ||
+      (rune >= 0x7F && rune <= 0x9F) ||
+      (rune >= 0x202A && rune <= 0x202E) ||
+      (rune >= 0x2066 && rune <= 0x2069);
+
+  static String? _cleanTitle(String? raw) {
+    if (raw == null) return null;
+    final kept = raw
+        .replaceAll(_whitespaceRuns, ' ')
+        .runes
+        .where((rune) => !_isStrippedTitleRune(rune));
+    final cleaned = String.fromCharCodes(kept)
+        .replaceAll(_whitespaceRuns, ' ')
+        .trim();
+    if (cleaned.isEmpty) return null;
+    final cut = String.fromCharCodes(cleaned.runes.take(_maxTitleLength))
+        .trim();
+    return cut.isEmpty ? null : cut;
+  }
 
   final PlayableSourceType type;
   final String value;
+  final String? title;
 
   bool get isFile => type == PlayableSourceType.file;
   bool get isUrl => type == PlayableSourceType.url;
+
+  String get queueLabel => title ?? displayName;
 
   String get displayName {
     if (isFile) {
