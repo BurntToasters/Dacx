@@ -70,6 +70,8 @@ DACX_E2E_REPORT=test-results/e2e/<os>/desktop-playback.json
 fvm flutter test integration_test/platform_release_smoke_test.dart -d <windows|macos|linux>
 ```
 
+`integration_test/window_modes_e2e_test.dart` drives the real window through mini-player and fullscreen, writing `window-modes.json` beside `DACX_E2E_REPORT`.
+
 Run package candidate smoke only with an executable extracted or installed
 from that exact candidate. `--no-launch` is inspection only and returns exit
 code 2. It never produces release proof.

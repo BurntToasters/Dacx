@@ -196,7 +196,7 @@ jobs:
         run: |
           export DACX_E2E_VERSION="$(node -p 'require("./package.json").version')"
           export DACX_E2E_RUN_ID="desktop-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}"
-          for TARGET in platform_release_smoke_test libmpv_contract_test; do
+          for TARGET in platform_release_smoke_test libmpv_contract_test window_modes_e2e_test; do
             E2E_LOG="test-results/e2e/${{ matrix.os }}/$TARGET.log"
             if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
               xvfb-run -a fvm flutter --ci test "integration_test/$TARGET.dart" -d linux 2>&1 | tee "$E2E_LOG"
